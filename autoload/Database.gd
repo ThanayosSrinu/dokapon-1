@@ -115,6 +115,8 @@ func _check_item(item: ItemData, problems: PackedStringArray) -> void:
 	var consumable := item.kind == ItemData.Kind.CONSUMABLE
 	if item.price <= 0:
 		problems.append("item %s needs a price above 0" % item.id)
+	if item.icon < 0 or item.icon >= GameArt.ITEM_ICONS.get_width() / GameArt.ITEM_ICON_SIZE:
+		problems.append("item %s has icon %d, which is not on the sheet" % [item.id, item.icon])
 	if consumable and item.heal_hp <= 0 and item.heal_mp <= 0:
 		problems.append("item %s heals nothing" % item.id)
 	if consumable and not item.bonuses.is_empty():

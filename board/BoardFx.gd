@@ -33,6 +33,25 @@ static func play(parent: Node, world_position: Vector2, kind: Kind, duration := 
 	tween.chain().tween_callback(sprite.queue_free)
 
 
+## A few words that float up from `world_position` and fade away.
+static func pop_text(parent: Node, world_position: Vector2, text: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", GameArt.INK)
+	label.add_theme_constant_override("outline_size", 6)
+	label.z_index = 30
+	parent.add_child(label)
+	var start := (world_position - label.get_minimum_size() * 0.5 + Vector2(0.0, -48.0)).round()
+	label.global_position = start
+	var tween := label.create_tween()
+	tween.tween_property(label, "global_position", start + Vector2(0.0, -40.0), 1.1) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(label, "modulate:a", 0.0, 0.4).set_delay(0.7)
+	tween.tween_callback(label.queue_free)
+
+
 ## Kicks up a little dust around the feet.
 static func dust(parent: Node, world_position: Vector2) -> void:
 	for side: float in [-1.0, 1.0]:

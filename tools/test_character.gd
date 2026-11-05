@@ -42,10 +42,10 @@ func _test_levels() -> void:
 	mage.leveled_up.connect(func(_level: int) -> void: signals[0] += 1)
 	var start_hp := mage.hp
 	_expect(mage.spells == ["spark"], "mage knows only spark at level 1")
-	_expect(mage.add_experience(99) == 0, "99 EXP is no level")
-	# 1 more reaches level 2; 200 reaches 3, with 50 left over.
-	_expect(mage.add_experience(251) == 2, "251 EXP gives two levels")
-	_expect(mage.level == 3 and mage.experience == 50, "leftover EXP is kept")
+	_expect(mage.add_experience(29) == 0, "29 EXP is no level")
+	# 1 more reaches level 2; 60 reaches 3, with 15 left over.
+	_expect(mage.add_experience(76) == 2, "76 EXP gives two levels")
+	_expect(mage.level == 3 and mage.experience == 15, "leftover EXP is kept")
 	_expect(signals[0] == 2, "leveled_up fires once per level")
 	_expect(mage.hp == start_hp + 8, "levels add growth to current HP")
 	_expect(mage.spells.has("frost_shard"), "mage learns frost_shard at level 3")

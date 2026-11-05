@@ -8,5 +8,6 @@ id = "mana_drop"
 display_name = "Mana Drop"
 description = "A crystal bead that sparks the mind."
 kind = 0
+icon = 18
 price = 60
 heal_mp = 10

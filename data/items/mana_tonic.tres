@@ -8,5 +8,6 @@ id = "mana_tonic"
 display_name = "Mana Tonic"
 description = "A cool vial that floods the spirit with power."
 kind = 0
+icon = 19
 price = 150
 heal_mp = 30

@@ -8,5 +8,6 @@ id = "herb"
 display_name = "Herb"
 description = "A bitter leaf that closes small wounds."
 kind = 0
+icon = 15
 price = 30
 heal_hp = 15

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SpellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/SpellData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "smite"
+display_name = "Smite"
+description = "A lance of holy light strikes one foe."
+kind = 0
+mp_cost = 4
+power = 12

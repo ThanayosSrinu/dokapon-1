@@ -6,6 +6,9 @@ extends Node
 
 ## How many fights are simulated for each class against each monster.
 const FIGHTS := 300
+## What a player of a level has had to spend, going by tools/sim_game.gd.
+const GEAR_BUDGET_BASE := 200
+const GEAR_BUDGET_PER_LEVEL := 120
 
 var _failures := 0
 
@@ -44,6 +47,14 @@ func _player(class_id: String, level := 1) -> PlayerData:
 	player.hp = player.get_stat("max_hp")
 	player.mp = player.get_stat("max_mp")
 	return player
+
+
+# All the EXP a level 1 player has earned, counting what levels used up.
+func _total_exp(player: PlayerData) -> int:
+	var total := player.experience
+	for level in range(1, player.level):
+		total += level * PlayerData.EXP_PER_LEVEL
+	return total
 
 
 func _duel() -> Battle:
@@ -180,7 +191,7 @@ func _test_rewards() -> void:
 	_expect(battle.winner == battle.challenger, "the hero beats the slime")
 	battle.conclude()
 	_expect(hero.gold == 100 + slime.gold_reward, "monster gold is paid")
-	_expect(hero.experience == slime.exp_reward, "monster EXP is paid")
+	_expect(_total_exp(hero) == slime.exp_reward, "monster EXP is paid")
 
 	var victim := _player("mage")
 	victim.gold = 100
@@ -224,7 +235,7 @@ func _test_pvp_rewards() -> void:
 	battle.conclude()
 	_expect(red.gold == 50, "the winner takes the loser's dropped gold")
 	_expect(blue.gold == 150, "the loser pays it")
-	_expect(red.experience == Battle.PVP_EXP_PER_LEVEL * 3, "PvP EXP depends on the loser's level")
+	_expect(_total_exp(red) == Battle.PVP_EXP_PER_LEVEL * 3, "PvP EXP depends on the loser's level")
 
 
 func _test_repeatable() -> void:
@@ -287,7 +298,8 @@ func _test_game_flow() -> void:
 			if waiting and not skipping.get(player, false):
 				knockouts += 1
 				var castle := main.board.get_starting_node().node_id
-				_expect(player.space_id == castle or phase == TurnManager.Phase.BATTLE,
+				var snared: bool = main._tokens[player].current_node.node_type == BoardNode.NodeType.TRAP
+				_expect(player.space_id == castle or phase == TurnManager.Phase.BATTLE or snared,
 						"a knocked out player goes to the castle")
 			if skipping.get(player, false) and not waiting:
 				rests += 1
@@ -319,11 +331,16 @@ func _press_something(main: GameController, presses: RandomNumberGenerator) -> v
 	if main.turn_manager.phase == TurnManager.Phase.ACTION and not main.roll_button.disabled:
 		main._on_roll_button_pressed()
 		return
-	var box: Container = main.battle_screen._choices if main.battle_screen.visible else main.choice_box
 	var buttons: Array[Button] = []
-	for child in box.get_children():
-		if child is Button and not child.disabled:
-			buttons.append(child)
+	if main.shop_screen.visible:
+		buttons = main.shop_screen.get_buttons()
+	elif main.bag_prompt.visible:
+		buttons = main.bag_prompt.get_buttons()
+	else:
+		var box: Container = main.battle_screen._choices if main.battle_screen.visible else main.choice_box
+		for child in box.get_children():
+			if child is Button and not child.disabled:
+				buttons.append(child)
 	if not buttons.is_empty():
 		buttons[presses.randi_range(0, buttons.size() - 1)].pressed.emit()
 
@@ -333,15 +350,23 @@ func _press_something(main: GameController, presses: RandomNumberGenerator) -> v
 ## Prints the share of fights each class wins at the levels each monster is met,
 ## with both sides playing like a CPU. A person who reads the habits does better.
 func _report_balance() -> void:
+	_report_table(false)
+	_report_table(true)
+
+
+## `geared` swaps starting gear for what a shop budget would buy.
+func _report_table(geared: bool) -> void:
 	var classes := Database.sorted_ids(Database.classes)
-	print("\nmonster       lv  ", "  ".join(classes), "   rounds")
+	print("\n%s" % ("Shop gear, %d + %d gold per level" % [GEAR_BUDGET_BASE, GEAR_BUDGET_PER_LEVEL]
+			if geared else "Starting gear"))
+	print("monster       lv  ", "  ".join(classes), "   rounds")
 	for monster_id in _monsters_by_level():
 		var monster := Database.get_monster(monster_id)
 		for level: int in [monster.min_level, monster.max_level]:
 			var row := PackedStringArray()
 			var rounds := 0
 			for class_id in classes:
-				var result := _simulate(class_id, level, monster)
+				var result := _simulate(class_id, level, monster, geared)
 				row.append("%3d%%" % result[0])
 				rounds += result[1]
 			print("%-13s %2d  %s   %.1f" % [monster.display_name, level, "    ".join(row),
@@ -359,11 +384,15 @@ func _monsters_by_level() -> Array[String]:
 
 
 # Returns [percent won, total rounds]. Fights start at full health.
-func _simulate(class_id: String, level: int, monster: MonsterData) -> Array[int]:
+func _simulate(class_id: String, level: int, monster: MonsterData, geared: bool) -> Array[int]:
 	var wins := 0
 	var rounds := 0
 	for index in FIGHTS:
 		var hero := _player(class_id, level)
+		if geared:
+			hero.gold = GEAR_BUDGET_BASE + GEAR_BUDGET_PER_LEVEL * level
+			Shop.cpu_shop(hero, Database.sorted_ids(Database.items))
+			hero.heal_fully()
 		var battle := Battle.new(Fighter.from_player(hero), Fighter.from_monster(monster))
 		while not battle.is_over():
 			var choice := battle.cpu_offense()

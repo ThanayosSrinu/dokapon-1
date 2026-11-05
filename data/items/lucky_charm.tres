@@ -8,6 +8,7 @@ id = "lucky_charm"
 display_name = "Lucky Charm"
 description = "A rabbit's foot that quickens your step."
 kind = 3
+icon = 14
 price = 150
 bonuses = Dictionary[String, int]({
 "speed": 2

@@ -2,8 +2,11 @@ class_name CharacterSheet
 extends CenterContainer
 ## Two windows for one player: Status (stats and spells) and Inventory
 ## (equipment and bag). With `can_act` on, bag items can be used or equipped and worn items taken off.
+## Hovering over an item shows what it does.
 ## Rules stay in PlayerData: this script only calls it and redraws.
 
+const ICON_SIZE := Vector2(32, 32)
+const DETAIL_HINT := "Hover over an item to see what it does."
 const SLOT_NAMES := {
 	ItemData.Kind.WEAPON: "Weapon",
 	ItemData.Kind.ARMOR: "Armor",
@@ -17,6 +20,7 @@ var _stats: Label
 var _worn: Container
 var _bag: Container
 var _spells: Label
+var _detail: Label
 var _close: Button
 
 
@@ -45,6 +49,12 @@ func _ready() -> void:
 	inventory.add_child(_worn)
 	_bag = VBoxContainer.new()
 	inventory.add_child(_bag)
+	_detail = Label.new()
+	_detail.custom_minimum_size = Vector2(380, 56)
+	_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail.add_theme_color_override("font_color", GameArt.GOLD)
+	_detail.add_theme_font_size_override("font_size", 14)
+	inventory.add_child(_detail)
 
 	_close = Button.new()
 	_close.text = "Close"
@@ -97,18 +107,20 @@ func _redraw() -> void:
 		player.get_stat("attack"), player.get_stat("defense"), player.get_stat("magic"),
 		player.get_stat("speed"), player.gold, player.experience, player.exp_to_next_level(),
 	]
+	_detail.text = DETAIL_HINT
 	_clear(_worn)
 	_clear(_bag)
 	for slot: ItemData.Kind in PlayerData.EQUIPMENT_SLOTS:
 		var item_id: String = player.equipment.get(slot, "")
 		var text := "%s: %s" % [SLOT_NAMES[slot], _item_name(item_id)]
-		_add_row(_worn, text, "Remove" if item_id != "" else "", player.unequip.bind(slot))
+		_add_row(_worn, text, "Remove" if item_id != "" else "", player.unequip.bind(slot), item_id)
 
 	_add_row(_bag, "Bag (%d / %d)" % [player.inventory.size(), PlayerData.INVENTORY_SIZE], "", Callable())
 	for item_id in player.inventory:
 		var consumable := Database.get_item(item_id).kind == ItemData.Kind.CONSUMABLE
 		var action := player.use_item.bind(item_id) if consumable else player.equip.bind(item_id)
-		_add_row(_bag, _item_name(item_id), "Use" if consumable else "Equip", action)
+		var usable := not consumable or player.can_use_item(item_id)
+		_add_row(_bag, _item_name(item_id), "Use" if consumable else "Equip", action, item_id, usable)
 
 	var names := PackedStringArray()
 	for spell_id in player.spells:
@@ -116,8 +128,16 @@ func _redraw() -> void:
 	_spells.text = "Spells: %s" % (", ".join(names) if not names.is_empty() else "none")
 
 
-func _add_row(parent: Container, text: String, action_text: String, action: Callable) -> void:
+func _add_row(parent: Container, text: String, action_text: String, action: Callable,
+		item_id := "", enabled := true) -> void:
 	var row := HBoxContainer.new()
+	if item_id != "":
+		var icon := TextureRect.new()
+		icon.texture = GameArt.item_icon(Database.get_item(item_id))
+		icon.custom_minimum_size = ICON_SIZE
+		row.add_child(icon)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		row.mouse_entered.connect(_show_detail.bind(item_id))
 	var label := Label.new()
 	label.text = text
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -125,9 +145,15 @@ func _add_row(parent: Container, text: String, action_text: String, action: Call
 	if _can_act and action_text != "":
 		var button := Button.new()
 		button.text = action_text
+		button.disabled = not enabled
 		button.pressed.connect(action)
 		row.add_child(button)
 	parent.add_child(row)
+
+
+func _show_detail(item_id: String) -> void:
+	var item := Database.get_item(item_id)
+	_detail.text = "%s\n%s" % [item.effect_text(), item.description]
 
 
 func _item_name(item_id: String) -> String:

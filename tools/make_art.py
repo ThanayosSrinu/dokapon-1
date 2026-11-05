@@ -4,7 +4,7 @@ Needs Pillow. Everything it draws is original and made only from code."""
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 
 OUT = Path("assets/custom")
 INK = (32, 22, 34, 255)
@@ -474,6 +474,258 @@ def make_battle():
     image.save(OUT / "battle_backdrop.png")
 
 
+# --- Items ------------------------------------------------------------------
+
+ITEM_CELL = 16
+
+
+def with_outline(image):
+    """Puts an ink edge around everything drawn on `image`."""
+    source = image.copy().load()
+    px = image.load()
+    for y in range(ITEM_CELL):
+        for x in range(ITEM_CELL):
+            if source[x, y][3] == 0:
+                for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = x + ox, y + oy
+                    if 0 <= nx < ITEM_CELL and 0 <= ny < ITEM_CELL and source[nx, ny][3] != 0:
+                        px[x, y] = INK
+                        break
+    return image
+
+
+def icon_canvas():
+    image = Image.new("RGBA", (ITEM_CELL, ITEM_CELL), (0, 0, 0, 0))
+    return image, ImageDraw.Draw(image)
+
+
+def icon_blade(length, width, steel, guard, grip):
+    image, draw = icon_canvas()
+    tip = 14 - (11 - length)
+    for step in range(length):
+        x, y = 5 + step, 10 - step
+        draw.point((x, y), fill=shade(steel, 1.2))
+        if width > 1 and step < length - 1:
+            draw.point((x + 1, y), fill=steel)
+            draw.point((x, y + 1), fill=shade(steel, 0.75))
+    draw.line((3, 8, 7, 12), fill=guard)
+    draw.line((4, 11, 2, 13), fill=grip)
+    draw.point((1, 14), fill=guard)
+    return with_outline(image)
+
+
+def icon_hammer():
+    image, draw = icon_canvas()
+    draw.line((7, 6, 7, 14), fill=hexc("#8a5a33"))
+    draw.line((8, 6, 8, 14), fill=hexc("#6d4426"))
+    draw.rectangle((2, 2, 13, 6), fill=hexc("#8d93a6"))
+    draw.line((2, 2, 13, 2), fill=hexc("#c6cbd8"))
+    draw.line((2, 6, 13, 6), fill=hexc("#5f6478"))
+    draw.rectangle((6, 2, 9, 6), fill=hexc("#6d7288"))
+    return with_outline(image)
+
+
+def icon_staff(wood, gem, wand=False):
+    image, draw = icon_canvas()
+    top = 6 if wand else 4
+    draw.line((5, 14, 10, top + 1), fill=wood)
+    draw.line((6, 14, 11, top + 1), fill=shade(wood, 0.72))
+    if wand:
+        draw.rectangle((9, 2, 12, 5), fill=gem)
+        draw.point((10, 3), fill=shade(gem, 1.5))
+    else:
+        draw.line((9, 3, 12, 3), fill=wood)
+        draw.line((12, 3, 13, 5), fill=wood)
+        draw.point((11, 5), fill=gem)
+        draw.point((12, 5), fill=gem)
+    return with_outline(image)
+
+
+def icon_torso(cloth, trim, pattern=None):
+    image, draw = icon_canvas()
+    draw.polygon([(5, 2), (10, 2), (14, 5), (12, 8), (11, 7), (11, 14), (4, 14), (4, 7), (3, 8), (1, 5)],
+                 fill=cloth)
+    draw.line((6, 2, 7, 5), fill=trim)
+    draw.line((9, 2, 8, 5), fill=trim)
+    draw.line((4, 13, 11, 13), fill=trim)
+    draw.line((11, 7, 11, 13), fill=shade(cloth, 0.7))
+    if pattern == "chain":
+        for y in range(6, 13):
+            for x in range(5, 11):
+                if (x + y) % 2 == 0:
+                    draw.point((x, y), fill=shade(cloth, 0.72))
+    elif pattern == "plate":
+        draw.line((4, 9, 11, 9), fill=shade(cloth, 0.68))
+        draw.line((7, 5, 7, 12), fill=shade(cloth, 1.3))
+    elif pattern == "belt":
+        draw.line((4, 10, 11, 10), fill=trim)
+    return with_outline(image)
+
+
+def icon_ring(band, gem):
+    image, draw = icon_canvas()
+    draw.ellipse((4, 6, 11, 13), outline=band)
+    draw.arc((5, 7, 10, 12), 30, 150, fill=shade(band, 0.7))
+    draw.rectangle((6, 3, 9, 6), fill=gem)
+    draw.point((7, 4), fill=shade(gem, 1.6))
+    return with_outline(image)
+
+
+def icon_pendant(cord, gem):
+    image, draw = icon_canvas()
+    draw.arc((3, 0, 12, 11), 20, 160, fill=cord)
+    draw.polygon([(7, 9), (9, 9), (11, 11), (8, 14), (5, 11)], fill=gem)
+    draw.point((7, 10), fill=shade(gem, 1.6))
+    draw.point((8, 13), fill=shade(gem, 0.65))
+    return with_outline(image)
+
+
+def icon_charm():
+    image, draw = icon_canvas()
+    fur = hexc("#e6d3b3")
+    draw.ellipse((5, 5, 11, 13), fill=fur)
+    draw.line((5, 11, 7, 13), fill=shade(fur, 0.75))
+    draw.point((6, 7), fill=shade(fur, 1.15))
+    for x in (6, 8, 10):
+        draw.point((x, 13), fill=hexc("#8a7350"))
+    draw.ellipse((6, 1, 10, 5), outline=GOLD)
+    return with_outline(image)
+
+
+def icon_herb():
+    image, draw = icon_canvas()
+    leaf, dark = hexc("#5fc266"), hexc("#3a8f4f")
+    draw.line((7, 14, 8, 6), fill=dark)
+    draw.polygon([(8, 2), (11, 4), (10, 7), (8, 8), (6, 6), (6, 4)], fill=leaf)
+    draw.polygon([(7, 9), (3, 7), (2, 9), (4, 11)], fill=dark)
+    draw.polygon([(8, 10), (12, 8), (13, 10), (11, 12)], fill=leaf)
+    draw.point((8, 5), fill=shade(leaf, 0.75))
+    return with_outline(image)
+
+
+def icon_flask(liquid, big=False):
+    image, draw = icon_canvas()
+    glass = hexc("#dbe7f0")
+    left, right = (3, 12) if big else (4, 11)
+    draw.rectangle((6, 3, 9, 6), fill=glass)
+    draw.rectangle((6, 1, 9, 2), fill=hexc("#a8784a"))
+    draw.polygon([(6, 6), (9, 6), (right, 9), (right, 13), (10, 14), (5, 14), (left, 13), (left, 9)],
+                 fill=liquid)
+    draw.line((left + 1, 9, left + 1, 12), fill=shade(liquid, 1.5))
+    draw.line((5, 13, 10, 13), fill=shade(liquid, 0.72))
+    draw.line((6, 7, 9, 7), fill=shade(liquid, 1.25))
+    return with_outline(image)
+
+
+def icon_drop():
+    image, draw = icon_canvas()
+    blue = hexc("#5fa8f0")
+    draw.polygon([(8, 2), (12, 8), (12, 11), (10, 13), (6, 13), (4, 11), (4, 8)], fill=blue)
+    draw.line((6, 8, 6, 11), fill=shade(blue, 1.5))
+    draw.line((7, 12, 11, 11), fill=shade(blue, 0.7))
+    return with_outline(image)
+
+
+def make_items():
+    """One picture per item. ItemData.icon counts along this row from 0."""
+    steel, iron = hexc("#c6cbd8"), hexc("#8d93b0")
+    brass, wood = hexc("#d9a441"), hexc("#8a5a33")
+    icons = [
+        icon_blade(8, 2, steel, brass, wood),
+        icon_blade(10, 2, iron, hexc("#c94f4f"), hexc("#3f3550")),
+        icon_blade(5, 1, steel, hexc("#6db0a8"), wood),
+        icon_hammer(),
+        icon_staff(wood, hexc("#69d36b")),
+        icon_staff(hexc("#5a4a8a"), hexc("#4fd8e8"), wand=True),
+        icon_torso(hexc("#7c7fd0"), hexc("#f0d890")),
+        icon_torso(hexc("#a86f3e"), hexc("#6d4426"), "belt"),
+        icon_torso(hexc("#9aa2b8"), hexc("#5f6478"), "chain"),
+        icon_torso(hexc("#c6cbd8"), brass, "plate"),
+        icon_ring(brass, hexc("#e0504a")),
+        icon_ring(hexc("#c6cbd8"), hexc("#4c8fe6")),
+        icon_pendant(brass, hexc("#e0506e")),
+        icon_pendant(hexc("#8d93b0"), hexc("#a56be0")),
+        icon_charm(),
+        icon_herb(),
+        icon_flask(hexc("#d8423f")),
+        icon_flask(hexc("#f0c23f"), big=True),
+        icon_drop(),
+        icon_flask(hexc("#4c8fe6"), big=True),
+    ]
+    sheet = Image.new("RGBA", (ITEM_CELL * len(icons), ITEM_CELL), (0, 0, 0, 0))
+    for index, icon in enumerate(icons):
+        sheet.paste(icon, (index * ITEM_CELL, 0))
+    x2(sheet).save(OUT / "item_icons.png")
+
+
+# --- Shop -------------------------------------------------------------------
+
+def make_shop():
+    """Shelves behind the counter, and the counter on its own to go in front of
+    the shopkeeper. Both are 376 by 64 art pixels."""
+    width, height, counter_top = 376, 64, 48
+    plank, plank_dark = hexc("#5a3b2e"), hexc("#4a2f28")
+    shelf, shelf_dark = hexc("#a8784a"), hexc("#6d4426")
+    image = Image.new("RGBA", (width, height), plank)
+    px = image.load()
+    for y in range(height):
+        for x in range(width):
+            if (x + (y // 16) * 11) % 28 == 0 or y % 16 == 15:
+                px[x, y] = plank_dark
+            elif (x * 7 + y * 13) % 61 == 0:
+                px[x, y] = shade(plank, 1.12)
+    # Goods stand along each shelf, picked by a fixed pattern.
+    goods = [hexc("#d8423f"), hexc("#4c8fe6"), hexc("#f0c23f"), hexc("#46a65c"), hexc("#8b5fd0")]
+    for shelf_y in (20, 40):
+        for x in range(width):
+            px[x, shelf_y] = shelf
+            px[x, shelf_y + 1] = shelf
+            px[x, shelf_y + 2] = shelf_dark
+        for x in range(8, width - 8, 9):
+            kind = (x * 3 + shelf_y) % 11
+            if x % 45 == 26:
+                continue
+            color = goods[kind % len(goods)]
+            if kind < 6:
+                # A bottle.
+                for y in range(shelf_y - 7, shelf_y):
+                    for dx in range(0, 4):
+                        px[x + dx, y] = color if y > shelf_y - 6 else hexc("#dbe7f0")
+                px[x + 1, shelf_y - 8] = hexc("#a8784a")
+                px[x + 2, shelf_y - 8] = hexc("#a8784a")
+                px[x, shelf_y - 4] = shade(color, 1.4)
+            elif kind < 9:
+                # A jar.
+                for y in range(shelf_y - 5, shelf_y):
+                    for dx in range(0, 6):
+                        px[x + dx, y] = shade(color, 0.8)
+                for dx in range(0, 6):
+                    px[x + dx, shelf_y - 6] = shelf_dark
+            else:
+                # A stack of coins.
+                for y in range(shelf_y - 3, shelf_y):
+                    for dx in range(0, 6):
+                        px[x + dx, y] = GOLD if y % 2 else GOLD_LIGHT
+    image.save(OUT / "shop_backdrop.png")
+
+    counter = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    px = counter.load()
+    light, dark = hexc("#c9965a"), hexc("#7a4d2c")
+    for y in range(counter_top, height):
+        for x in range(width):
+            if y < counter_top + 2:
+                px[x, y] = light
+            elif y == counter_top + 2:
+                px[x, y] = INK
+            elif x % 40 == 0:
+                px[x, y] = shade(dark, 0.72)
+            elif (x * 5 + y * 3) % 47 == 0:
+                px[x, y] = shade(dark, 1.15)
+            else:
+                px[x, y] = dark
+    counter.save(OUT / "shop_counter.png")
+
+
 # --- Tile table -------------------------------------------------------------
 
 def make_tile_table():
@@ -516,4 +768,6 @@ if __name__ == "__main__":
     make_fx()
     make_ui()
     make_battle()
+    make_items()
+    make_shop()
     make_tile_table()

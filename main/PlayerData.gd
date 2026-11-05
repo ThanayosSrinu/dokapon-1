@@ -13,8 +13,8 @@ signal leveled_up(new_level: int)
 const INVENTORY_SIZE := 6
 const MAX_LEVEL := 30
 ## Reaching the next level takes this much experience, times the current level.
-const EXP_PER_LEVEL := 100
-## Turns a knocked out player spends recovering at the castle.
+const EXP_PER_LEVEL := 30
+## Turns a knocked out player spends recovering.
 const KO_TURNS_LOST := 1
 ## The slots a player can wear something in.
 const EQUIPMENT_SLOTS: Array[ItemData.Kind] = [
@@ -49,7 +49,7 @@ var inventory: Array[String] = []
 var equipment := {}
 ## The ids of the spells this player knows.
 var spells: Array[String] = []
-## Turns left to sit out after a knockout.
+## Turns left to sit out, after a knockout or a snare.
 var turns_to_skip := 0
 
 
@@ -79,6 +79,15 @@ func choose_class(id: String) -> void:
 
 func get_class_name_text() -> String:
 	return Database.get_class_data(class_id).display_name
+
+
+## What a stat would be with `item_id` worn in place of what is in its slot.
+func get_stat_with(item_id: String, stat: String) -> int:
+	var item := Database.get_item(item_id)
+	var worn_bonus := 0
+	if equipment.has(item.kind):
+		worn_bonus = Database.get_item(equipment[item.kind]).bonuses.get(stat, 0)
+	return maxi(get_stat(stat) - worn_bonus + item.bonuses.get(stat, 0), 1)
 
 
 ## A stat's current value: class, then level, then everything worn. Always at
@@ -132,6 +141,15 @@ func add_item(item_id: String) -> bool:
 	return true
 
 
+## Takes one of an item out of the bag. Returns false if there is none.
+func remove_item(item_id: String) -> bool:
+	if not inventory.has(item_id):
+		return false
+	inventory.erase(item_id)
+	changed.emit()
+	return true
+
+
 ## True if a consumable is in the bag and would do something right now.
 func can_use_item(item_id: String) -> bool:
 	var item := Database.get_item(item_id)
@@ -156,10 +174,37 @@ func use_item(item_id: String) -> bool:
 
 ## Lost a battle: back to full health, but sitting out the next turn.
 func knock_out() -> void:
+	turns_to_skip = KO_TURNS_LOST
+	heal_fully()
+
+
+func heal_fully() -> void:
 	hp = get_stat("max_hp")
 	mp = get_stat("max_mp")
-	turns_to_skip = KO_TURNS_LOST
 	changed.emit()
+
+
+func refill_mp() -> void:
+	mp = get_stat("max_mp")
+	changed.emit()
+
+
+## Damage outside of battle. It can leave 1 HP but never knocks anyone out.
+func take_damage(amount: int) -> void:
+	hp = maxi(hp - amount, 1)
+	changed.emit()
+
+
+func lose_turn() -> void:
+	turns_to_skip += 1
+	changed.emit()
+
+
+## Teaches a spell from outside this player's class.
+func learn_spell(spell_id: String) -> void:
+	if not spells.has(spell_id):
+		spells.append(spell_id)
+		changed.emit()
 
 
 ## Wears an item from the bag. What it replaces goes back into the bag.

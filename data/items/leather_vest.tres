@@ -8,6 +8,7 @@ id = "leather_vest"
 display_name = "Leather Vest"
 description = "Toughened hide sewn into a snug vest."
 kind = 2
+icon = 7
 price = 110
 bonuses = Dictionary[String, int]({
 "defense": 3

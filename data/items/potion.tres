@@ -8,5 +8,6 @@ id = "potion"
 display_name = "Potion"
 description = "A fizzy brew that mends a fair wound."
 kind = 0
+icon = 16
 price = 80
 heal_hp = 40

@@ -8,6 +8,7 @@ id = "dagger"
 display_name = "Dagger"
 description = "A slim blade that strikes swiftly."
 kind = 1
+icon = 2
 price = 90
 bonuses = Dictionary[String, int]({
 "attack": 2,

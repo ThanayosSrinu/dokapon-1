@@ -28,6 +28,7 @@ starting_items = Array[String](["herb", "mana_drop"])
 starting_equipment = Array[String](["oak_staff", "cloth_robe"])
 spells_by_level = Dictionary[int, String]({
 1: "mend",
+2: "smite",
 4: "renew",
 8: "sanctuary"
 })

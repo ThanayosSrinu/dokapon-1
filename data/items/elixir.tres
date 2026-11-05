@@ -8,5 +8,6 @@ id = "elixir"
 display_name = "Elixir"
 description = "A golden draught that heals grievous harm."
 kind = 0
+icon = 17
 price = 200
 heal_hp = 100

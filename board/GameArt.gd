@@ -16,6 +16,9 @@ const FLAG: Texture2D = preload("res://assets/custom/flag.png")
 const RIBBON: Texture2D = preload("res://assets/custom/ribbon.png")
 const PORTRAIT_FRAME: Texture2D = preload("res://assets/custom/portrait_frame.png")
 const BATTLE_BACKDROP: Texture2D = preload("res://assets/custom/battle_backdrop.png")
+const SHOP_BACKDROP: Texture2D = preload("res://assets/custom/shop_backdrop.png")
+const SHOP_COUNTER: Texture2D = preload("res://assets/custom/shop_counter.png")
+const ITEM_ICONS: Texture2D = preload("res://assets/custom/item_icons.png")
 const FONT: Font = preload("res://assets/kenney/fonts/KenneyMiniSquare.ttf")
 
 ## Pixels of the world per pixel of art.
@@ -39,6 +42,8 @@ const SPACE_CELL := 40
 ## The point on a SPACES image at the middle of the space's top face.
 const SPACE_CENTER := Vector2(20, 18)
 const ICON_CELL := 20
+## Size of one picture on ITEM_ICONS. They are already drawn at 2x.
+const ITEM_ICON_SIZE := 32
 
 const INK := Color(0.125, 0.086, 0.133)
 const GOLD := Color(0.96, 0.82, 0.42)
@@ -56,6 +61,14 @@ static func portrait(sheet: Texture2D) -> AtlasTexture:
 	var texture := AtlasTexture.new()
 	texture.atlas = sheet
 	texture.region = Rect2(8, 3, 16, 16)
+	return texture
+
+
+## A texture holding an item's picture.
+static func item_icon(item: ItemData) -> AtlasTexture:
+	var texture := AtlasTexture.new()
+	texture.atlas = ITEM_ICONS
+	texture.region = Rect2(item.icon * ITEM_ICON_SIZE, 0, ITEM_ICON_SIZE, ITEM_ICON_SIZE)
 	return texture
 
 

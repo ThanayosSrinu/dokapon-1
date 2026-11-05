@@ -25,6 +25,9 @@ var day := 1
 ## Town space ID -> owning PlayerData. Filled in Section 7.
 var town_owners := {}
 
+## Treasure space ID -> the day its chest was emptied. See SpaceEffects.
+var emptied_chests := {}
+
 
 ## Resets everything for a new game and decides the turn order at random.
 ## A `seed_value` of 0 picks a new random seed.
@@ -34,6 +37,7 @@ func start_new_game(new_players: Array[PlayerData], seed_value := 0) -> void:
 	players = _shuffled(new_players)
 	day = 1
 	town_owners.clear()
+	emptied_chests.clear()
 	print("New game: seed %d, turn order %s" % [game_seed, ", ".join(get_player_names())])
 
 

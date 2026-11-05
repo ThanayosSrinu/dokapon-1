@@ -12,17 +12,21 @@
 [ext_resource type="Script" path="res://ui/ClassMenu.gd" id="14_class"]
 [ext_resource type="Script" path="res://ui/CharacterSheet.gd" id="15_sheet"]
 [ext_resource type="Script" path="res://ui/BattleScreen.gd" id="16_battle"]
+[ext_resource type="Script" path="res://ui/ShopScreen.gd" id="17_shop"]
+[ext_resource type="Script" path="res://ui/BagPrompt.gd" id="18_bag"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Warrior-Red.png" id="10_red"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Soldier-Blue.png" id="11_blue"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Green.png" id="12_green"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Purple.png" id="13_purple"]
 
-[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu", "fade", "message_window", "info_panel", "class_menu", "character_sheet", "character_button", "battle_screen")]
+[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu", "fade", "message_window", "info_panel", "class_menu", "character_sheet", "character_button", "battle_screen", "shop_screen", "bag_prompt")]
 script = ExtResource("1_r0du0")
 class_menu = NodePath("UI/ClassMenu")
 character_sheet = NodePath("UI/CharacterSheet")
 character_button = NodePath("UI/Panel/Row/Side/CharacterButton")
 battle_screen = NodePath("UI/BattleScreen")
+shop_screen = NodePath("UI/ShopScreen")
+bag_prompt = NodePath("UI/BagPrompt")
 players = [NodePath("Player1"), NodePath("Player2"), NodePath("Player3"), NodePath("Player4")]
 roll_button = NodePath("UI/Panel/Row/Side/RollButton")
 status_label = NodePath("UI/Panel/Row/StatusLabel")
@@ -262,6 +266,24 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("16_battle")
+
+[node name="ShopScreen" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("17_shop")
+
+[node name="BagPrompt" type="CenterContainer" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("18_bag")
 
 [node name="Fade" type="ColorRect" parent="UI"]
 visible = false

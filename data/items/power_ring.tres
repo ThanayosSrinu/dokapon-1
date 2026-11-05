@@ -8,6 +8,7 @@ id = "power_ring"
 display_name = "Power Ring"
 description = "A red band that tightens your grip in battle."
 kind = 3
+icon = 10
 price = 260
 bonuses = Dictionary[String, int]({
 "attack": 3

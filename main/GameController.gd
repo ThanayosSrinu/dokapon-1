@@ -7,8 +7,9 @@ extends Node2D
 ##   ROLLING        Tumble the die, then show the landing rings.
 ##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
-##   SPACE_EVENT    Celebrate the landed space, and offer to fight anyone on it.
-##   BATTLE         BattleScreen plays the fight. Section 6 adds the other effects.
+##   SPACE_EVENT    Offer to fight anyone on the space. If nobody is challenged,
+##                  the space takes effect. SpaceEffects and Shop hold the rules.
+##   BATTLE         BattleScreen plays the fight.
 ## Press C or the Character button to open the active player's sheet.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
@@ -31,11 +32,12 @@ extends Node2D
 ##       ├── TurnBanner
 ##       ├── SetupMenu
 ##       ├── BattleScreen
+##       ├── ShopScreen
+##       ├── BagPrompt
 ##       └── Fade (ColorRect)
 
-## Emitted by the buttons that ask whether to challenge a rival. Carries the
-## chosen player, or null to leave them be.
-signal _rival_chosen(rival: PlayerData)
+## Emitted by the buttons from _ask(), with the value of the one pressed.
+signal _choice_made(value: Variant)
 
 ## Where tokens stand when they share a space, by how many there are. Each one
 ## stays inside the top of the space.
@@ -55,20 +57,20 @@ const PLAY_ZOOM := 1
 const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.CASTLE: "Back home at the castle.",
 	BoardNode.NodeType.NORMAL: "An ordinary space. Nothing happens.",
-	BoardNode.NodeType.SHOP: "A shop! (Shopping is not implemented yet.)",
+	BoardNode.NodeType.SHOP: "A shop, with new stock every week.",
 	BoardNode.NodeType.EVENT: "An event space! (Events are not implemented yet.)",
 	BoardNode.NodeType.TOWN: "A town. (Towns are not implemented yet.)",
-	BoardNode.NodeType.ITEM: "An item space.",
-	BoardNode.NodeType.MAGIC: "A magic space. (Spells are not implemented yet.)",
-	BoardNode.NodeType.GOLD: "A gold space.",
+	BoardNode.NodeType.ITEM: "Something glints on the ground.",
+	BoardNode.NodeType.MAGIC: "The air hums with old magic.",
+	BoardNode.NodeType.GOLD: "Coins shine in the dirt.",
 	BoardNode.NodeType.BATTLE: "Something stirs nearby...",
-	BoardNode.NodeType.TREASURE: "Treasure may be buried here. (Not implemented yet.)",
-	BoardNode.NodeType.SHRINE: "A shrine. (Healing is not implemented yet.)",
-	BoardNode.NodeType.TRAP: "A trap! (Traps are not implemented yet.)",
+	BoardNode.NodeType.TREASURE: "A chest sits here, and something may guard it.",
+	BoardNode.NodeType.SHRINE: "A shrine that restores HP and MP.",
+	BoardNode.NodeType.TRAP: "Something is wrong with this ground...",
 }
 
-## Placeholder reward until Section 6 gives these spaces real effects.
-const GOLD_SPACE_REWARD := 50
+const GOLD_TEXT_COLOR := Color(0.96, 0.82, 0.42)
+const LOSS_TEXT_COLOR := Color(1.0, 0.55, 0.5)
 ## How often a CPU player challenges a rival it lands next to. Section 9 replaces
 ## this with real thinking.
 const CPU_CHALLENGE_CHANCE := 0.5
@@ -123,6 +125,12 @@ const CPU_CHALLENGE_CHANCE := 0.5
 ## Plays fights. Drag BattleScreen here.
 @export var battle_screen: BattleScreen
 
+## Buying and selling. Drag ShopScreen here.
+@export var shop_screen: ShopScreen
+
+## Asks what to drop when the bag is full. Drag BagPrompt here.
+@export var bag_prompt: BagPrompt
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -162,6 +170,8 @@ var _landing_nodes: Array[BoardNode] = []
 var _text_tween: Tween
 # The pulse of the Roll Dice button while it waits.
 var _button_tween: Tween
+# True if the space just played hurt the active player, so nobody cheers.
+var _landing_went_badly := false
 
 
 func _ready() -> void:
@@ -170,7 +180,8 @@ func _ready() -> void:
 			or info_label == null or dice == null or turn_manager == null
 			or hud == null or banner == null or setup_menu == null or fade == null
 			or message_window == null or info_panel == null or class_menu == null
-			or character_sheet == null or character_button == null or battle_screen == null):
+			or character_sheet == null or character_button == null or battle_screen == null
+			or shop_screen == null or bag_prompt == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -295,10 +306,11 @@ func _on_space_clicked(node: BoardNode) -> void:
 	var neighbor_texts := PackedStringArray()
 	for neighbor in board.get_neighbors(node):
 		neighbor_texts.append("#%d %s" % [neighbor.node_id, neighbor.get_display_name()])
-	info_label.text = "Space #%d: %s\nType: %s\nNeighbors: %s" % [
+	info_label.text = "Space #%d: %s\nType: %s\n%s\nNeighbors: %s" % [
 		node.node_id,
 		node.get_display_name(),
 		node.get_type_name(),
+		TYPE_DESCRIPTIONS.get(node.node_type, ""),
 		", ".join(neighbor_texts),
 	]
 	# A PanelContainer never shrinks by itself when its text gets shorter.
@@ -333,7 +345,7 @@ func _enter_turn_start() -> void:
 	if player.turns_to_skip > 0:
 		player.turns_to_skip -= 1
 		await banner.play("%s rests" % player.player_name, player.token_color, player.character_sheet)
-		_previous_result = "%s rested at the castle." % player.player_name
+		_previous_result = "%s sat out a turn." % player.player_name
 		_active_player().is_active = false
 		turn_manager.end_turn()
 		return
@@ -365,38 +377,125 @@ func _enter_space_event() -> void:
 		space.get_display_name(),
 		TYPE_DESCRIPTIONS.get(space.node_type, ""),
 	]
-	var reward := _give_placeholder_reward(space)
-	if reward != "":
-		_previous_result += " " + reward
 	_show_status(_previous_result)
 	space.bump(1.6)
 	BoardFx.burst(board, space.global_position, BoardNode.TYPE_INFO[space.node_type]["color"])
 
-	var battle := await _find_battle(space)
-	if battle != null:
-		await _enter_battle(battle)
-		return
-	if space.node_type == BoardNode.NodeType.TRAP:
-		camera.shake()
-	player.cheer()
+	# A rival comes first, and challenging one gives up the space's effect.
+	_landing_went_badly = false
+	var data := turn_manager.current_player()
+	var rival := await _ask_about_rivals(space)
+	if rival != null:
+		await _play_battle(Battle.new(Fighter.from_player(data), Fighter.from_player(rival)))
+	else:
+		await _play_space(space)
+	if not _landing_went_badly:
+		player.cheer()
 	await get_tree().create_timer(space_event_duration).timeout
 	turn_manager.end_turn()
 
 
-## Returns the fight this landing starts, or null if there is none. A rival on
-## the space comes first, and a Battle space only counts if nobody was challenged.
-func _find_battle(space: BoardNode) -> Battle:
+## Does what the active player's space does.
+func _play_space(space: BoardNode) -> void:
 	var data := turn_manager.current_player()
-	var rival := await _ask_about_rivals(space)
-	if rival != null:
-		return Battle.new(Fighter.from_player(data), Fighter.from_player(rival))
-	if space.node_type == BoardNode.NodeType.BATTLE:
-		return Battle.new(Fighter.from_player(data), Fighter.from_monster(_pick_monster(data)))
-	return null
+	match space.node_type:
+		BoardNode.NodeType.GOLD:
+			await _apply_result(SpaceEffects.gold_space(data))
+		BoardNode.NodeType.ITEM:
+			await _apply_result(SpaceEffects.item_space(data))
+		BoardNode.NodeType.MAGIC:
+			await _apply_result(SpaceEffects.magic_space(data))
+		BoardNode.NodeType.SHRINE:
+			await _apply_result(SpaceEffects.shrine_space(data))
+		BoardNode.NodeType.TRAP:
+			await _apply_result(SpaceEffects.trap_space(data))
+		BoardNode.NodeType.SHOP:
+			await _visit_shop(space)
+		BoardNode.NodeType.TREASURE:
+			await _visit_chest(space)
+		BoardNode.NodeType.BATTLE:
+			await _play_battle(Battle.new(Fighter.from_player(data), Fighter.from_monster(_pick_monster(data))))
+
+
+## Pays out a Result and shows it in the message window.
+func _apply_result(result: SpaceEffects.Result) -> void:
+	var data := turn_manager.current_player()
+	var token := _active_player()
+	_previous_result += " " + result.text
+	_show_status(_previous_result)
+	if result.harmful:
+		_landing_went_badly = true
+		camera.shake()
+	if result.gold != 0:
+		data.add_gold(result.gold)
+		BoardFx.pop_text(board, token.global_position, "%+d G" % result.gold,
+				GOLD_TEXT_COLOR if result.gold > 0 else LOSS_TEXT_COLOR)
+	if result.item_id != "":
+		await _give_item(data, result.item_id)
+	if result.to_castle:
+		_send_to_castle(data)
+
+
+## Puts an item in the bag, asking what to drop if the bag is full.
+func _give_item(data: PlayerData, item_id: String) -> void:
+	var item_name := Database.get_item(item_id).display_name
+	if data.add_item(item_id):
+		BoardFx.pop_text(board, _active_player().global_position, item_name, Color.WHITE)
+		return
+	var kept := false
+	if data.is_cpu:
+		var dropped := SpaceEffects.cpu_make_room(data, item_id)
+		kept = dropped != "" and data.add_item(item_id)
+	else:
+		kept = await bag_prompt.ask(data, item_id)
+	if kept:
+		_previous_result += " It went in the bag."
+	else:
+		_previous_result += " It was left behind."
+	_show_status(_previous_result)
+
+
+## People browse the ShopScreen. CPU players buy what they need straight away.
+func _visit_shop(space: BoardNode) -> void:
+	var data := turn_manager.current_player()
+	var shelves := Shop.stock(space.node_id, GameState.get_week())
+	var line := ""
+	if data.is_cpu:
+		var bought := Shop.cpu_shop(data, shelves)
+		line = "%s bought %s." % [data.player_name, ", ".join(bought)] if not bought.is_empty() \
+				else "%s found nothing to buy." % data.player_name
+	else:
+		line = await shop_screen.run(data, shelves, space.get_display_name())
+	_previous_result += " " + line
+	_show_status(_previous_result)
+
+
+## Offers the chest, fights its guardian if it has one, then pays out.
+func _visit_chest(space: BoardNode) -> void:
+	var data := turn_manager.current_player()
+	if not SpaceEffects.chest_is_full(space.node_id):
+		var days := SpaceEffects.chest_days_left(space.node_id)
+		_previous_result += " It is empty. It fills again in %d day(s)." % days
+		_show_status(_previous_result)
+		return
+	if not data.is_cpu:
+		var opened: Variant = await _ask("%s\nOpen the chest?" % _previous_result,
+				[["Open it", true], ["Leave it", false]])
+		if not opened:
+			return
+	var chest := SpaceEffects.roll_chest(data)
+	if chest.guardian != null:
+		_show_status("%s\nThe %s guards it!" % [_previous_result, chest.guardian.display_name])
+		var battle := Battle.new(Fighter.from_player(data), Fighter.from_monster(chest.guardian))
+		await _play_battle(battle)
+		if battle.winner == null or battle.winner.player != data:
+			return
+	SpaceEffects.empty_chest(space.node_id)
+	await _apply_result(chest)
 
 
 ## Plays `battle`, then sends the loser home.
-func _enter_battle(battle: Battle) -> void:
+func _play_battle(battle: Battle) -> void:
 	turn_manager.go_to(TurnManager.Phase.BATTLE)
 	camera.shake()
 	await get_tree().create_timer(space_event_duration * 0.5).timeout
@@ -405,8 +504,7 @@ func _enter_battle(battle: Battle) -> void:
 	_show_status(_previous_result)
 	if battle.loser != null and battle.loser.player != null:
 		_send_to_castle(battle.loser.player)
-	await get_tree().create_timer(space_event_duration).timeout
-	turn_manager.end_turn()
+		_landing_went_badly = true
 
 
 # --- Internal helpers -------------------------------------------------------
@@ -449,24 +547,6 @@ func _start_game(player_count: int) -> void:
 	turn_manager.start_game()
 
 
-## Temporary: lets gold and items change before shops exist.
-## Returns a line for the message window, or "" if nothing happened.
-func _give_placeholder_reward(space: BoardNode) -> String:
-	var player := turn_manager.current_player()
-	match space.node_type:
-		BoardNode.NodeType.GOLD:
-			player.add_gold(GOLD_SPACE_REWARD)
-			return "Found %d gold." % GOLD_SPACE_REWARD
-		BoardNode.NodeType.ITEM:
-			var ids := Database.sorted_ids(Database.items)
-			var item_id := ids[GameState.rng.randi_range(0, ids.size() - 1)]
-			var item_name := Database.get_item(item_id).display_name
-			if player.add_item(item_id):
-				return "Found a %s." % item_name
-			return "Found a %s, but the bag is full." % item_name
-	return ""
-
-
 ## Asks the active player whether to fight someone sharing `space`. Returns the
 ## rival, or null. Nobody fights at the castle: it is the safe place to wake up.
 func _ask_about_rivals(space: BoardNode) -> PlayerData:
@@ -484,23 +564,28 @@ func _ask_about_rivals(space: BoardNode) -> PlayerData:
 			return rivals[GameState.rng.randi_range(0, rivals.size() - 1)]
 		return null
 
-	_show_status("%s\nChallenge someone here?" % _previous_result)
-	roll_button.hide()
+	var options := []
 	for rival in rivals:
-		_add_rival_button("Challenge %s" % rival.player_name, rival)
-	_add_rival_button("Leave them be", null)
+		options.append(["Challenge %s" % rival.player_name, rival])
+	options.append(["Leave them be", null])
+	return await _ask("%s\nChallenge someone here?" % _previous_result, options)
+
+
+## Shows `question` with one button per option, each a [text, value] pair.
+## Returns the value of the one pressed.
+func _ask(question: String, options: Array) -> Variant:
+	_show_status(question)
+	roll_button.hide()
+	for option: Array in options:
+		var button := Button.new()
+		button.text = option[0]
+		button.pressed.connect(func() -> void: _choice_made.emit(option[1]))
+		choice_box.add_child(button)
 	choice_box.get_child(0).grab_focus()
-	var chosen: PlayerData = await _rival_chosen
+	var chosen: Variant = await _choice_made
 	_clear_choices()
 	roll_button.show()
 	return chosen
-
-
-func _add_rival_button(text: String, rival: PlayerData) -> void:
-	var button := Button.new()
-	button.text = text
-	button.pressed.connect(func() -> void: _rival_chosen.emit(rival))
-	choice_box.add_child(button)
 
 
 ## Picks a monster for a player of this level.
@@ -520,8 +605,8 @@ func _send_to_castle(player: PlayerData) -> void:
 
 ## Only the active human player may change things, and only before rolling.
 func _open_character_sheet() -> void:
-	# The HUD appears once every player has a class. A fight fills the screen.
-	if not hud.visible or battle_screen.visible:
+	# The HUD appears once every player has a class. These fill the screen.
+	if not hud.visible or battle_screen.visible or shop_screen.visible or bag_prompt.visible:
 		return
 	var player := turn_manager.current_player()
 	character_sheet.open(player, not player.is_cpu and turn_manager.phase == TurnManager.Phase.ACTION)
