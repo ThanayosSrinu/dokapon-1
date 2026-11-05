@@ -25,14 +25,6 @@ const GUARD_STEPS_FREE := 2
 ## An owner's guard is this many levels tougher per level of the town above 1.
 const GUARD_LEVELS_PER_TOWN_LEVEL := 2
 
-## CPU players fight guards up to this many levels above their own, if their health
-## is at least this share. Section 9 replaces these with real thinking.
-const CPU_LEVELS_AHEAD := 2
-const CPU_HEALTH_SHARE := 0.6
-## CPU players keep this much gold after investing.
-const CPU_KEEP_GOLD := 100
-
-
 ## Reads where the towns are. `towns` is BoardManager.get_town_info().
 static func setup(towns: Dictionary) -> void:
 	GameState.towns = towns
@@ -218,14 +210,3 @@ static func ranking() -> Array[PlayerData]:
 				return first > second
 			return GameState.players.find(a) < GameState.players.find(b))
 	return order
-
-
-## True if a CPU player thinks it can beat this town's guard.
-static func cpu_will_fight(player: PlayerData, id: int) -> bool:
-	return (guard(id).level <= player.level + CPU_LEVELS_AHEAD
-			and player.hp >= player.get_stat("max_hp") * CPU_HEALTH_SHARE)
-
-
-static func cpu_will_invest(player: PlayerData, id: int) -> bool:
-	return (why_not_invest(player, id) == ""
-			and player.gold - invest_cost(id) >= CPU_KEEP_GOLD)

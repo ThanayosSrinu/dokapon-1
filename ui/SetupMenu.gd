@@ -1,9 +1,13 @@
 class_name SetupMenu
 extends CenterContainer
 ## The menu shown before a game starts. It shows the heroes, asks how many will
-## play and covers the board, so the board cannot be clicked behind it.
+## play, how many of them the computer runs and how well, and covers the board, so
+## the board cannot be clicked behind it.
 
-## Emitted once when a number is picked. The menu then hides itself.
+## Emitted once, right before player_count_chosen.
+signal cpus_chosen(count: int, level: CpuBrain.Level)
+
+## Emitted once when the last question is answered. The menu then hides itself.
 signal player_count_chosen(count: int)
 
 const HEROES: Array[Texture2D] = [
@@ -26,8 +30,14 @@ const FRAME_TIME := 0.45
 ## Gets one animated hero per player. Drag HeroRow here.
 @export var hero_row: Container
 
+## Asks each question. Drag Subtitle here.
+@export var question_label: Label
+
 var _heroes: Array[AtlasTexture] = []
 var _clock := 0.0
+# The answers so far, kept for the later questions.
+var _player_count := 0
+var _cpu_count := 0
 
 
 func _ready() -> void:
@@ -39,13 +49,7 @@ func _ready() -> void:
 		hero.custom_minimum_size = HERO_SIZE
 		hero_row.add_child(hero)
 
-	for count in range(min_players, max_players + 1):
-		var button := Button.new()
-		button.text = "%d Players" % count
-		button.pressed.connect(_choose.bind(count))
-		button_row.add_child(button)
-	# Focus the last button, so Space or Enter starts a full game.
-	button_row.get_child(-1).grab_focus()
+	_ask_player_count()
 
 	var panel: Control = get_node("Panel")
 	# Wait a frame, so the panel has its final size before animating it.
@@ -70,6 +74,49 @@ func _process(delta: float) -> void:
 		texture.region.position.x = column * GameArt.CHARACTER_FRAME
 
 
-func _choose(count: int) -> void:
+func _ask_player_count() -> void:
+	var options := []
+	for count in range(min_players, max_players + 1):
+		options.append(["%d Players" % count, _ask_cpu_count.bind(count)])
+	# Space or Enter starts a full game.
+	_show_question("How many heroes set out?", options, options.size() - 1)
+
+
+func _ask_cpu_count(count: int) -> void:
+	_player_count = count
+	var options := [["All people", _ask_level.bind(0)]]
+	for cpus in range(1, count + 1):
+		options.append(["%d CPU" % cpus, _ask_level.bind(cpus)])
+	# One person against the computer is the usual game.
+	_show_question("How many does the computer play?", options, count - 1)
+
+
+func _ask_level(cpus: int) -> void:
+	_cpu_count = cpus
+	if cpus == 0:
+		_finish(CpuBrain.Level.NORMAL)
+		return
+	var options := []
+	for level: CpuBrain.Level in CpuBrain.LEVEL_NAMES:
+		options.append([CpuBrain.LEVEL_NAMES[level], _finish.bind(level)])
+	_show_question("How well does the computer play?", options, 1)
+
+
+func _finish(level: CpuBrain.Level) -> void:
 	hide()
-	player_count_chosen.emit(count)
+	cpus_chosen.emit(_cpu_count, level)
+	player_count_chosen.emit(_player_count)
+
+
+# Each option is a [text, Callable] pair.
+func _show_question(question: String, options: Array, focused: int) -> void:
+	question_label.text = question
+	for old_button in button_row.get_children():
+		button_row.remove_child(old_button)
+		old_button.queue_free()
+	for option: Array in options:
+		var button := Button.new()
+		button.text = option[0]
+		button.pressed.connect(option[1])
+		button_row.add_child(button)
+	button_row.get_child(focused).grab_focus()

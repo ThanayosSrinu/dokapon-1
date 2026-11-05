@@ -147,15 +147,15 @@ func _test_income_and_worth() -> void:
 func _test_cpu_choices() -> void:
 	var hero := _player("Hero")
 	_new_game([hero])
-	_expect(Town.cpu_will_fight(hero, NEAR), "a CPU player fights a weak guard")
-	_expect(not Town.cpu_will_fight(hero, FAR), "a CPU player avoids a strong guard")
+	_expect(CpuBrain.will_fight_guard(hero, NEAR), "a CPU player fights a weak guard")
+	_expect(not CpuBrain.will_fight_guard(hero, FAR), "a CPU player avoids a strong guard")
 	hero.hp = 1
-	_expect(not Town.cpu_will_fight(hero, NEAR), "a hurt CPU player avoids fights")
+	_expect(not CpuBrain.will_fight_guard(hero, NEAR), "a hurt CPU player avoids fights")
 	Town.claim(NEAR, hero)
 	hero.gold = Town.invest_cost(NEAR)
-	_expect(not Town.cpu_will_invest(hero, NEAR), "a CPU player keeps some gold back")
-	hero.gold += Town.CPU_KEEP_GOLD
-	_expect(Town.cpu_will_invest(hero, NEAR), "a CPU player invests spare gold")
+	_expect(not CpuBrain.will_invest(hero, NEAR), "a CPU player keeps some gold back")
+	hero.gold += CpuBrain.KEEP_GOLD_BASE + CpuBrain.KEEP_GOLD_PER_LEVEL * hero.level
+	_expect(CpuBrain.will_invest(hero, NEAR), "a CPU player invests spare gold")
 
 
 func _test_quests() -> void:

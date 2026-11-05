@@ -224,10 +224,12 @@ func is_waiting_for_choice() -> bool:
 func get_landing_preview(steps: int) -> Array[BoardNode]:
 	# Before a move starts, the player may be free to turn around. In the
 	# middle of a move, they never are.
-	var came_from := _previous_node
-	if can_reverse_at_turn_start and not is_moving:
-		came_from = null
-	return board_manager.get_landing_nodes(current_node, steps, came_from)
+	return board_manager.get_landing_nodes(current_node, steps, get_came_from())
+
+
+## The space this player may not walk straight back to, or null if there is none.
+func get_came_from() -> BoardNode:
+	return null if can_reverse_at_turn_start and not is_moving else _previous_node
 
 
 ## Slides the idle token slightly off the center of its space, so several

@@ -390,7 +390,7 @@ func _simulate(class_id: String, level: int, monster: MonsterData, geared: bool)
 		var hero := _player(class_id, level)
 		if geared:
 			hero.gold = GEAR_BUDGET_BASE + GEAR_BUDGET_PER_LEVEL * level
-			Shop.cpu_shop(hero, Database.sorted_ids(Database.items))
+			CpuBrain.shop(hero, Database.sorted_ids(Database.items))
 			hero.heal_fully()
 		var battle := Battle.new(Fighter.from_player(hero), Fighter.from_monster(monster))
 		while not battle.is_over():

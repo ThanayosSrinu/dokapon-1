@@ -225,7 +225,7 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("8_banner")
 
-[node name="SetupMenu" type="CenterContainer" parent="UI" node_paths=PackedStringArray("button_row", "hero_row")]
+[node name="SetupMenu" type="CenterContainer" parent="UI" node_paths=PackedStringArray("button_row", "hero_row", "question_label")]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -235,6 +235,7 @@ mouse_filter = 0
 script = ExtResource("9_setup")
 button_row = NodePath("Panel/VBox/ButtonRow")
 hero_row = NodePath("Panel/VBox/HeroRow")
+question_label = NodePath("Panel/VBox/Subtitle")
 
 [node name="Panel" type="PanelContainer" parent="UI/SetupMenu"]
 layout_mode = 2

@@ -56,10 +56,10 @@ const PVP_EXP_PER_LEVEL := 30
 ## spoils instead: see Rivalry.
 const KO_GOLD_SHARE := 0.25
 
-## Below this share of HP, a CPU fighter tries to heal.
+## Below this share of HP, a monster or an Easy CPU player tries to heal.
 const CPU_HEAL_BELOW := 0.35
-## How often a CPU player picks each move. Monsters use their own habits, and
-## Section 9 replaces these with real thinking.
+## How often an Easy CPU player picks each move. Monsters use their own habits, and
+## CpuBrain assumes that anyone it has not seen fight has these habits too.
 const CPU_OFFENSE := {"attack": 5, "smash": 2, "spell": 3}
 const CPU_DEFENSE := {"guard": 4, "dodge": 2, "counter": 3}
 const OFFENSE_NAMES := {"attack": Offense.ATTACK, "smash": Offense.SMASH, "spell": Offense.SPELL}
@@ -112,6 +112,10 @@ var winner: Fighter
 var loser: Fighter
 ## Set when the battle ends with someone running away.
 var fled_fighter: Fighter
+## Fighter -> Offense or Defense -> how often it has shown that move in this fight.
+## Moves are shown when they resolve, so CpuBrain may learn from them.
+var seen_offenses := {}
+var seen_defenses := {}
 
 # How many fighters have acted this round.
 var _actions_this_round := 0
@@ -172,6 +176,9 @@ func resolve(choice: Choice, defense := Defense.NONE) -> Outcome:
 	outcome.defender = defender
 	outcome.offense = choice.offense
 	outcome.defense = defense
+	if needs_defense(choice):
+		_remember(seen_offenses, attacker, choice.offense)
+		_remember(seen_defenses, defender, defense)
 	match choice.offense:
 		Offense.ATTACK:
 			outcome.opening = "%s attacks!" % attacker.display_name
@@ -209,9 +216,12 @@ func conclude() -> PackedStringArray:
 	return lines
 
 
-## Picks the attacker's move for a monster or CPU player.
+## Picks the attacker's move for a monster or CPU player. Monsters and Easy players
+## go by habit, and CpuBrain thinks for the others.
 func cpu_offense() -> Choice:
 	var fighter := attacker
+	if _thinks(fighter):
+		return CpuBrain.offense(self)
 	var healing := _cpu_healing_choice(fighter)
 	if healing != null:
 		return healing
@@ -228,8 +238,20 @@ func cpu_offense() -> Choice:
 ## Picks the defender's answer for a monster or CPU player.
 func cpu_defense() -> Defense:
 	var fighter := defender
+	if _thinks(fighter):
+		return CpuBrain.defense(self)
 	var weights: Dictionary = fighter.monster.defense_weights if fighter.monster != null else CPU_DEFENSE
 	return DEFENSE_NAMES[_weighted_pick(weights)]
+
+
+func _thinks(fighter: Fighter) -> bool:
+	return fighter.player != null and fighter.player.difficulty != CpuBrain.Level.EASY
+
+
+func _remember(memory: Dictionary, fighter: Fighter, move: int) -> void:
+	if not memory.has(fighter):
+		memory[fighter] = {}
+	memory[fighter][move] = memory[fighter].get(move, 0) + 1
 
 
 # --- Resolving an action ----------------------------------------------------

@@ -12,6 +12,7 @@ extends Node2D
 ##                  the rules.
 ##   BATTLE         BattleScreen plays the fight. Rivalry settles a duel afterwards.
 ## During ACTION a player may also cast one field spell (FieldMagic.gd).
+## CPU players take every turn the same way, and CpuBrain.gd makes their choices.
 ## Each new week pays the owners of towns, posts a royal quest (Quest.gd) and checks
 ## on the Shadow Crown (ShadowCrown.gd).
 ## Press C or the Character button to open the active player's sheet, and R or
@@ -78,9 +79,6 @@ const TYPE_DESCRIPTIONS := {
 const GOLD_TEXT_COLOR := Color(0.96, 0.82, 0.42)
 const LOSS_TEXT_COLOR := Color(1.0, 0.55, 0.5)
 const EVENT_COLOR := Color(0.62, 0.42, 0.90)
-## How often a CPU player challenges a rival it lands next to. Section 9 replaces
-## this with real thinking.
-const CPU_CHALLENGE_CHANCE := 0.5
 
 ## Every token in the scene. The setup menu decides how many are used, and the
 ## turn order is drawn at random when the game starts.
@@ -153,9 +151,12 @@ const CPU_CHALLENGE_CHANCE := 0.5
 ## Seconds the landed space stays on screen before the turn ends.
 @export var space_event_duration := 0.8
 
-## How many players the computer controls, counted from the last token. Their
-## choices are random until Section 9 adds real AI.
+## How many players the computer controls, counted from the last token. The setup
+## menu overwrites this. CpuBrain makes their choices.
 @export_range(0, 4) var cpu_players := 0
+
+## How well they play. The setup menu overwrites this too.
+@export var cpu_level := CpuBrain.Level.NORMAL
 
 ## The black cover that fades away at the start. Drag Fade here.
 @export var fade: ColorRect
@@ -222,6 +223,7 @@ func _ready() -> void:
 	EventBus.space_clicked.connect(_on_space_clicked)
 	EventBus.phase_changed.connect(_on_phase_changed)
 	EventBus.day_started.connect(_on_day_started)
+	setup_menu.cpus_chosen.connect(_on_cpus_chosen)
 	setup_menu.player_count_chosen.connect(_start_game)
 	character_button.pressed.connect(_open_character_sheet)
 	character_sheet.hidden.connect(_on_character_sheet_hidden)
@@ -319,7 +321,9 @@ func _on_path_choice_required(available_nodes: Array[BoardNode]) -> void:
 	turn_manager.go_to(TurnManager.Phase.CHOOSING_PATH)
 
 	if turn_manager.current_player().is_cpu:
-		_choose_path(available_nodes[GameState.rng.randi_range(0, available_nodes.size() - 1)])
+		var token := _active_player()
+		_choose_path(CpuBrain.choose_path(turn_manager.current_player(), board, available_nodes,
+				token.current_node, token.steps_left))
 		return
 
 	_show_status("%s - Rolled %d\nFork! Click a glowing space:" % [_turn_title(), _last_roll])
@@ -372,6 +376,11 @@ func _on_movement_finished(final_node: BoardNode) -> void:
 	_set_landing_nodes(no_nodes)
 	_arrange_tokens()
 	turn_manager.go_to(TurnManager.Phase.SPACE_EVENT)
+
+
+func _on_cpus_chosen(count: int, level: CpuBrain.Level) -> void:
+	cpu_players = count
+	cpu_level = level
 
 
 ## Each week begins by paying the town owners, posting a new quest and checking on
@@ -433,7 +442,11 @@ func _enter_turn_start() -> void:
 func _enter_action() -> void:
 	var data := turn_manager.current_player()
 	if data.is_cpu:
-		var plan := FieldMagic.cpu_plan(data)
+		var used := CpuBrain.tidy(data)
+		if not used.is_empty():
+			_previous_result = "%s used %s." % [data.player_name, ", ".join(used)]
+			_show_status(_previous_result)
+		var plan := CpuBrain.field_plan(data, board, _active_player().get_came_from())
 		if not plan.is_empty():
 			await _cast_field_spell(data, plan["spell"], plan["target"])
 		_on_roll_button_pressed()
@@ -581,7 +594,7 @@ func _visit_shop(space: BoardNode) -> void:
 	var shelves := Shop.stock(space.node_id, GameState.get_week())
 	var line := ""
 	if data.is_cpu:
-		var bought := Shop.cpu_shop(data, shelves)
+		var bought := CpuBrain.shop(data, shelves)
 		line = "%s bought %s." % [data.player_name, ", ".join(bought)] if not bought.is_empty() \
 				else "%s found nothing to buy." % data.player_name
 	else:
@@ -598,11 +611,12 @@ func _visit_chest(space: BoardNode) -> void:
 		_previous_result += " It is empty. It fills again in %d day(s)." % days
 		_show_status(_previous_result)
 		return
+	var opened: Variant = CpuBrain.will_open_chest(data)
 	if not data.is_cpu:
-		var opened: Variant = await _ask("%s\nOpen the chest?" % _previous_result,
+		opened = await _ask("%s\nOpen the chest?" % _previous_result,
 				[["Open it", true], ["Leave it", false]])
-		if not opened:
-			return
+	if not opened:
+		return
 	var chest := SpaceEffects.roll_chest(data)
 	if chest.guardian != null:
 		_show_status("%s\nThe %s guards it!" % [_previous_result, chest.guardian.display_name])
@@ -631,7 +645,7 @@ func _free_town(space: BoardNode) -> void:
 	var id := space.node_id
 	var guard := Town.guard(id)
 	var line := "%s (level %d) holds %s." % [guard.display_name, guard.level, space.get_display_name()]
-	var fight: Variant = Town.cpu_will_fight(data, id)
+	var fight: Variant = CpuBrain.will_fight_guard(data, id)
 	if not data.is_cpu:
 		fight = await _ask("%s\n%s Free it, and it pays %d G a week." % [_previous_result, line, Town.income(id)],
 				[["Fight", true], ["Leave it", false]])
@@ -661,7 +675,7 @@ func _manage_town(space: BoardNode) -> void:
 	if problem != "":
 		_say("Growing %s costs %d G. %s" % [space.get_display_name(), cost, problem])
 		return
-	var invest: Variant = Town.cpu_will_invest(data, id)
+	var invest: Variant = CpuBrain.will_invest(data, id)
 	if not data.is_cpu:
 		invest = await _ask("%s\nGrow %s to level %d? It would pay %d G a week instead of %d G."
 				% [_previous_result, space.get_display_name(), Town.level(id) + 1,
@@ -681,7 +695,7 @@ func _enter_rival_town(space: BoardNode, town_owner: PlayerData) -> void:
 	var data := turn_manager.current_player()
 	var id := space.node_id
 	var guard := Town.guard(id)
-	var storm: Variant = Town.cpu_will_fight(data, id)
+	var storm: Variant = CpuBrain.will_storm(data, id)
 	if not data.is_cpu:
 		storm = await _ask("%s\n%s owns this town. %s (level %d) guards it." % [_previous_result,
 				town_owner.player_name, guard.display_name, guard.level],
@@ -749,7 +763,7 @@ func _take_spoil(winner: PlayerData, loser: PlayerData) -> void:
 	if options.is_empty():
 		_say("%s has nothing worth taking." % loser.player_name)
 		return
-	var spoil := Rivalry.cpu_spoil(options)
+	var spoil := CpuBrain.pick_spoil(winner, options)
 	if not winner.is_cpu:
 		var buttons := []
 		for option in options:
@@ -815,6 +829,7 @@ func _start_game(player_count: int) -> void:
 		var token := players[index]
 		var data := PlayerData.new(token.player_name, token.token_color,
 				index >= player_count - cpu_players)
+		data.difficulty = cpu_level
 		data.character_sheet = token.character_sheet
 		data.space_id = token.current_node.node_id
 		roster.append(data)
@@ -836,7 +851,8 @@ func _start_game(player_count: int) -> void:
 			player.choose_class(ids[GameState.rng.randi_range(0, ids.size() - 1)])
 		else:
 			player.choose_class(await class_menu.ask(player))
-		print("%s is a %s" % [player.player_name, player.get_class_name_text()])
+		var mind: String = " (CPU, %s)" % CpuBrain.LEVEL_NAMES[player.difficulty] if player.is_cpu else ""
+		print("%s is a %s%s" % [player.player_name, player.get_class_name_text(), mind])
 
 	hud.setup(GameState.players)
 	hud.show()
@@ -859,9 +875,7 @@ func _ask_about_rivals(space: BoardNode) -> PlayerData:
 		return null
 
 	if turn_manager.current_player().is_cpu:
-		if GameState.rng.randf() < CPU_CHALLENGE_CHANCE:
-			return rivals[GameState.rng.randi_range(0, rivals.size() - 1)]
-		return null
+		return CpuBrain.pick_rival(turn_manager.current_player(), rivals, space)
 
 	var options := []
 	var question := "%s\nChallenge someone here?" % _previous_result

@@ -11,8 +11,6 @@ const MIRE_STEPS := 2
 ## Gold Leech takes this share of the target's gold, up to this much per caster level.
 const LEECH_SHARE := 0.1
 const LEECH_MAX_PER_LEVEL := 40
-## How often a CPU player casts when it can. Section 9 replaces this with real thinking.
-const CPU_CAST_CHANCE := 0.35
 
 
 ## Every field spell's id, sorted so that seeded picks are repeatable.
@@ -90,22 +88,3 @@ static func cast(caster: PlayerData, id: String, target: PlayerData = null) -> S
 			target.lose_turn()
 			result.text = "%s falls asleep and will miss a turn." % target.player_name
 	return result
-
-
-## What a CPU player casts: {"spell", "target"}, or an empty Dictionary for nothing.
-## It aims at whoever is ahead. Section 9 replaces this with real thinking.
-static func cpu_plan(player: PlayerData) -> Dictionary:
-	# Going home is a choice for Section 9: a CPU player would waste its lead.
-	var options: Array[String] = known(player).filter(func(id: String) -> bool:
-			return why_not(player, id) == "" and id != "homeward")
-	if options.is_empty() or GameState.rng.randf() >= CPU_CAST_CHANCE:
-		return {}
-	var id := options[GameState.rng.randi_range(0, options.size() - 1)]
-	var target: PlayerData = null
-	if targets_rival(id):
-		var targets := valid_targets(player, id)
-		for rival in Town.ranking():
-			if targets.has(rival):
-				target = rival
-				break
-	return {"spell": id, "target": target}

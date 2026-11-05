@@ -27,8 +27,10 @@ var token_color := Color.WHITE
 ## This player's character sheet, used for portraits in the UI.
 var character_sheet: Texture2D
 
-## True when the computer plays this player. Section 9 adds real AI.
+## True when the computer plays this player.
 var is_cpu := false
+## How well the computer plays them.
+var difficulty := CpuBrain.Level.NORMAL
 
 ## The stable ID of the space the player stands on. Saved instead of a node
 ## reference, because nodes do not exist in a save file.

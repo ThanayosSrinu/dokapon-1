@@ -192,19 +192,19 @@ func _test_cpu_shopping() -> void:
 	var shelves: Array[String] = ["war_hammer", "rune_wand", "herb", "potion"]
 	var warrior := _player("warrior")
 	warrior.gold = 700
-	var bought := Shop.cpu_shop(warrior, shelves)
+	var bought := CpuBrain.shop(warrior, shelves)
 	_expect(warrior.equipment[ItemData.Kind.WEAPON] == "war_hammer", "a warrior buys the hammer")
 	_expect(bought.has("War Hammer"), "the purchase is reported")
 	_expect(not warrior.inventory.has("short_sword"), "old gear is sold")
 
 	var mage := _player("mage")
 	mage.gold = 700
-	Shop.cpu_shop(mage, shelves)
+	CpuBrain.shop(mage, shelves)
 	_expect(mage.equipment[ItemData.Kind.WEAPON] == "rune_wand", "a mage buys the wand")
 
 	var poor := _player("warrior")
 	poor.gold = 40
-	Shop.cpu_shop(poor, shelves)
+	CpuBrain.shop(poor, shelves)
 	_expect(poor.gold >= 0, "a CPU cannot go into debt")
 
 

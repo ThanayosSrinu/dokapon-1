@@ -71,7 +71,7 @@ func _test_spoils() -> void:
 	GameState.shadow_crown = {"wearer": "Red", "ends_day": 8}
 	options = Rivalry.spoils(red, blue)
 	_expect(options.back()["kind"] == Rivalry.Spoil.TOWN, "the crown's wearer can take a town")
-	_expect(Rivalry.cpu_spoil(options) == options.back(), "the CPU takes what is worth most")
+	_expect(CpuBrain.pick_spoil(red, options) == options.back(), "the CPU takes what is worth most")
 	Rivalry.take(red, blue, options.back())
 	_expect(Town.owner_of(NEAR) == red, "the town moves")
 
@@ -142,7 +142,7 @@ func _test_field_magic() -> void:
 	_expect(FieldMagic.why_not(red, "homeward") != "", "Homeward is useless at the castle")
 	red.mp = 0
 	_expect(FieldMagic.why_not(red, "mire") == "Not enough MP.", "no MP, no spell")
-	_expect(FieldMagic.cpu_plan(red).is_empty(), "a CPU with no MP casts nothing")
+	_expect(CpuBrain.field_plan(red, null, null).is_empty(), "a CPU with no MP casts nothing")
 
 	var learner := _player("Learner", 1)
 	var teachable := SpaceEffects.learnable_spells(learner)

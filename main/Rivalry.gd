@@ -91,15 +91,6 @@ static func take(winner: PlayerData, loser: PlayerData, spoil: Dictionary) -> St
 	return "%s takes %s from %s." % [winner.player_name, spoil["text"], loser.player_name]
 
 
-## The CPU's choice: whatever is worth the most. Section 9 can make this smarter.
-static func cpu_spoil(options: Array[Dictionary]) -> Dictionary:
-	var best: Dictionary = options[0]
-	for option in options:
-		if option["value"] > best["value"]:
-			best = option
-	return best
-
-
 ## Fines a bully and updates the grudges. Returns a sentence about it, or "".
 ## Call it after the EXP is paid and the spoil is taken.
 static func after_duel(winner: PlayerData, loser: PlayerData, winner_challenged: bool) -> String:
