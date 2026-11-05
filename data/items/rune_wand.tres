@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ItemData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "rune_wand"
+display_name = "Rune Wand"
+description = "A wand etched with glowing arcane runes."
+kind = 1
+price = 480
+bonuses = Dictionary[String, int]({
+"attack": 2,
+"magic": 7
+})

@@ -21,6 +21,8 @@ const WAITING_OPACITY := 0.55
 var _rows := {}
 # PlayerData -> the portrait in that player's row.
 var _portraits := {}
+# PlayerData -> the label with that player's numbers.
+var _labels := {}
 
 
 func _ready() -> void:
@@ -37,7 +39,10 @@ func setup(players: Array[PlayerData]) -> void:
 		row.add_theme_constant_override("separation", 10)
 		var portrait := _make_portrait(player)
 		var label := Label.new()
-		label.text = player.player_name
+		label.add_theme_font_size_override("font_size", 14)
+		_labels[player] = label
+		player.changed.connect(_show_numbers.bind(player))
+		_show_numbers(player)
 		row.add_child(portrait)
 		row.add_child(label)
 		player_list.add_child(row)
@@ -50,6 +55,11 @@ func setup(players: Array[PlayerData]) -> void:
 	position.x = -size.x
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(self, "position:x", target, 0.5)
+
+
+func _show_numbers(player: PlayerData) -> void:
+	_labels[player].text = "%s Lv %d %s\nHP %d/%d  %d G" % [player.player_name, player.level,
+			player.get_class_name_text(), player.hp, player.get_stat("max_hp"), player.gold]
 
 
 func _make_portrait(player: PlayerData) -> Control:

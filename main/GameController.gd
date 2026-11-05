@@ -8,6 +8,7 @@ extends Node2D
 ##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
 ##   SPACE_EVENT    Celebrate the landed space. Sections 5 and 6 add real effects.
+## Press C or the Character button to open the active player's sheet.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
 ## Scene layout:
@@ -51,14 +52,18 @@ const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.SHOP: "A shop! (Shopping is not implemented yet.)",
 	BoardNode.NodeType.EVENT: "An event space! (Events are not implemented yet.)",
 	BoardNode.NodeType.TOWN: "A town. (Towns are not implemented yet.)",
-	BoardNode.NodeType.ITEM: "An item space. (Items are not implemented yet.)",
+	BoardNode.NodeType.ITEM: "An item space.",
 	BoardNode.NodeType.MAGIC: "A magic space. (Spells are not implemented yet.)",
-	BoardNode.NodeType.GOLD: "A gold space. (Gold is not implemented yet.)",
-	BoardNode.NodeType.BATTLE: "A monster appears! (Battles are not implemented yet.)",
+	BoardNode.NodeType.GOLD: "A gold space.",
+	BoardNode.NodeType.BATTLE: "A monster appears! (Real battles arrive in Section 5.)",
 	BoardNode.NodeType.TREASURE: "Treasure may be buried here. (Not implemented yet.)",
 	BoardNode.NodeType.SHRINE: "A shrine. (Healing is not implemented yet.)",
 	BoardNode.NodeType.TRAP: "A trap! (Traps are not implemented yet.)",
 }
+
+## Placeholder rewards until Sections 5 and 6 give these spaces real effects.
+const GOLD_SPACE_REWARD := 50
+const BATTLE_SPACE_EXPERIENCE := 60
 
 ## Every token in the scene. The setup menu decides how many are used, and the
 ## turn order is drawn at random when the game starts.
@@ -97,6 +102,15 @@ const TYPE_DESCRIPTIONS := {
 
 ## Asks how many players will play. Drag SetupMenu here.
 @export var setup_menu: SetupMenu
+
+## Asks each human player for a class. Drag ClassMenu here.
+@export var class_menu: ClassMenu
+
+## Shows a player's stats, items and spells. Drag CharacterSheet here.
+@export var character_sheet: CharacterSheet
+
+## Opens the character sheet. Drag CharacterButton here.
+@export var character_button: Button
 
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
@@ -144,7 +158,8 @@ func _ready() -> void:
 			or choice_box == null or board == null or camera == null
 			or info_label == null or dice == null or turn_manager == null
 			or hud == null or banner == null or setup_menu == null or fade == null
-			or message_window == null or info_panel == null):
+			or message_window == null or info_panel == null or class_menu == null
+			or character_sheet == null or character_button == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -160,6 +175,8 @@ func _ready() -> void:
 	EventBus.space_clicked.connect(_on_space_clicked)
 	EventBus.phase_changed.connect(_on_phase_changed)
 	setup_menu.player_count_chosen.connect(_start_game)
+	character_button.pressed.connect(_open_character_sheet)
+	character_sheet.hidden.connect(_on_character_sheet_hidden)
 
 	camera.world_limit = board.get_world_rect()
 	camera.global_position = board.get_bounds().get_center()
@@ -179,6 +196,16 @@ func _ready() -> void:
 	_show_status("Choose the number of players.")
 	_clear_choices()
 	_arrange_tokens()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and character_sheet.visible:
+		character_sheet.close_sheet()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_C:
+		if character_sheet.visible:
+			character_sheet.close_sheet()
+		else:
+			_open_character_sheet()
 
 
 # --- Signal handlers --------------------------------------------------------
@@ -320,6 +347,9 @@ func _enter_space_event() -> void:
 		space.get_display_name(),
 		TYPE_DESCRIPTIONS.get(space.node_type, ""),
 	]
+	var reward := _give_placeholder_reward(space)
+	if reward != "":
+		_previous_result += " " + reward
 	_show_status(_previous_result)
 	space.bump(1.6)
 	BoardFx.burst(board, space.global_position, BoardNode.TYPE_INFO[space.node_type]["color"])
@@ -354,12 +384,57 @@ func _start_game(player_count: int) -> void:
 		token.path_choice_required.connect(_on_path_choice_required)
 
 	GameState.start_new_game(roster, game_seed)
+	for player in GameState.players:
+		if player.is_cpu:
+			var ids := Database.sorted_ids(Database.classes)
+			player.choose_class(ids[GameState.rng.randi_range(0, ids.size() - 1)])
+		else:
+			player.choose_class(await class_menu.ask(player))
+		print("%s is a %s" % [player.player_name, player.get_class_name_text()])
+
 	hud.setup(GameState.players)
 	hud.show()
 	_arrange_tokens()
 	_slide_in_windows()
 	camera.set_zoom_index(PLAY_ZOOM, 0.9)
 	turn_manager.start_game()
+
+
+## Temporary: lets stats and items change before battles and shops exist.
+## Returns a line for the message window, or "" if nothing happened.
+func _give_placeholder_reward(space: BoardNode) -> String:
+	var player := turn_manager.current_player()
+	match space.node_type:
+		BoardNode.NodeType.GOLD:
+			player.add_gold(GOLD_SPACE_REWARD)
+			return "Found %d gold." % GOLD_SPACE_REWARD
+		BoardNode.NodeType.BATTLE:
+			var levels := player.add_experience(BATTLE_SPACE_EXPERIENCE)
+			if levels > 0:
+				return "Level up! Now level %d." % player.level
+			return "Gained %d EXP." % BATTLE_SPACE_EXPERIENCE
+		BoardNode.NodeType.ITEM:
+			var ids := Database.sorted_ids(Database.items)
+			var item_id := ids[GameState.rng.randi_range(0, ids.size() - 1)]
+			var item_name := Database.get_item(item_id).display_name
+			if player.add_item(item_id):
+				return "Found a %s." % item_name
+			return "Found a %s, but the bag is full." % item_name
+	return ""
+
+
+## Only the active human player may change things, and only before rolling.
+func _open_character_sheet() -> void:
+	# The HUD appears once every player has a class.
+	if not hud.visible:
+		return
+	var player := turn_manager.current_player()
+	character_sheet.open(player, not player.is_cpu and turn_manager.phase == TurnManager.Phase.ACTION)
+
+
+func _on_character_sheet_hidden() -> void:
+	if turn_manager.phase == TurnManager.Phase.ACTION and not turn_manager.current_player().is_cpu:
+		roll_button.grab_focus()
 
 
 ## Brings the message window up from below and the info box in from the right.

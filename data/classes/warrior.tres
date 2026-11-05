@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="ClassData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "warrior"
+display_name = "Warrior"
+description = "Strong and sturdy, with little magic."
+base_stats = Dictionary[String, int]({
+"attack": 12,
+"defense": 9,
+"magic": 2,
+"max_hp": 40,
+"max_mp": 4,
+"speed": 6
+})
+growth = Dictionary[String, int]({
+"attack": 3,
+"defense": 2,
+"magic": 0,
+"max_hp": 8,
+"max_mp": 1,
+"speed": 1
+})
+starting_gold = 200
+starting_items = Array[String](["herb"])
+starting_equipment = Array[String](["short_sword"])
+spells_by_level = Dictionary[int, String]({
+5: "spark"
+})

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SpellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/SpellData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "frost_shard"
+display_name = "Frost Shard"
+description = "A sliver of ice launched at one enemy."
+kind = 0
+mp_cost = 5
+power = 11

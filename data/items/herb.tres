@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ItemData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "herb"
+display_name = "Herb"
+description = "A bitter leaf that closes small wounds."
+kind = 0
+price = 30
+heal_hp = 15

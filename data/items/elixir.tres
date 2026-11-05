@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ItemData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "elixir"
+display_name = "Elixir"
+description = "A golden draught that heals grievous harm."
+kind = 0
+price = 200
+heal_hp = 100

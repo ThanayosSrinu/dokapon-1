@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SpellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/SpellData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "thunderbolt"
+display_name = "Thunderbolt"
+description = "A crackling bolt drops from a clear sky."
+kind = 0
+mp_cost = 9
+power = 20

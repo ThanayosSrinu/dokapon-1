@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="ClassData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "rogue"
+display_name = "Rogue"
+description = "A quick trickster who lives by the blade."
+base_stats = Dictionary[String, int]({
+"attack": 9,
+"defense": 6,
+"magic": 4,
+"max_hp": 32,
+"max_mp": 8,
+"speed": 11
+})
+growth = Dictionary[String, int]({
+"attack": 2,
+"defense": 1,
+"magic": 1,
+"max_hp": 6,
+"max_mp": 1,
+"speed": 3
+})
+starting_gold = 300
+starting_items = Array[String](["herb", "herb"])
+starting_equipment = Array[String](["dagger", "leather_vest"])
+spells_by_level = Dictionary[int, String]({
+1: "spark",
+7: "frost_shard"
+})

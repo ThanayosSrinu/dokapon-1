@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ItemData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "lucky_charm"
+display_name = "Lucky Charm"
+description = "A rabbit's foot that quickens your step."
+kind = 3
+price = 150
+bonuses = Dictionary[String, int]({
+"speed": 2
+})
