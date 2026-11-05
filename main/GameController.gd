@@ -1,30 +1,32 @@
 class_name GameController
 extends Node2D
-## Runs the game for now. Each player takes one move in order:
-##   1. The player clicks "Roll Dice" and the die tumbles.
-##   2. Blue rings show every space the roll can end on.
-##   3. The token hops that many spaces while the camera follows it.
-##   4. At a fork, the possible paths glow green. Click a glowing space, or
-##      click one of the path buttons, to continue.
-##   5. When the token stops, the landed space is shown and the next player's
-##      turn begins.
+## Connects the rules to what is on screen. TurnManager decides which phase the
+## game is in, and this script does the work of each phase:
+##   TURN_START     Announce the player and move the camera to their token.
+##   ACTION         Wait for "Roll Dice".
+##   ROLLING        Tumble the die, then show the landing rings.
+##   MOVING         The token hops while the camera follows it.
+##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
+##   SPACE_EVENT    Show the landed space. Sections 5 and 6 add real effects.
 ## Clicking any other space shows its details in the InfoLabel.
-##
-## A real Turn Manager replaces the simple player rotation here in Section 3.
 ##
 ## Scene layout:
 ##   Main (Node2D, this script)
 ##   ├── WorldMap (BoardManager, from res://maps/WorldMap.tscn)
 ##   ├── Player1 ... Player4 (PlayerMovement, from res://player/Player.tscn)
 ##   ├── BoardCamera
+##   ├── TurnManager
 ##   └── UI (CanvasLayer)
 ##       ├── InfoLabel (Label)
+##       ├── TurnHud
 ##       ├── Dice (DiceRoller)
-##       └── Panel (PanelContainer)
-##           └── VBox (VBoxContainer)
-##               ├── StatusLabel (Label)
-##               ├── RollButton (Button)
-##               └── ChoiceBox (VBoxContainer)
+##       ├── Panel (PanelContainer)
+##       │   └── VBox (VBoxContainer)
+##       │       ├── StatusLabel (Label)
+##       │       ├── RollButton (Button)
+##       │       └── ChoiceBox (VBoxContainer)
+##       ├── TurnBanner
+##       └── SetupMenu
 
 ## Distance between a space's center and the tokens sharing it, in pixels.
 const TOKEN_SPREAD := 20.0
@@ -45,7 +47,8 @@ const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.TRAP: "A trap! (Traps are not implemented yet.)",
 }
 
-## Every player, in turn order. Remove entries to play with fewer players.
+## Every token in the scene. The setup menu decides how many are used, and the
+## turn order is drawn at random when the game starts.
 @export var players: Array[PlayerMovement] = []
 
 ## The "Roll Dice" button. Drag the RollButton node here in the Inspector.
@@ -70,15 +73,36 @@ const TYPE_DESCRIPTIONS := {
 ## The die shown at the bottom of the screen. Drag the Dice node here.
 @export var dice: DiceRoller
 
+## The turn state machine. Drag the TurnManager node here.
+@export var turn_manager: TurnManager
+
+## Shows the calendar and turn order. Drag TurnHud here.
+@export var hud: TurnHud
+
+## Announces each turn. Drag TurnBanner here.
+@export var banner: TurnBanner
+
+## Asks how many players will play. Drag SetupMenu here.
+@export var setup_menu: SetupMenu
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
-# The round being played, starting at 1. A round is one move by each player.
-var _turn := 1
-# Index into `players` of the player whose move it is.
-var _active_index := 0
-# True from pressing "Roll Dice" until the token has stopped.
-var _move_in_progress := false
+## Seconds the landed space stays on screen before the turn ends.
+@export var space_event_duration := 0.8
+
+## How many players the computer controls, counted from the last token. Their
+## choices are random until Section 9 adds real AI.
+@export_range(0, 4) var cpu_players := 0
+
+## Set above 0 to replay the game with that seed, which is printed to Output at
+## the start of every game. 0 uses a new random seed.
+@export var game_seed := 0
+
+# PlayerData -> the token (PlayerMovement) on the board.
+var _tokens := {}
+# What happened on the last turn, shown above the next player's prompt.
+var _previous_result := ""
 # The result of the last dice roll, kept so every status message can show it.
 var _last_roll := 0
 # The space clicked last, so its highlight can be removed on the next click.
@@ -92,9 +116,9 @@ var _landing_nodes: Array[BoardNode] = []
 func _ready() -> void:
 	if (players.is_empty() or roll_button == null or status_label == null
 			or choice_box == null or board == null or camera == null
-			or info_label == null or dice == null):
-		push_error("GameController: assign 'players', 'roll_button', 'status_label', "
-				+ "'choice_box', 'board', 'camera', 'info_label' and 'dice' in the Inspector.")
+			or info_label == null or dice == null or turn_manager == null
+			or hud == null or banner == null or setup_menu == null):
+		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
 	# The button's 'pressed' signal is meant to be connected in the editor
@@ -105,35 +129,30 @@ func _ready() -> void:
 				+ "Connecting it from code instead.")
 		roll_button.pressed.connect(_on_roll_button_pressed)
 
-	# The players are created from their own scene file, so their signals are
-	# connected here in code. Only the active player ever moves, so one set of
-	# handlers works for all of them.
-	for player in players:
-		player.step_finished.connect(_on_step_finished)
-		player.movement_finished.connect(_on_movement_finished)
-		player.path_choice_required.connect(_on_path_choice_required)
-
-	# Board clicks arrive through the global EventBus autoload.
+	# Board clicks and phase changes arrive through the global EventBus autoload.
 	EventBus.space_clicked.connect(_on_space_clicked)
+	EventBus.phase_changed.connect(_on_phase_changed)
+	setup_menu.player_count_chosen.connect(_start_game)
 
 	camera.global_position = board.get_bounds().get_center()
 	info_label.text = ("Click a space to inspect it.\n"
 			+ "WASD / arrows: pan    Wheel: zoom    Right-drag: pan")
 
+	roll_button.disabled = true
+	_show_status("Choose the number of players.")
 	_clear_choices()
 	_arrange_tokens()
-	_begin_turn()
 
 
 # --- Signal handlers --------------------------------------------------------
 
 ## Connected to RollButton's 'pressed' signal in the editor.
 func _on_roll_button_pressed() -> void:
-	if _move_in_progress:
+	# The phase is the only guard needed: it leaves ACTION right here, so a
+	# second press cannot start a second roll.
+	if turn_manager.phase != TurnManager.Phase.ACTION:
 		return
-
-	# Set these first, so nothing can start a second roll mid-move.
-	_move_in_progress = true
+	turn_manager.go_to(TurnManager.Phase.ROLLING)
 	roll_button.disabled = true
 
 	var player := _active_player()
@@ -147,6 +166,7 @@ func _on_roll_button_pressed() -> void:
 
 	# The tokens left behind move back to the center of their space.
 	_arrange_tokens(player)
+	turn_manager.go_to(TurnManager.Phase.MOVING)
 	# move_steps() runs over several frames. It returns right away here and
 	# reports back later through the signals connected in _ready().
 	player.move_steps(_last_roll)
@@ -160,6 +180,12 @@ func _on_step_finished(_node: BoardNode, steps_remaining: int) -> void:
 
 
 func _on_path_choice_required(available_nodes: Array[BoardNode]) -> void:
+	turn_manager.go_to(TurnManager.Phase.CHOOSING_PATH)
+
+	if turn_manager.current_player().is_cpu:
+		_choose_path(available_nodes[GameState.rng.randi_range(0, available_nodes.size() - 1)])
+		return
+
 	_show_status("%s - Rolled %d\nFork! Click a glowing space:" % [_turn_title(), _last_roll])
 	_path_options = available_nodes
 	for node in available_nodes:
@@ -173,7 +199,7 @@ func _on_path_choice_required(available_nodes: Array[BoardNode]) -> void:
 
 func _on_space_clicked(node: BoardNode) -> void:
 	# At a fork, clicking a glowing space picks that path.
-	if _path_options.has(node):
+	if turn_manager.phase == TurnManager.Phase.CHOOSING_PATH and _path_options.has(node):
 		_choose_path(node)
 		return
 
@@ -181,8 +207,8 @@ func _on_space_clicked(node: BoardNode) -> void:
 		_selected_node.highlighted = false
 	_selected_node = node
 	node.highlighted = true
-	# During a move, the camera stays with the token.
-	if not _move_in_progress:
+	# During the rest of a turn, the camera stays with the token.
+	if turn_manager.phase == TurnManager.Phase.ACTION:
 		camera.focus_on(node.global_position)
 
 	var neighbor_texts := PackedStringArray()
@@ -197,48 +223,104 @@ func _on_space_clicked(node: BoardNode) -> void:
 
 
 func _on_movement_finished(final_node: BoardNode) -> void:
-	var player := _active_player()
-	print("%s: rolled %d, landed on space %d (%s)" % [
-		player.player_name, _last_roll, final_node.node_id, final_node.get_type_name()])
+	turn_manager.current_player().space_id = final_node.node_id
 	var no_nodes: Array[BoardNode] = []
 	_set_landing_nodes(no_nodes)
 	_arrange_tokens()
+	turn_manager.go_to(TurnManager.Phase.SPACE_EVENT)
 
-	var landed_text := "%s landed on #%d %s.\n%s" % [
+
+func _on_phase_changed(phase: TurnManager.Phase) -> void:
+	match phase:
+		TurnManager.Phase.TURN_START:
+			_enter_turn_start()
+		TurnManager.Phase.ACTION:
+			_enter_action()
+		TurnManager.Phase.SPACE_EVENT:
+			_enter_space_event()
+
+
+# --- Phases -----------------------------------------------------------------
+
+func _enter_turn_start() -> void:
+	var player := turn_manager.current_player()
+	camera.follow(_active_player())
+	_show_status(_after_previous_result(_turn_title()))
+	await banner.play(_turn_title(), player.token_color)
+	turn_manager.go_to(TurnManager.Phase.ACTION)
+
+
+func _enter_action() -> void:
+	if turn_manager.current_player().is_cpu:
+		_on_roll_button_pressed()
+		return
+
+	_show_status(_after_previous_result("%s\nPress \"Roll Dice\"." % _turn_title()))
+	roll_button.disabled = false
+	# Give the button keyboard focus, so Space or Enter also rolls.
+	roll_button.grab_focus()
+
+
+func _enter_space_event() -> void:
+	var player := _active_player()
+	var space := player.current_node
+	print("Week %d Day %d, %s: rolled %d, landed on space %d (%s)" % [
+		GameState.get_week(), GameState.get_day_of_week(),
+		player.player_name, _last_roll, space.node_id, space.get_type_name()])
+	_previous_result = "%s landed on #%d %s.\n%s" % [
 		player.player_name,
-		final_node.node_id,
-		final_node.get_display_name(),
-		TYPE_DESCRIPTIONS.get(final_node.node_type, ""),
+		space.node_id,
+		space.get_display_name(),
+		TYPE_DESCRIPTIONS.get(space.node_type, ""),
 	]
-
-	# Move on to the next player. After the last one, wrap around to the first.
-	_active_index = (_active_index + 1) % players.size()
-	if _active_index == 0:
-		_turn += 1
-	_move_in_progress = false
-	_begin_turn(landed_text)
+	_show_status(_previous_result)
+	await get_tree().create_timer(space_event_duration).timeout
+	turn_manager.end_turn()
 
 
 # --- Internal helpers -------------------------------------------------------
 
+## Uses the first `player_count` tokens, removes the rest and starts day 1.
+func _start_game(player_count: int) -> void:
+	for unused_token in players.slice(player_count):
+		unused_token.queue_free()
+	players = players.slice(0, player_count)
+
+	var roster: Array[PlayerData] = []
+	for index in players.size():
+		var token := players[index]
+		var data := PlayerData.new(token.player_name, token.token_color,
+				index >= player_count - cpu_players)
+		data.space_id = token.current_node.node_id
+		roster.append(data)
+		_tokens[data] = token
+		# Only the active player ever moves, so one set of handlers works for
+		# all of the tokens.
+		token.step_finished.connect(_on_step_finished)
+		token.movement_finished.connect(_on_movement_finished)
+		token.path_choice_required.connect(_on_path_choice_required)
+
+	GameState.start_new_game(roster, game_seed)
+	hud.setup(GameState.players)
+	hud.show()
+	_arrange_tokens()
+	turn_manager.start_game()
+
+
 func _active_player() -> PlayerMovement:
-	return players[_active_index]
+	return _tokens[turn_manager.current_player()]
 
 
-## "Turn 3 - Red", the first part of most status messages.
+## "Red's turn", the first part of most status messages.
 func _turn_title() -> String:
-	return "Turn %d - %s" % [_turn, _active_player().player_name]
+	return "%s's turn" % turn_manager.current_player().player_name
 
 
-func _begin_turn(previous_result := "") -> void:
-	var status := "%s\nPress \"Roll Dice\"." % _turn_title()
-	if previous_result != "":
-		status = previous_result + "\n\n" + status
-	_show_status(status)
-	camera.follow(_active_player())
-	roll_button.disabled = false
-	# Give the button keyboard focus, so Space or Enter also rolls.
-	roll_button.grab_focus()
+## Adds what happened last turn above `text`, once there is a last turn.
+func _after_previous_result(text: String) -> String:
+	if _previous_result == "":
+		return text
+	return "%s\n\n%s" % [_previous_result, text]
 
 
 func _choose_path(node: BoardNode) -> void:
@@ -248,6 +330,7 @@ func _choose_path(node: BoardNode) -> void:
 	_path_options = []
 	_clear_choices()
 	_show_status("%s - Rolled %d\nMoving..." % [_turn_title(), _last_roll])
+	turn_manager.go_to(TurnManager.Phase.MOVING)
 	_active_player().choose_path(node)
 
 

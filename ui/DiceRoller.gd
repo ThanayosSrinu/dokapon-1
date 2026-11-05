@@ -30,8 +30,9 @@ var value := 0:
 ## Rolls the die, plays the animation and returns the result.
 func roll() -> int:
 	# The result is decided first. The animation is only for show.
-	# Godot 4 seeds the random number generator automatically on start.
-	var result := fixed_result if fixed_result > 0 else randi_range(1, SIDES)
+	# Only the result uses the game's seeded generator, so the same seed gives
+	# the same rolls no matter how the animation plays out.
+	var result := fixed_result if fixed_result > 0 else GameState.rng.randi_range(1, SIDES)
 
 	# Rotate and scale around the middle of the die, not its corner.
 	pivot_offset = size * 0.5
