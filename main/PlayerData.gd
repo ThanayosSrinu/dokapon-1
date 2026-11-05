@@ -7,6 +7,9 @@ extends RefCounted
 var player_name := "Player"
 var token_color := Color.WHITE
 
+## This player's character: a tile of the Tiny Dungeon sheet (GameArt.DUNGEON).
+var sprite_tile := 0
+
 ## True when the computer plays this player. Section 9 adds real AI.
 var is_cpu := false
 

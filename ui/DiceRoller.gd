@@ -17,6 +17,10 @@ const PIPS := {
 	6: [Vector2(-1, -1), Vector2(-1, 0), Vector2(-1, 1), Vector2(1, -1), Vector2(1, 0), Vector2(1, 1)],
 }
 
+## The cream tile of GameArt.UI_LARGE used as the body of the die.
+const BODY_TILE := 0
+const PIP_COLOR := Color(0.24, 0.16, 0.21)
+
 ## For testing: when above 0, every roll gives this number.
 @export_range(0, 6) var fixed_result := 0
 
@@ -61,15 +65,12 @@ func _random_face_except(face: int) -> int:
 
 
 func _draw() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.96, 0.94, 0.88)
-	style.border_color = Color(0.25, 0.18, 0.10)
-	style.set_border_width_all(4)
-	style.set_corner_radius_all(16)
-	draw_style_box(style, Rect2(Vector2.ZERO, size))
+	GameArt.draw_tile(self, GameArt.UI_LARGE, BODY_TILE, Rect2(Vector2.ZERO, size),
+			GameArt.UI_TILE_SIZE)
 
 	var center := size * 0.5
-	var pip_gap := size.x * 0.27
-	var pip_radius := size.x * 0.085
-	for pip in PIPS.get(value, []):
-		draw_circle(center + pip * pip_gap, pip_radius, Color(0.15, 0.12, 0.10))
+	var pip_gap := size.x * 0.24
+	var pip_size := Vector2.ONE * size.x * 0.14
+	for pip: Vector2 in PIPS.get(value, []):
+		# Square pips, to match the pixel art.
+		draw_rect(Rect2(center + pip * pip_gap - pip_size * 0.5, pip_size), PIP_COLOR)

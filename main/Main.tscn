@@ -30,21 +30,25 @@ setup_menu = NodePath("UI/SetupMenu")
 [node name="Player1" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Red"
+sprite_tile = 97
 token_color = Color(0.92, 0.26, 0.24, 1)
 
 [node name="Player2" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Blue"
+sprite_tile = 99
 token_color = Color(0.25, 0.5, 0.95, 1)
 
 [node name="Player3" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Green"
+sprite_tile = 112
 token_color = Color(0.2, 0.72, 0.36, 1)
 
 [node name="Player4" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Purple"
+sprite_tile = 84
 token_color = Color(0.65, 0.38, 0.92, 1)
 
 [node name="BoardCamera" type="Camera2D" parent="."]
@@ -98,18 +102,18 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="Dice" type="Control" parent="UI"]
-custom_minimum_size = Vector2(110, 110)
+custom_minimum_size = Vector2(96, 96)
 layout_mode = 3
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -55.0
-offset_top = -134.0
-offset_right = 55.0
+offset_left = -120.0
+offset_top = -120.0
+offset_right = -24.0
 offset_bottom = -24.0
-grow_horizontal = 2
+grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("5_dice")

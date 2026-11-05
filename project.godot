@@ -25,6 +25,10 @@ GameState="*res://autoload/GameState.gd"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+theme/custom="res://ui/pixel_theme.tres"
+
 [input]
 
 camera_left={
@@ -59,3 +63,8 @@ camera_down={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+environment/defaults/default_clear_color=Color(0.518, 0.776, 0.412, 1)

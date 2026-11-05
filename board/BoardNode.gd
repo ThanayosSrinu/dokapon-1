@@ -7,8 +7,8 @@ extends Marker2D
 ## neighbors through `connected_nodes`. Every link is two-way, so a link only
 ## has to be set on ONE of the two spaces. The BoardManager draws the paths.
 ##
-## Each space draws itself as a colored circle with a symbol, both in the
-## editor and in the game. Real art comes in a later section.
+## Each space draws itself as a colored plate with an icon, both in the editor
+## and in the game.
 
 ## Every kind of space in the game. IMPORTANT: always add new types at the
 ## END of this list. Scenes store the type as a number (CASTLE = 0,
@@ -30,25 +30,34 @@ enum NodeType {
 	TRAP,      # Lose gold or HP.
 }
 
-## Display data for each type: readable name, the symbol drawn on the space,
-## and its color.
+## Display data for each type: readable name, plate color, and the icon drawn
+## on the plate. "tile" is a tile of "sheet" (see GameArt). Without a tile, the
+## "symbol" text is drawn instead, if there is one.
 const TYPE_INFO := {
-	NodeType.CASTLE:   {"name": "Castle",   "symbol": "C", "color": Color(0.95, 0.75, 0.15)},
-	NodeType.NORMAL:   {"name": "Normal",   "symbol": "",  "color": Color(0.55, 0.55, 0.60)},
-	NodeType.SHOP:     {"name": "Shop",     "symbol": "S", "color": Color(0.20, 0.70, 0.35)},
-	NodeType.EVENT:    {"name": "Event",    "symbol": "?", "color": Color(0.55, 0.35, 0.85)},
-	NodeType.TOWN:     {"name": "Town",     "symbol": "T", "color": Color(0.85, 0.50, 0.25)},
-	NodeType.ITEM:     {"name": "Item",     "symbol": "I", "color": Color(0.25, 0.50, 0.95)},
-	NodeType.MAGIC:    {"name": "Magic",    "symbol": "M", "color": Color(0.85, 0.30, 0.60)},
-	NodeType.GOLD:     {"name": "Gold",     "symbol": "G", "color": Color(0.90, 0.80, 0.35)},
-	NodeType.BATTLE:   {"name": "Battle",   "symbol": "!", "color": Color(0.85, 0.20, 0.20)},
-	NodeType.TREASURE: {"name": "Treasure", "symbol": "X", "color": Color(0.20, 0.70, 0.70)},
-	NodeType.SHRINE:   {"name": "Shrine",   "symbol": "+", "color": Color(0.65, 0.85, 1.00)},
-	NodeType.TRAP:     {"name": "Trap",     "symbol": "~", "color": Color(0.35, 0.22, 0.28)},
+	NodeType.CASTLE:   {"name": "Castle",   "color": Color(0.95, 0.75, 0.15), "sheet": GameArt.DUNGEON, "tile": 29},
+	NodeType.NORMAL:   {"name": "Normal",   "color": Color(0.62, 0.62, 0.68)},
+	NodeType.SHOP:     {"name": "Shop",     "color": Color(0.30, 0.75, 0.42), "sheet": GameArt.DUNGEON, "tile": 74},
+	NodeType.EVENT:    {"name": "Event",    "color": Color(0.62, 0.42, 0.90), "symbol": "?"},
+	NodeType.TOWN:     {"name": "Town",     "color": Color(0.90, 0.56, 0.30), "sheet": GameArt.TOWN, "tile": 83},
+	NodeType.ITEM:     {"name": "Item",     "color": Color(0.35, 0.60, 0.98), "sheet": GameArt.DUNGEON, "tile": 115},
+	NodeType.MAGIC:    {"name": "Magic",    "color": Color(0.90, 0.40, 0.68), "sheet": GameArt.DUNGEON, "tile": 129},
+	NodeType.GOLD:     {"name": "Gold",     "color": Color(0.95, 0.85, 0.40), "sheet": GameArt.TOWN, "tile": 93},
+	NodeType.BATTLE:   {"name": "Battle",   "color": Color(0.90, 0.28, 0.28), "sheet": GameArt.DUNGEON, "tile": 110},
+	NodeType.TREASURE: {"name": "Treasure", "color": Color(0.28, 0.75, 0.75), "sheet": GameArt.DUNGEON, "tile": 89},
+	NodeType.SHRINE:   {"name": "Shrine",   "color": Color(0.70, 0.88, 1.00), "sheet": GameArt.TOWN, "tile": 104},
+	NodeType.TRAP:     {"name": "Trap",     "color": Color(0.50, 0.36, 0.42), "sheet": GameArt.TOWN, "tile": 105},
 }
 
-const BASE_RADIUS := 22.0
-const CASTLE_RADIUS := 32.0
+## The plate under every space: a round tile of GameArt.UI_LARGE.
+const PLATE_TILE := 39
+## Size of the plate tile in the world. The round plate fills about 7/8 of it.
+const PLATE_SIZE := 80.0
+const CASTLE_PLATE_SIZE := 96.0
+## Size of the icon on the plate.
+const ICON_SIZE := 40.0
+
+const BASE_RADIUS := 36.0
+const CASTLE_RADIUS := 43.0
 const HIGHLIGHT_COLOR := Color(1.0, 0.95, 0.3)
 const PATH_CHOICE_COLOR := Color(0.45, 1.0, 0.55)
 const LANDING_COLOR := Color(0.35, 0.9, 1.0)
@@ -161,7 +170,6 @@ func link_to(other: BoardNode) -> void:
 
 func _draw() -> void:
 	var info: Dictionary = TYPE_INFO[node_type]
-	var color: Color = info["color"]
 	var radius := get_radius()
 
 	if highlighted:
@@ -173,28 +181,20 @@ func _draw() -> void:
 		var pulse := sin(_pulse_time * PULSE_SPEED) * 4.0
 		draw_arc(Vector2.ZERO, radius + 20.0 + pulse, 0.0, TAU, 48, PATH_CHOICE_COLOR, 6.0, true)
 
-	draw_circle(Vector2.ZERO, radius, color)
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, color.darkened(0.6), 3.0, true)
+	var plate_size := CASTLE_PLATE_SIZE if node_type == NodeType.CASTLE else PLATE_SIZE
+	GameArt.draw_tile(self, GameArt.UI_LARGE, PLATE_TILE,
+			Rect2(Vector2.ONE * -plate_size * 0.5, Vector2.ONE * plate_size),
+			GameArt.UI_TILE_SIZE, info["color"])
 
-	_draw_centered_text(info["symbol"], Vector2.ZERO, 22)
-	# The id floats above the space. Very useful while building and debugging.
-	_draw_centered_text("#%d" % node_id, Vector2(0, -radius - 12.0), 14)
+	if info.has("tile"):
+		GameArt.draw_tile(self, info["sheet"], info["tile"],
+				Rect2(Vector2.ONE * -ICON_SIZE * 0.5, Vector2.ONE * ICON_SIZE))
+	else:
+		GameArt.draw_centered_text(self, info.get("symbol", ""), Vector2.ZERO, 32)
+
+	# The id only helps while building the map, so the game does not show it.
+	if Engine.is_editor_hint():
+		GameArt.draw_centered_text(self, "#%d" % node_id, Vector2(0, -radius - 12.0), 16)
 	# Named spaces (castles, towns) show their name underneath.
 	if display_name != "":
-		_draw_centered_text(display_name, Vector2(0, radius + 16.0), 14)
-
-
-## Draws white text with a dark outline, centered on `center`.
-func _draw_centered_text(text: String, center: Vector2, font_size: int) -> void:
-	if text == "":
-		return
-	var font := ThemeDB.fallback_font
-	var box_width := 140.0
-	# draw_string() places text by its baseline, so shift down by half the
-	# text height to center it vertically.
-	var vertical_offset := (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
-	var origin := center + Vector2(-box_width * 0.5, vertical_offset)
-	draw_string_outline(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, 5, Color(0, 0, 0, 0.85))
-	draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, Color.WHITE)
+		GameArt.draw_centered_text(self, display_name, Vector2(0, radius + 14.0), 16)

@@ -25,23 +25,32 @@ signal movement_finished(final_node: BoardNode)
 # Emitted by choose_path() to wake up a move that is waiting at a fork.
 signal _path_chosen
 
-const TOKEN_RADIUS := 16.0
+## Width and height of the character in the world.
+const SPRITE_SIZE := 48.0
+## Radius of the colored ring at the character's feet.
+const RING_RADIUS := 22.0
 # Drawn above idle tokens while moving (z_index of a normal node is 0).
 const MOVING_Z_INDEX := 10
 
 ## The board to walk on. Drag the BoardManager node here in the Inspector.
 @export var board_manager: BoardManager
 
-## Shown in the UI. The first letter is drawn on the token.
+## Shown in the UI.
 @export var player_name := "Player":
 	set(value):
 		player_name = value
 		queue_redraw()
 
-## The color of this player's token.
+## The color of this player's token: the ring at the character's feet.
 @export var token_color := Color(0.9, 0.3, 0.3):
 	set(value):
 		token_color = value
+		queue_redraw()
+
+## This player's character: a tile of the Tiny Dungeon sheet (GameArt.DUNGEON).
+@export var sprite_tile := 97:
+	set(value):
+		sprite_tile = value
 		queue_redraw()
 
 ## Seconds the slide from one space to the next takes.
@@ -80,6 +89,8 @@ var _chosen_node: BoardNode
 var _hop_offset := 0.0
 # The running set_rest_offset() animation.
 var _rest_tween: Tween
+# True after walking left. The sprite is mirrored to face that way.
+var _facing_left := false
 
 
 func _ready() -> void:
@@ -202,6 +213,8 @@ func _ask_for_path(options: Array[BoardNode]) -> BoardNode:
 
 
 func _slide_to(node: BoardNode) -> void:
+	if not is_equal_approx(node.global_position.x, global_position.x):
+		_facing_left = node.global_position.x < global_position.x
 	var tween := create_tween()
 	# Sine easing starts and stops gently instead of moving at a fixed speed.
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -224,28 +237,20 @@ func _set_hop(progress: float) -> void:
 # --- Drawing ----------------------------------------------------------------
 
 func _draw() -> void:
-	# A flat ellipse under the token: a circle drawn with a squashed transform.
-	# It stays on the ground during a hop, which is what makes the hop readable.
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.45))
-	draw_circle(Vector2(0, 6), TOKEN_RADIUS, Color(0, 0, 0, 0.4))
+	# A flat ellipse under the character: a circle drawn with a squashed
+	# transform. It stays on the ground during a hop, which is what makes the
+	# hop readable.
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
+	draw_circle(Vector2.ZERO, RING_RADIUS + 3.0, Color(0.14, 0.09, 0.13, 0.85))
+	draw_circle(Vector2.ZERO, RING_RADIUS, token_color)
 	draw_set_transform(Vector2.ZERO)
 
-	var body := Vector2(0, -TOKEN_RADIUS * 0.6 - _hop_offset)
-	draw_circle(body, TOKEN_RADIUS, token_color)
-	draw_arc(body, TOKEN_RADIUS, 0.0, TAU, 40, Color.WHITE, 3.0, true)
-	_draw_centered_text(player_name.left(1), body, 18)
+	var top := -SPRITE_SIZE - 2.0 - _hop_offset
+	var rect := Rect2(-SPRITE_SIZE * 0.5, top, SPRITE_SIZE, SPRITE_SIZE)
+	if _facing_left:
+		# A rectangle with a negative width draws the image mirrored.
+		rect = Rect2(SPRITE_SIZE * 0.5, top, -SPRITE_SIZE, SPRITE_SIZE)
+	GameArt.draw_tile(self, GameArt.DUNGEON, sprite_tile, rect)
 
 	if steps_left > 0:
-		_draw_centered_text(str(steps_left), body + Vector2(0, -TOKEN_RADIUS - 14.0), 22)
-
-
-## Draws white text with a dark outline, centered on `center`.
-func _draw_centered_text(text: String, center: Vector2, font_size: int) -> void:
-	var font := ThemeDB.fallback_font
-	var box_width := 60.0
-	var vertical_offset := (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
-	var origin := center + Vector2(-box_width * 0.5, vertical_offset)
-	draw_string_outline(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, 5, Color(0, 0, 0, 0.85))
-	draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, Color.WHITE)
+		GameArt.draw_centered_text(self, str(steps_left), Vector2(0, top - 16.0), 24)

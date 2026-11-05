@@ -4,7 +4,7 @@ extends PanelContainer
 ## player highlighted. It only listens to EventBus, so nothing has to tell it
 ## what to display.
 
-const SWATCH_SIZE := Vector2(16, 16)
+const SWATCH_SIZE := Vector2(32, 32)
 # The opacity of the rows of players who are not taking their turn.
 const WAITING_OPACITY := 0.45
 
@@ -35,6 +35,10 @@ func setup(players: Array[PlayerData]) -> void:
 		swatch.color = player.token_color
 		swatch.custom_minimum_size = SWATCH_SIZE
 		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var portrait := TextureRect.new()
+		portrait.texture = GameArt.tile_texture(GameArt.DUNGEON, player.sprite_tile)
+		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		swatch.add_child(portrait)
 		var label := Label.new()
 		label.text = player.player_name
 		row.add_child(swatch)

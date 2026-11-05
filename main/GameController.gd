@@ -29,7 +29,7 @@ extends Node2D
 ##       └── SetupMenu
 
 ## Distance between a space's center and the tokens sharing it, in pixels.
-const TOKEN_SPREAD := 20.0
+const TOKEN_SPREAD := 30.0
 
 ## A short line shown under the name of the space the player lands on.
 const TYPE_DESCRIPTIONS := {
@@ -291,6 +291,7 @@ func _start_game(player_count: int) -> void:
 		var token := players[index]
 		var data := PlayerData.new(token.player_name, token.token_color,
 				index >= player_count - cpu_players)
+		data.sprite_tile = token.sprite_tile
 		data.space_id = token.current_node.node_id
 		roster.append(data)
 		_tokens[data] = token

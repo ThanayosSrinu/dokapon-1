@@ -10,26 +10,13 @@ extends Node2D
 ## Every link is two-way, so each link only has to be set on one of the two
 ## spaces.
 ##
-## Draws the paths between spaces, both in the editor and in the game.
+## Draws the countryside and its roads (see BoardArt), both in the editor and
+## in the game.
 ## Checks the map for mistakes and shows them as warnings (the yellow
 ## triangle next to this node in the Scene dock).
 
 ## Emitted once every space has been read and linked.
 signal board_ready
-
-@export_group("Paths")
-@export var path_color := Color(0.93, 0.87, 0.72):
-	set(value):
-		path_color = value
-		queue_redraw()
-@export var path_outline_color := Color(0.25, 0.18, 0.10):
-	set(value):
-		path_outline_color = value
-		queue_redraw()
-@export var path_width := 10.0:
-	set(value):
-		path_width = maxf(value, 1.0)
-		queue_redraw()
 
 @export_group("Input")
 ## When on, left-clicking a space emits EventBus.space_clicked.
@@ -342,14 +329,4 @@ func _assign_missing_ids() -> void:
 # --- Drawing ----------------------------------------------------------------
 
 func _draw() -> void:
-	# Two passes: all dark outlines first, then all light centers on top, so
-	# paths that meet at a space look like one clean road.
-	for pass_index in 2:
-		var color := path_outline_color if pass_index == 0 else path_color
-		var width := path_width + 6.0 if pass_index == 0 else path_width
-		for node in _nodes:
-			for other in _neighbors[node]:
-				# Every link is stored on both ends; draw it only once.
-				if node.get_instance_id() < other.get_instance_id():
-					draw_line(to_local(node.global_position), to_local(other.global_position),
-							color, width, true)
+	BoardArt.paint(self, _nodes, _neighbors)
