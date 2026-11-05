@@ -5,18 +5,23 @@ extends Node2D
 ## map: where players start, which spaces are neighbors, and which space is
 ## under the mouse.
 ##
-## The map is built by hand in the editor (see res://maps/WorldMap.tscn):
-## add BoardNode children and link them through their `connected_nodes`.
-## Every link is two-way, so each link only has to be set on one of the two
-## spaces.
+## The whole map lives in one file (see `map_file`): the spaces, their links,
+## lakes and rivers. Spaces are created from it, and BoardArt builds the island
+## from them, both in the editor and in the game. A link is two-way, so it only
+## has to be written on one of the two spaces.
 ##
-## Builds the island and its roads (see BoardArt), both in the editor and in
-## the game.
-## Checks the map for mistakes and shows them as warnings (the yellow
-## triangle next to this node in the Scene dock).
+## Checks the map for mistakes and shows them as warnings (the yellow triangle
+## next to this node in the Scene dock). `tools/check_map.gd` prints the same
+## list without opening the editor.
 
 ## Emitted once every space has been read and linked.
 signal board_ready
+
+## World distance between two neighboring grid points of the map file.
+const GRID := 160
+
+## The map to play. The editor reloads it whenever the file changes.
+@export_file("*.json") var map_file := "res://maps/world_map.json"
 
 @export_group("Input")
 ## When on, left-clicking a space emits EventBus.space_clicked.
@@ -26,21 +31,17 @@ signal board_ready
 ## Print every space and its neighbors to the Output panel on start.
 @export var print_on_ready := true
 
-@export_group("Editor Tools")
-## Gives a fresh id to every space whose id is -1 or used twice
-## (for example after duplicating a space with Ctrl+D). Existing unique ids
-## are never changed, so save files stay valid. Can be undone with Ctrl+Z.
-@export_tool_button("Assign Missing IDs") var assign_ids_button := _assign_missing_ids
-
-# Every BoardNode child, in Scene-dock order.
+# Every space, in map-file order.
 var _nodes: Array[BoardNode] = []
 # node_id (int) -> BoardNode
 var _nodes_by_id := {}
 # BoardNode -> Array[BoardNode]. Links from both ends are merged here, which
 # is what makes every link two-way.
 var _neighbors := {}
-# Snapshot of the map used by the editor to notice changes.
-var _last_signature := []
+# When the map file last changed. The editor uses this to notice edits.
+var _map_time := 0
+# Mistakes found while reading the map file.
+var _load_problems := PackedStringArray()
 # The island under the board.
 var _art: BoardArt
 
@@ -62,11 +63,8 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	# Only runs in the editor (see _ready). Rebuild whenever a space was added,
-	# removed, moved, retyped or relinked, so drawing and warnings stay current.
-	var signature := _make_signature()
-	if signature != _last_signature:
-		_last_signature = signature
+	# Only runs in the editor (see _ready): keep up with edits to the map file.
+	if FileAccess.get_modified_time(map_file) != _map_time:
 		rebuild()
 		update_configuration_warnings()
 
@@ -89,28 +87,26 @@ func _get_configuration_warnings() -> PackedStringArray:
 
 # --- Public API -------------------------------------------------------------
 
-## Re-reads every BoardNode child and its links. Call this after adding or
-## removing spaces while the game runs (the editor does it automatically).
+## Reads the map file and builds the spaces and the island from it.
 func rebuild() -> void:
+	for node in _nodes:
+		remove_child(node)
+		node.queue_free()
 	_nodes.clear()
 	_nodes_by_id.clear()
 	_neighbors.clear()
+	_load_problems.clear()
 
-	for child in get_children():
-		if child is BoardNode:
-			_nodes.append(child)
-			var neighbor_list: Array[BoardNode] = []
-			_neighbors[child] = neighbor_list
-			# If two spaces share an id, the first one wins (validate() warns).
-			if child.node_id >= 0 and not _nodes_by_id.has(child.node_id):
-				_nodes_by_id[child.node_id] = child
-
-	for node in _nodes:
-		for other in node.connected_nodes:
-			if is_instance_valid(other) and other != node and _neighbors.has(other):
-				_add_link(node, other)
-
-	_art = BoardArt.paint(self, _nodes, _neighbors)
+	var data := _read_map()
+	_create_spaces(data.get("spaces", []))
+	var lakes := []
+	for lake: Dictionary in data.get("lakes", []):
+		lakes.append([Vector2i(int(lake.x), int(lake.y)), Vector2(lake.width, lake.height)])
+	var rivers := []
+	for river: Dictionary in data.get("rivers", []):
+		rivers.append([Vector2i(int(river.from[0]), int(river.from[1])),
+				Vector2i(int(river.to[0]), int(river.to[1]))])
+	_art = BoardArt.paint(self, _nodes, _neighbors, lakes, rivers)
 
 
 ## The painted part of the world. The camera stays inside it.
@@ -212,21 +208,10 @@ func get_bounds() -> Rect2:
 
 ## Checks the map and returns a readable list of problems (empty = all good).
 func validate() -> PackedStringArray:
-	var problems := PackedStringArray()
+	var problems := _load_problems.duplicate()
 	if _nodes.is_empty():
-		problems.append("The board has no spaces yet. Add BoardNode children.")
+		problems.append("The map has no spaces yet.")
 		return problems
-
-	# Every space needs its own id.
-	var seen_ids := {}
-	for node in _nodes:
-		if node.node_id < 0:
-			problems.append("'%s' has no id. Press 'Assign Missing IDs'." % node.name)
-		elif seen_ids.has(node.node_id):
-			problems.append("'%s' and '%s' share id %d. Press 'Assign Missing IDs'."
-					% [seen_ids[node.node_id].name, node.name, node.node_id])
-		else:
-			seen_ids[node.node_id] = node
 
 	# Exactly one Castle (the start).
 	var castles := _nodes.filter(func(n: BoardNode) -> bool:
@@ -237,18 +222,11 @@ func validate() -> PackedStringArray:
 		problems.append("There are %d Castles. Only the first one ('%s') is the start."
 				% [castles.size(), castles[0].name])
 
-	# Broken links and isolated spaces.
 	for node in _nodes:
-		for other in node.connected_nodes:
-			if not is_instance_valid(other):
-				problems.append("'%s' has an empty slot in Connected Nodes." % node.name)
-			elif other == node:
-				problems.append("'%s' is linked to itself." % node.name)
-			elif not _neighbors.has(other):
-				problems.append("'%s' links to '%s', which is not on this board."
-						% [node.name, other.name])
 		if get_neighbors(node).is_empty():
 			problems.append("'%s' is not linked to any other space." % node.name)
+
+	problems.append_array(_find_layout_problems())
 
 	# Every linked space must be reachable from the start.
 	if not castles.is_empty():
@@ -296,46 +274,97 @@ func _collect_reachable(start: BoardNode) -> Dictionary:
 	return reached
 
 
-## A cheap snapshot of everything that affects drawing and warnings.
-## Instance ids are used instead of node references, so deleted nodes are
-## never touched.
-func _make_signature() -> Array:
-	var signature := []
-	for child in get_children():
-		if child is BoardNode:
-			var link_ids := []
-			for other in child.connected_nodes:
-				link_ids.append(other.get_instance_id() if is_instance_valid(other) else 0)
-			signature.append([child.get_instance_id(), child.node_id, child.node_type,
-					child.position, link_ids])
-	return signature
+func _read_map() -> Dictionary:
+	_map_time = FileAccess.get_modified_time(map_file)
+	var text := FileAccess.get_file_as_string(map_file)
+	if text == "":
+		_load_problems.append("The map file '%s' is missing or empty." % map_file)
+		return {}
+	var data = JSON.parse_string(text)
+	if not data is Dictionary:
+		_load_problems.append("The map file '%s' is not valid JSON." % map_file)
+		return {}
+	return data
 
 
-func _assign_missing_ids() -> void:
-	rebuild()
-	var used_ids := {}
-	var needs_id: Array[BoardNode] = []
+func _create_spaces(rows: Array) -> void:
+	for row: Dictionary in rows:
+		var id := int(row.get("id", -1))
+		if id < 0 or _nodes_by_id.has(id):
+			_load_problems.append("Space id %d is missing or used twice." % id)
+			continue
+		var type_name: String = row.get("type", "NORMAL")
+		if not BoardNode.NodeType.has(type_name):
+			_load_problems.append("Space %d has an unknown type '%s'." % [id, type_name])
+		var node := BoardNode.new()
+		node.name = "S%02d" % id
+		node.node_id = id
+		node.node_type = BoardNode.NodeType.get(type_name, BoardNode.NodeType.NORMAL)
+		node.display_name = row.get("name", "")
+		node.position = Vector2(row.get("x", 0), row.get("y", 0)) * GRID
+		# Not owned by the scene, so a space is never saved into it.
+		add_child(node)
+		_nodes.append(node)
+		_nodes_by_id[id] = node
+		var neighbor_list: Array[BoardNode] = []
+		_neighbors[node] = neighbor_list
+
+	for row: Dictionary in rows:
+		var node: BoardNode = _nodes_by_id.get(int(row.get("id", -1)))
+		if node == null:
+			continue
+		for link in row.get("to", []):
+			var other: BoardNode = _nodes_by_id.get(int(link))
+			if other == null:
+				_load_problems.append("'%s' links to %d, which is not on this map." % [node.name, link])
+			elif other == node:
+				_load_problems.append("'%s' is linked to itself." % node.name)
+			else:
+				_add_link(node, other)
+
+
+## Finds roads that pass through a third space. The map still works, but the
+## road on screen is not the way the token walks.
+func get_layout_notes() -> PackedStringArray:
+	var notes := PackedStringArray()
+	var spaces := {}
 	for node in _nodes:
-		if node.node_id < 0 or used_ids.has(node.node_id):
-			needs_id.append(node)
-		else:
-			used_ids[node.node_id] = true
+		spaces[BoardArt.vertex_of(node)] = node
+	for node in _nodes:
+		for other in get_neighbors(node):
+			if node.node_id > other.node_id:
+				continue
+			for vertex in BoardArt.road_between(BoardArt.vertex_of(node), BoardArt.vertex_of(other)):
+				var met: BoardNode = spaces.get(vertex)
+				if met != null and met != node and met != other:
+					notes.append("The road %s-%s runs through '%s'." % [node.name, other.name, met.name])
+	return notes
 
-	if needs_id.is_empty():
-		print("BoardManager: every space already has a unique id.")
-		return
 
-	# Go through the editor's undo system, so Ctrl+Z works and the scene is
-	# marked as unsaved. EditorInterface is fetched by name because it only
-	# exists inside the editor, never in the exported game.
-	var undo_redo = Engine.get_singleton("EditorInterface").get_editor_undo_redo()
-	undo_redo.create_action("Assign Missing Space IDs")
-	var next_id := 0
-	for node in needs_id:
-		while used_ids.has(next_id):
-			next_id += 1
-		used_ids[next_id] = true
-		undo_redo.add_do_property(node, "node_id", next_id)
-		undo_redo.add_undo_property(node, "node_id", node.node_id)
-	undo_redo.commit_action()
-	print("BoardManager: assigned ids to %d space(s)." % needs_id.size())
+## Finds places where the map cannot draw properly: spaces on top of each other,
+## or a road inside the castle walls.
+func _find_layout_problems() -> PackedStringArray:
+	var problems := PackedStringArray()
+	var spaces := {}
+	for node in _nodes:
+		var vertex := BoardArt.vertex_of(node)
+		if spaces.has(vertex):
+			problems.append("'%s' and '%s' are on the same spot." % [spaces[vertex].name, node.name])
+		spaces[vertex] = node
+
+	var castle_rects: Array[Rect2i] = []
+	for node in _nodes:
+		if node.node_type == BoardNode.NodeType.CASTLE:
+			castle_rects.append(Rect2i(BoardArt.CASTLE_RECT.position + BoardArt.vertex_of(node),
+					BoardArt.CASTLE_RECT.size))
+
+	for node in _nodes:
+		for other in get_neighbors(node):
+			if node.node_id > other.node_id:
+				continue
+			for vertex in BoardArt.road_between(BoardArt.vertex_of(node), BoardArt.vertex_of(other)):
+				for rect in castle_rects:
+					if rect.has_point(vertex):
+						problems.append("The road %s-%s runs through the castle walls." % [node.name, other.name])
+						break
+	return problems

@@ -1,9 +1,10 @@
 @tool
 class_name BoardArt
 extends RefCounted
-## Builds the island under the board: sea, beaches, grass, cliffs, forests, a
-## lake and river, dirt roads, towns and the castle. It is built from the spaces
-## and their links, so moving a space in the editor moves its road and town too.
+## Builds the island under the board: sea, beaches, grass, cliffs, forests,
+## lakes and rivers, dirt roads, towns and the castle. Everything comes from the
+## map file, so a changed map needs no art work: roads, bridges, houses, the size
+## of the island and all of its animation follow by themselves.
 ## BoardManager calls paint() whenever the board changes.
 ##
 ## The art is a "corner" tileset: every corner of a tile has one terrain, and a
@@ -40,10 +41,6 @@ const SCENERY_SEED := 20261105
 ## Seconds each frame of the water stays on screen.
 const WATER_FRAME_TIME := 0.22
 
-## Water, as [center vertex, radius in cells], next to the board's east road.
-const LAKES := [[Vector2i(5, 3), Vector2(3.4, 3.2)], [Vector2i(15, 3), Vector2(2.4, 2.2)]]
-## The river between them, as [first vertex, last vertex]. Two vertices high.
-const RIVER_ROWS := [[Vector2i(6, 2), Vector2i(15, 3)]]
 ## The bridge's planks, north to south. They are drawn in a layer of their own,
 ## because a road is centered on vertices and tiles are centered on cells.
 const BRIDGE_TILES := [Vector2i(10, 30), Vector2i(10, 31), Vector2i(10, 32)]
@@ -98,6 +95,9 @@ const SCATTER_BEACH := [Vector2i(3, 28), Vector2i(2, 28), Vector2i(0, 31)]
 static var _tile_set: TileSet
 
 var _rng := RandomNumberGenerator.new()
+# From the map file: [center vertex, radius in cells] and [first, last vertex].
+var _lakes: Array = []
+var _rivers: Array = []
 # Vertex -> terrain.
 var _ground := {}
 # Vertex -> true: the vertices of each forest overlay.
@@ -132,7 +132,8 @@ var world_rect := Rect2()
 
 
 ## Replaces the island on `canvas` (the BoardManager) and returns the result.
-static func paint(canvas: Node2D, nodes: Array[BoardNode], neighbors: Dictionary) -> BoardArt:
+static func paint(canvas: Node2D, nodes: Array[BoardNode], neighbors: Dictionary,
+		lakes: Array = [], rivers: Array = []) -> BoardArt:
 	for child in canvas.get_children(true):
 		if child.has_meta("board_art"):
 			canvas.remove_child(child)
@@ -142,6 +143,8 @@ static func paint(canvas: Node2D, nodes: Array[BoardNode], neighbors: Dictionary
 	if nodes.is_empty():
 		return art
 	art._rng.seed = SCENERY_SEED
+	art._lakes = lakes
+	art._rivers = rivers
 	art._plan(nodes, neighbors)
 	art._build_layers(canvas)
 	return art
@@ -149,6 +152,21 @@ static func paint(canvas: Node2D, nodes: Array[BoardNode], neighbors: Dictionary
 
 static func vertex_of(node: BoardNode) -> Vector2i:
 	return Vector2i((node.position / GameArt.CELL).round())
+
+
+## Every vertex of the road between two vertices. It walks in steps of one cell,
+## never diagonally: diagonal corners have no tiles.
+static func road_between(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	var vertex := from
+	var path: Array[Vector2i] = [vertex]
+	while vertex != to:
+		var left := to - vertex
+		if absi(left.x) >= absi(left.y):
+			vertex.x += signi(left.x)
+		else:
+			vertex.y += signi(left.y)
+		path.append(vertex)
+	return path
 
 
 # --- Planning ---------------------------------------------------------------
@@ -174,21 +192,9 @@ func _lay_roads(nodes: Array[BoardNode], neighbors: Dictionary) -> void:
 		_road[vertex_of(node)] = true
 		for other: BoardNode in neighbors[node]:
 			# Every link is stored on both ends; lay it only once.
-			if node.get_instance_id() < other.get_instance_id():
-				_lay_road(vertex_of(node), vertex_of(other))
-
-
-# Walks in steps of one cell, never diagonally: diagonal corners have no tiles.
-func _lay_road(from: Vector2i, to: Vector2i) -> void:
-	var vertex := from
-	_road[vertex] = true
-	while vertex != to:
-		var left := to - vertex
-		if absi(left.x) >= absi(left.y):
-			vertex.x += signi(left.x)
-		else:
-			vertex.y += signi(left.y)
-		_road[vertex] = true
+			if node.node_id < other.node_id:
+				for vertex in road_between(vertex_of(node), vertex_of(other)):
+					_road[vertex] = true
 
 
 func _reserve_spaces(nodes: Array[BoardNode]) -> void:
@@ -276,7 +282,7 @@ func _lay_water() -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = SCENERY_SEED + 2
 	noise.frequency = 0.25
-	for lake: Array in LAKES:
+	for lake: Array in _lakes:
 		var center: Vector2i = lake[0]
 		var radius: Vector2 = lake[1]
 		for y in range(center.y - ceili(radius.y) - 1, center.y + ceili(radius.y) + 2):
@@ -285,7 +291,7 @@ func _lay_water() -> void:
 				var offset := Vector2(vertex - center) / radius
 				if offset.length() + noise.get_noise_2d(x, y) * 0.3 <= 1.0 and not _near_road(vertex, 2):
 					_set_water(vertex)
-	for row: Array in RIVER_ROWS:
+	for row: Array in _rivers:
 		var first: Vector2i = row[0]
 		var last: Vector2i = row[1]
 		for y in range(first.y, last.y + 1):

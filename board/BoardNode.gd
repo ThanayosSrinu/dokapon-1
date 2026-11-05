@@ -3,17 +3,15 @@ class_name BoardNode
 extends Marker2D
 ## A single space on the game board.
 ##
-## Add BoardNode children DIRECTLY under a BoardManager node, then link
-## neighbors through `connected_nodes`. Every link is two-way, so a link only
-## has to be set on ONE of the two spaces. The BoardManager draws the paths.
+## The BoardManager creates these from the map file (res://maps/world_map.json).
 ##
 ## Each space draws itself as a colored plate with an icon, both in the editor
 ## and in the game.
 
 ## Every kind of space in the game. IMPORTANT: always add new types at the
 ## END of this list. Scenes store the type as a number (CASTLE = 0,
-## NORMAL = 1, ...), so inserting a type in the middle would silently change
-## every space you already placed.
+## NORMAL = 1, ...), and the map file by name; inserting a type in the middle
+## would silently change saved data.
 enum NodeType {
 	CASTLE,    # Home castle: start point, rest and rewards.
 	NORMAL,    # Nothing happens.
@@ -65,7 +63,6 @@ const DASHES := 10
 
 ## Unique number of this space. Save files will refer to spaces by this id,
 ## so it must never change once assigned.
-## -1 means "not assigned yet": press "Assign Missing IDs" on the BoardManager.
 @export var node_id := -1:
 	set(value):
 		node_id = value
@@ -83,9 +80,6 @@ const DASHES := 10
 	set(value):
 		display_name = value
 		queue_redraw()
-
-## The neighboring spaces. Setting a link on one of the two spaces is enough.
-@export var connected_nodes: Array[BoardNode] = []
 
 ## When true, a glowing ring is drawn around the space (selected space,
 ## path choices at a fork, ...). Not saved; set by code while playing.
@@ -155,18 +149,6 @@ func get_type_name() -> String:
 ## The name to show in the UI: `display_name` if set, else the type name.
 func get_display_name() -> String:
 	return display_name if display_name != "" else get_type_name()
-
-
-## Adds a link to `other`. One side is enough; the BoardManager treats every
-## link as two-way. Call BoardManager.rebuild() after changing links while
-## the game is running.
-func link_to(other: BoardNode) -> void:
-	if other == null or other == self or connected_nodes.has(other):
-		return
-	# Reassign a copy so the change is picked up by the editor and undo.
-	var updated := connected_nodes.duplicate()
-	updated.append(other)
-	connected_nodes = updated
 
 
 ## Bounces the space, as if a foot had just landed on it.

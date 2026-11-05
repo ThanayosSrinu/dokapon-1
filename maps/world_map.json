@@ -1,0 +1,29 @@
+{
+  "spaces": [
+    {"id": 0, "type": "CASTLE", "x": 0, "y": 2, "name": "Royal Castle", "to": [1, 14]},
+    {"id": 1, "type": "NORMAL", "x": -1, "y": 2, "to": [2]},
+    {"id": 2, "type": "ITEM", "x": -2, "y": 2, "to": [3]},
+    {"id": 3, "type": "BATTLE", "x": -2, "y": 1, "to": [4]},
+    {"id": 4, "type": "GOLD", "x": -2, "y": 0, "to": [5]},
+    {"id": 5, "type": "TOWN", "x": -2, "y": -1, "name": "Westhollow", "to": [6]},
+    {"id": 6, "type": "EVENT", "x": -1, "y": -1, "to": [7]},
+    {"id": 7, "type": "SHOP", "x": 0, "y": -1, "to": [8]},
+    {"id": 8, "type": "MAGIC", "x": 1, "y": -1, "to": [9]},
+    {"id": 9, "type": "TOWN", "x": 2, "y": -1, "name": "Brightwater", "to": [10]},
+    {"id": 10, "type": "BATTLE", "x": 2, "y": 0, "to": [11]},
+    {"id": 11, "type": "TREASURE", "x": 2, "y": 1, "to": [12]},
+    {"id": 12, "type": "SHRINE", "x": 2, "y": 2, "to": [13]},
+    {"id": 13, "type": "TRAP", "x": 1, "y": 2, "to": [0]},
+    {"id": 14, "type": "NORMAL", "x": 0, "y": 1, "to": [15]},
+    {"id": 15, "type": "BATTLE", "x": 0, "y": 0, "to": [7]},
+    {"id": 16, "type": "TOWN", "x": 3, "y": 2, "name": "Eastmarsh", "to": [12]},
+    {"id": 17, "type": "TOWN", "x": 0, "y": -2, "name": "Northgate", "to": [5, 9]}
+  ],
+  "lakes": [
+    {"x": 5, "y": 3, "width": 3.4, "height": 3.2},
+    {"x": 15, "y": 3, "width": 2.4, "height": 2.2}
+  ],
+  "rivers": [
+    {"from": [6, 2], "to": [15, 3]}
+  ]
+}
