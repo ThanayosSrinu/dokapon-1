@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://d3vyo0to8xw3b"]
+
+[ext_resource type="Script" uid="uid://p53s6w2ahi2t" path="res://Board.gd" id="1_cbhje"]
+[ext_resource type="Script" uid="uid://8hy5460fgcsr" path="res://board/BoardNode.gd" id="1_g5mom"]
+[ext_resource type="Texture2D" uid="uid://tg3vg4gna7dn" path="res://icon.svg" id="2_ai47i"]
+
+[node name="Board" type="Node2D" unique_id=111082895 node_paths=PackedStringArray("start_node")]
+script = ExtResource("1_cbhje")
+start_node = NodePath("Castle")
+
+[node name="Castle" type="Marker2D" parent="." unique_id=1704168292 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(200, 324)
+script = ExtResource("1_g5mom")
+node_type = 0
+connected_nodes = [NodePath("../Space_1"), NodePath("../Space_5")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Space_1" type="Marker2D" parent="." unique_id=975764892 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(400, 150)
+script = ExtResource("1_g5mom")
+node_id = 1
+connected_nodes = [NodePath("../Castle"), NodePath("../Shop_A")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Shop_A" type="Marker2D" parent="." unique_id=2061521761 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(650, 150)
+script = ExtResource("1_g5mom")
+node_id = 2
+node_type = 2
+connected_nodes = [NodePath("../Space_1"), NodePath("../Space_3")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Space_3" type="Marker2D" parent="." unique_id=1799530330 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(900, 324)
+script = ExtResource("1_g5mom")
+node_id = 3
+connected_nodes = [NodePath("../Shop_A"), NodePath("../Event_A")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Event_A" type="Marker2D" parent="." unique_id=457352329 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(650, 500)
+script = ExtResource("1_g5mom")
+node_id = 4
+node_type = 3
+connected_nodes = [NodePath("../Space_3"), NodePath("../Space_5")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Space_5" type="Marker2D" parent="." unique_id=43885885 node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(400, 500)
+script = ExtResource("1_g5mom")
+node_id = 5
+connected_nodes = [NodePath("../Event_A"), NodePath("../Castle")]
+metadata/_custom_type_script = "uid://8hy5460fgcsr"
+
+[node name="Token" type="Sprite2D" parent="." unique_id=439173594]
+scale = Vector2(0.4, 0.4)
+texture = ExtResource("2_ai47i")

@@ -1,0 +1,64 @@
+[gd_scene format=3 uid="uid://clxl856wo34b6"]
+
+[ext_resource type="Script" uid="uid://craek0lns0ti8" path="res://main/GameController.gd" id="1_r0du0"]
+[ext_resource type="PackedScene" path="res://maps/WorldMap.tscn" id="2_map"]
+[ext_resource type="PackedScene" uid="uid://b0uvqryp6dnha" path="res://player/Player.tscn" id="3_fos0i"]
+[ext_resource type="Script" path="res://board/BoardCamera.gd" id="4_cam"]
+
+[node name="Main" type="Node2D" node_paths=PackedStringArray("player", "roll_button", "status_label", "choice_box", "board", "camera", "info_label")]
+script = ExtResource("1_r0du0")
+player = NodePath("Player")
+roll_button = NodePath("UI/Panel/VBox/RollButton")
+status_label = NodePath("UI/Panel/VBox/StatusLabel")
+choice_box = NodePath("UI/Panel/VBox/ChoiceBox")
+board = NodePath("WorldMap")
+camera = NodePath("BoardCamera")
+info_label = NodePath("UI/InfoLabel")
+
+[node name="WorldMap" parent="." instance=ExtResource("2_map")]
+
+[node name="Player" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
+board_manager = NodePath("../WorldMap")
+
+[node name="BoardCamera" type="Camera2D" parent="."]
+script = ExtResource("4_cam")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="InfoLabel" type="Label" parent="UI"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 620.0
+offset_bottom = 120.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+text = "Info"
+
+[node name="Panel" type="PanelContainer" parent="UI"]
+custom_minimum_size = Vector2(260, 0)
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -260.0
+offset_bottom = 40.0
+grow_horizontal = 0
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StatusLabel" type="Label" parent="UI/Panel/VBox"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+text = "Status"
+autowrap_mode = 3
+
+[node name="RollButton" type="Button" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Roll Dice"
+
+[node name="ChoiceBox" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[connection signal="pressed" from="UI/Panel/VBox/RollButton" to="." method="_on_roll_button_pressed"]
