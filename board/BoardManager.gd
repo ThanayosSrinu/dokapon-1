@@ -83,8 +83,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint() or not clickable:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		# get_global_mouse_position() already accounts for camera pan and zoom.
-		var node := get_node_at(get_global_mouse_position())
+		# make_input_local() converts the click from screen pixels to this node's
+		# coordinates, which accounts for camera pan and zoom.
+		var node := get_node_at(to_global(make_input_local(event).position))
 		if node != null:
 			get_viewport().set_input_as_handled()
 			EventBus.space_clicked.emit(node)
@@ -154,6 +155,34 @@ func get_connected_nodes(node: BoardNode, came_from: BoardNode = null) -> Array[
 	if came_from != null and options.size() > 1:
 		options.erase(came_from)
 	return options
+
+
+## Returns every space a player on `start` can stop on after walking EXACTLY
+## `steps` spaces, following the same rules as real movement (see
+## get_connected_nodes). This is a breadth-first search done one layer per
+## step. It remembers "which space, and where from", not just "which space",
+## because where you came from decides where you may go next.
+func get_landing_nodes(start: BoardNode, steps: int, came_from: BoardNode = null) -> Array[BoardNode]:
+	# Each state is [space, the space stepped off to get there].
+	var states := [[start, came_from]]
+	for step in steps:
+		# Dictionary keys are unique, so paths that meet are only walked once.
+		# Without this, the search would grow with every fork it passes.
+		var next_states := {}
+		for state in states:
+			var options := get_connected_nodes(state[0], state[1])
+			if options.is_empty():
+				# An isolated space: a real move would stop here too.
+				next_states[state] = true
+			for next in options:
+				next_states[[next, state[0]]] = true
+		states = next_states.keys()
+
+	var result: Array[BoardNode] = []
+	for state in states:
+		if not result.has(state[0]):
+			result.append(state[0])
+	return result
 
 
 ## Returns the space under `world_position`, or null if there is none.

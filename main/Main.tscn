@@ -4,21 +4,40 @@
 [ext_resource type="PackedScene" path="res://maps/WorldMap.tscn" id="2_map"]
 [ext_resource type="PackedScene" uid="uid://b0uvqryp6dnha" path="res://player/Player.tscn" id="3_fos0i"]
 [ext_resource type="Script" path="res://board/BoardCamera.gd" id="4_cam"]
+[ext_resource type="Script" path="res://ui/DiceRoller.gd" id="5_dice"]
 
-[node name="Main" type="Node2D" node_paths=PackedStringArray("player", "roll_button", "status_label", "choice_box", "board", "camera", "info_label")]
+[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice")]
 script = ExtResource("1_r0du0")
-player = NodePath("Player")
+players = [NodePath("Player1"), NodePath("Player2"), NodePath("Player3"), NodePath("Player4")]
 roll_button = NodePath("UI/Panel/VBox/RollButton")
 status_label = NodePath("UI/Panel/VBox/StatusLabel")
 choice_box = NodePath("UI/Panel/VBox/ChoiceBox")
 board = NodePath("WorldMap")
 camera = NodePath("BoardCamera")
 info_label = NodePath("UI/InfoLabel")
+dice = NodePath("UI/Dice")
 
 [node name="WorldMap" parent="." instance=ExtResource("2_map")]
 
-[node name="Player" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
+[node name="Player1" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
+player_name = "Red"
+token_color = Color(0.92, 0.26, 0.24, 1)
+
+[node name="Player2" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
+board_manager = NodePath("../WorldMap")
+player_name = "Blue"
+token_color = Color(0.25, 0.5, 0.95, 1)
+
+[node name="Player3" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
+board_manager = NodePath("../WorldMap")
+player_name = "Green"
+token_color = Color(0.2, 0.72, 0.36, 1)
+
+[node name="Player4" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
+board_manager = NodePath("../WorldMap")
+player_name = "Purple"
+token_color = Color(0.65, 0.38, 0.92, 1)
 
 [node name="BoardCamera" type="Camera2D" parent="."]
 script = ExtResource("4_cam")
@@ -34,6 +53,23 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 18
 text = "Info"
+
+[node name="Dice" type="Control" parent="UI"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 3
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -55.0
+offset_top = -134.0
+offset_right = 55.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("5_dice")
 
 [node name="Panel" type="PanelContainer" parent="UI"]
 custom_minimum_size = Vector2(260, 0)
@@ -58,7 +94,7 @@ autowrap_mode = 3
 layout_mode = 2
 text = "Roll Dice"
 
-[node name="ChoiceBox" type="HBoxContainer" parent="UI/Panel/VBox"]
+[node name="ChoiceBox" type="VBoxContainer" parent="UI/Panel/VBox"]
 layout_mode = 2
 
 [connection signal="pressed" from="UI/Panel/VBox/RollButton" to="." method="_on_roll_button_pressed"]

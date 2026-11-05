@@ -50,6 +50,10 @@ const TYPE_INFO := {
 const BASE_RADIUS := 22.0
 const CASTLE_RADIUS := 32.0
 const HIGHLIGHT_COLOR := Color(1.0, 0.95, 0.3)
+const PATH_CHOICE_COLOR := Color(0.45, 1.0, 0.55)
+const LANDING_COLOR := Color(0.35, 0.9, 1.0)
+## How fast the path-choice ring pulses.
+const PULSE_SPEED := 6.0
 
 ## Unique number of this space. Save files will refer to spaces by this id,
 ## so it must never change once assigned.
@@ -81,6 +85,35 @@ var highlighted := false:
 	set(value):
 		highlighted = value
 		queue_redraw()
+
+## When true, this space is a path the current player can click at a fork.
+## It draws a pulsing green ring. Not saved; set by code while playing.
+var is_path_choice := false:
+	set(value):
+		is_path_choice = value
+		# Only spaces that are pulsing need to redraw every frame.
+		set_process(value)
+		queue_redraw()
+
+## When true, the current roll can end on this space. It draws a steady blue
+## ring. Not saved; set by code while playing.
+var is_landing_spot := false:
+	set(value):
+		is_landing_spot = value
+		queue_redraw()
+
+# Seconds this space has been pulsing.
+var _pulse_time := 0.0
+
+
+func _ready() -> void:
+	# Nothing pulses until is_path_choice is turned on.
+	set_process(false)
+
+
+func _process(delta: float) -> void:
+	_pulse_time += delta
+	queue_redraw()
 
 
 func _notification(what: int) -> void:
@@ -133,6 +166,12 @@ func _draw() -> void:
 
 	if highlighted:
 		draw_arc(Vector2.ZERO, radius + 7.0, 0.0, TAU, 48, HIGHLIGHT_COLOR, 5.0, true)
+	if is_landing_spot:
+		draw_arc(Vector2.ZERO, radius + 13.0, 0.0, TAU, 48, LANDING_COLOR, 4.0, true)
+	if is_path_choice:
+		# sin() swings between -1 and 1, so the ring grows and shrinks.
+		var pulse := sin(_pulse_time * PULSE_SPEED) * 4.0
+		draw_arc(Vector2.ZERO, radius + 20.0 + pulse, 0.0, TAU, 48, PATH_CHOICE_COLOR, 6.0, true)
 
 	draw_circle(Vector2.ZERO, radius, color)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, color.darkened(0.6), 3.0, true)

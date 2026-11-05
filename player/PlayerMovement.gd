@@ -1,18 +1,23 @@
 class_name PlayerMovement
 extends Node2D
-## Moves a player token across the board, one space at a time.
+## One player's token: draws it and moves it across the board, one space at a
+## time. Main.tscn holds several of these, one per player.
 ##
 ## How to use it:
 ##   1. Drag the BoardManager node into `board_manager` in the Inspector.
 ##      The player then appears on the Castle space when the game starts.
 ##   2. Call move_steps() with a dice roll.
-##   3. At a fork, movement pauses and `path_choice_required` is emitted.
+##   3. After every step, `step_finished` is emitted.
+##   4. At a fork, movement pauses and `path_choice_required` is emitted.
 ##      Answer it by calling choose_path() with one of the offered spaces.
-##   4. `movement_finished` is emitted when the player has stopped.
+##   5. `movement_finished` is emitted when the player has stopped.
 
 ## Emitted when the player must pick which way to go. Movement stays paused
 ## until choose_path() is called with one of `available_nodes`.
 signal path_choice_required(available_nodes: Array[BoardNode])
+
+## Emitted each time the token arrives on a space during a move.
+signal step_finished(node: BoardNode, steps_remaining: int)
 
 ## Emitted once every step is used up and the token has stopped sliding.
 signal movement_finished(final_node: BoardNode)
@@ -20,14 +25,33 @@ signal movement_finished(final_node: BoardNode)
 # Emitted by choose_path() to wake up a move that is waiting at a fork.
 signal _path_chosen
 
+const TOKEN_RADIUS := 16.0
+# Drawn above idle tokens while moving (z_index of a normal node is 0).
+const MOVING_Z_INDEX := 10
+
 ## The board to walk on. Drag the BoardManager node here in the Inspector.
 @export var board_manager: BoardManager
+
+## Shown in the UI. The first letter is drawn on the token.
+@export var player_name := "Player":
+	set(value):
+		player_name = value
+		queue_redraw()
+
+## The color of this player's token.
+@export var token_color := Color(0.9, 0.3, 0.3):
+	set(value):
+		token_color = value
+		queue_redraw()
 
 ## Seconds the slide from one space to the next takes.
 @export var step_duration := 0.35
 
 ## Short pause after each step, so single steps are easy to count.
 @export var step_pause := 0.05
+
+## How high the token hops on each step, in pixels.
+@export var hop_height := 22.0
 
 ## When true, a new turn may start in any direction, even back the way the
 ## player came last turn. When false, the player keeps walking forward.
@@ -39,12 +63,23 @@ var current_node: BoardNode
 ## True while move_steps() is running (sliding or waiting at a fork).
 var is_moving := false
 
+## Steps still to walk in this move. Drawn above the token while moving.
+var steps_left := 0:
+	set(value):
+		steps_left = value
+		queue_redraw()
+
 # The space the player stepped off last. Used to avoid walking straight back.
 var _previous_node: BoardNode
 # The spaces offered at the current fork. Empty when not waiting.
 var _pending_choices: Array[BoardNode] = []
 # The space picked through choose_path(), until move_steps() reads it.
 var _chosen_node: BoardNode
+# Current height of the hop. Only the drawing moves up; the position stays on
+# the road, so the camera does not bob up and down.
+var _hop_offset := 0.0
+# The running set_rest_offset() animation.
+var _rest_tween: Tween
 
 
 func _ready() -> void:
@@ -82,15 +117,17 @@ func move_steps(steps: int) -> void:
 		return
 
 	is_moving = true
+	z_index = MOVING_Z_INDEX
 	if can_reverse_at_turn_start:
 		_previous_node = null
 
-	var steps_left := steps
+	steps_left = steps
 	while steps_left > 0:
 		var options := board_manager.get_connected_nodes(current_node, _previous_node)
 		if options.is_empty():
 			# An isolated space: nowhere to go, so the move ends early.
 			push_warning("PlayerMovement: space %d has no exits." % current_node.node_id)
+			steps_left = 0
 			break
 
 		var next_node: BoardNode
@@ -103,8 +140,10 @@ func move_steps(steps: int) -> void:
 		_previous_node = current_node
 		current_node = next_node
 		steps_left -= 1
+		step_finished.emit(current_node, steps_left)
 
 	is_moving = false
+	z_index = 0
 	movement_finished.emit(current_node)
 
 
@@ -121,6 +160,26 @@ func choose_path(node: BoardNode) -> void:
 ## Returns true while movement is paused at a fork.
 func is_waiting_for_choice() -> bool:
 	return not _pending_choices.is_empty()
+
+
+## Returns every space this player could stop on after `steps` more steps.
+func get_landing_preview(steps: int) -> Array[BoardNode]:
+	# Before a move starts, the player may be free to turn around. In the
+	# middle of a move, they never are.
+	var came_from := _previous_node
+	if can_reverse_at_turn_start and not is_moving:
+		came_from = null
+	return board_manager.get_landing_nodes(current_node, steps, came_from)
+
+
+## Slides the idle token slightly off the center of its space, so several
+## tokens on one space stay visible. Vector2.ZERO puts it back in the center.
+func set_rest_offset(offset: Vector2) -> void:
+	if _rest_tween != null and _rest_tween.is_valid():
+		_rest_tween.kill()
+	_rest_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_rest_tween.tween_property(self, "global_position",
+			current_node.global_position + offset, 0.2)
 
 
 # --- Internal helpers -------------------------------------------------------
@@ -146,7 +205,47 @@ func _slide_to(node: BoardNode) -> void:
 	var tween := create_tween()
 	# Sine easing starts and stops gently instead of moving at a fixed speed.
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	# set_parallel() runs the slide and the hop at the same time.
+	tween.set_parallel(true)
 	tween.tween_property(self, "global_position", node.global_position, step_duration)
+	tween.tween_method(_set_hop, 0.0, 1.0, step_duration)
 	if step_pause > 0.0:
-		tween.tween_interval(step_pause)
+		# chain() goes back to one-after-another for this last part.
+		tween.chain().tween_interval(step_pause)
 	await tween.finished
+
+
+# `progress` goes from 0 to 1. sin() turns that into up, then back down.
+func _set_hop(progress: float) -> void:
+	_hop_offset = sin(progress * PI) * hop_height
+	queue_redraw()
+
+
+# --- Drawing ----------------------------------------------------------------
+
+func _draw() -> void:
+	# A flat ellipse under the token: a circle drawn with a squashed transform.
+	# It stays on the ground during a hop, which is what makes the hop readable.
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.45))
+	draw_circle(Vector2(0, 6), TOKEN_RADIUS, Color(0, 0, 0, 0.4))
+	draw_set_transform(Vector2.ZERO)
+
+	var body := Vector2(0, -TOKEN_RADIUS * 0.6 - _hop_offset)
+	draw_circle(body, TOKEN_RADIUS, token_color)
+	draw_arc(body, TOKEN_RADIUS, 0.0, TAU, 40, Color.WHITE, 3.0, true)
+	_draw_centered_text(player_name.left(1), body, 18)
+
+	if steps_left > 0:
+		_draw_centered_text(str(steps_left), body + Vector2(0, -TOKEN_RADIUS - 14.0), 22)
+
+
+## Draws white text with a dark outline, centered on `center`.
+func _draw_centered_text(text: String, center: Vector2, font_size: int) -> void:
+	var font := ThemeDB.fallback_font
+	var box_width := 60.0
+	var vertical_offset := (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
+	var origin := center + Vector2(-box_width * 0.5, vertical_offset)
+	draw_string_outline(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
+			font_size, 5, Color(0, 0, 0, 0.85))
+	draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
+			font_size, Color.WHITE)
