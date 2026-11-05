@@ -1,7 +1,7 @@
 class_name CharacterSheet
 extends CenterContainer
-## A window showing one player's stats, equipment, bag and spells. With
-## `can_act` on, bag items can be used or equipped and worn items taken off.
+## Two windows for one player: Status (stats and spells) and Inventory
+## (equipment and bag). With `can_act` on, bag items can be used or equipped and worn items taken off.
 ## Rules stay in PlayerData: this script only calls it and redraws.
 
 const SLOT_NAMES := {
@@ -24,43 +24,52 @@ func _ready() -> void:
 	# Keeps clicks from reaching the board and buttons behind the window.
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var panel := PanelContainer.new()
-	add_child(panel)
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(640, 0)
-	box.add_theme_constant_override("separation", 10)
-	panel.add_child(box)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	add_child(layout)
+	var windows := HBoxContainer.new()
+	windows.add_theme_constant_override("separation", 12)
+	layout.add_child(windows)
 
-	_title = Label.new()
-	_title.add_theme_color_override("font_color", GameArt.GOLD)
-	_title.add_theme_font_size_override("font_size", 24)
-	box.add_child(_title)
-
-	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 24)
-	box.add_child(columns)
-
+	var status := _add_window(windows, 300)
+	_title = _add_heading(status)
 	_stats = Label.new()
-	_stats.custom_minimum_size = Vector2(190, 0)
-	columns.add_child(_stats)
-
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	columns.add_child(right)
-	_worn = VBoxContainer.new()
-	right.add_child(_worn)
-	_bag = VBoxContainer.new()
-	right.add_child(_bag)
-
+	status.add_child(_stats)
 	_spells = Label.new()
 	_spells.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_spells)
+	status.add_child(_spells)
+
+	var inventory := _add_window(windows, 380)
+	_add_heading(inventory).text = "Inventory"
+	_worn = VBoxContainer.new()
+	inventory.add_child(_worn)
+	_bag = VBoxContainer.new()
+	inventory.add_child(_bag)
 
 	_close = Button.new()
 	_close.text = "Close"
 	_close.pressed.connect(close_sheet)
-	box.add_child(_close)
+	layout.add_child(_close)
 	hide()
+
+
+## Adds a framed window of its own and returns the box for its contents.
+func _add_window(parent: Container, width: float) -> VBoxContainer:
+	var panel := PanelContainer.new()
+	parent.add_child(panel)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(width, 0)
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+	return box
+
+
+func _add_heading(parent: Container) -> Label:
+	var heading := Label.new()
+	heading.add_theme_color_override("font_color", GameArt.GOLD)
+	heading.add_theme_font_size_override("font_size", 22)
+	parent.add_child(heading)
+	return heading
 
 
 func open(player: PlayerData, can_act: bool) -> void:
