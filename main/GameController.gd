@@ -5,9 +5,9 @@ extends Node2D
 ##   TURN_START     Announce the player and move the camera to their token.
 ##   ACTION         Wait for "Roll Dice".
 ##   ROLLING        Tumble the die, then show the landing rings.
-##   MOVING         The token hops while the camera follows it.
+##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
-##   SPACE_EVENT    Show the landed space. Sections 5 and 6 add real effects.
+##   SPACE_EVENT    Celebrate the landed space. Sections 5 and 6 add real effects.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
 ## Scene layout:
@@ -17,19 +17,32 @@ extends Node2D
 ##   ├── BoardCamera
 ##   ├── TurnManager
 ##   └── UI (CanvasLayer)
-##       ├── InfoLabel (Label)
 ##       ├── TurnHud
-##       ├── Dice (DiceRoller)
-##       ├── Panel (PanelContainer)
-##       │   └── VBox (VBoxContainer)
+##       ├── InfoPanel (PanelContainer) -> InfoLabel
+##       ├── Panel (PanelContainer, the message window)
+##       │   └── Row (HBoxContainer)
 ##       │       ├── StatusLabel (Label)
-##       │       ├── RollButton (Button)
-##       │       └── ChoiceBox (VBoxContainer)
+##       │       └── Side (VBoxContainer)
+##       │           ├── RollButton (Button)
+##       │           └── ChoiceBox (VBoxContainer)
+##       ├── Dice (DiceRoller)
 ##       ├── TurnBanner
-##       └── SetupMenu
+##       ├── SetupMenu
+##       └── Fade (ColorRect)
 
-## Distance between a space's center and the tokens sharing it, in pixels.
-const TOKEN_SPREAD := 30.0
+## Where tokens stand when they share a space, by how many there are. Each one
+## stays inside the top of the space.
+const TOKEN_SLOTS := {
+	1: [Vector2.ZERO],
+	2: [Vector2(-22, 0), Vector2(22, 0)],
+	3: [Vector2(0, -10), Vector2(-22, 10), Vector2(22, 10)],
+	4: [Vector2(-22, -10), Vector2(22, -10), Vector2(-22, 10), Vector2(22, 10)],
+}
+## Characters written per second in the message window.
+const TEXT_SPEED := 70.0
+## Which of BoardCamera.ZOOM_LEVELS shows the whole island, and which is normal.
+const OVERVIEW_ZOOM := 0
+const PLAY_ZOOM := 1
 
 ## A short line shown under the name of the space the player lands on.
 const TYPE_DESCRIPTIONS := {
@@ -95,6 +108,15 @@ const TYPE_DESCRIPTIONS := {
 ## choices are random until Section 9 adds real AI.
 @export_range(0, 4) var cpu_players := 0
 
+## The black cover that fades away at the start. Drag Fade here.
+@export var fade: ColorRect
+
+## The message window, hidden until the game starts. Drag Panel here.
+@export var message_window: Control
+
+## The box of details about a space, hidden until the game starts. Drag InfoPanel here.
+@export var info_panel: Control
+
 ## Set above 0 to replay the game with that seed, which is printed to Output at
 ## the start of every game. 0 uses a new random seed.
 @export var game_seed := 0
@@ -109,15 +131,20 @@ var _last_roll := 0
 var _selected_node: BoardNode
 # The spaces glowing green at the current fork.
 var _path_options: Array[BoardNode] = []
-# The spaces with a blue landing ring.
+# The spaces with a gold landing ring.
 var _landing_nodes: Array[BoardNode] = []
+# The message being written out.
+var _text_tween: Tween
+# The pulse of the Roll Dice button while it waits.
+var _button_tween: Tween
 
 
 func _ready() -> void:
 	if (players.is_empty() or roll_button == null or status_label == null
 			or choice_box == null or board == null or camera == null
 			or info_label == null or dice == null or turn_manager == null
-			or hud == null or banner == null or setup_menu == null):
+			or hud == null or banner == null or setup_menu == null or fade == null
+			or message_window == null or info_panel == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -134,9 +161,19 @@ func _ready() -> void:
 	EventBus.phase_changed.connect(_on_phase_changed)
 	setup_menu.player_count_chosen.connect(_start_game)
 
+	camera.world_limit = board.get_world_rect()
 	camera.global_position = board.get_bounds().get_center()
+	camera.zoom = Vector2.ONE * BoardCamera.ZOOM_LEVELS[OVERVIEW_ZOOM]
+	camera.set_zoom_index(OVERVIEW_ZOOM, 0.0)
 	info_label.text = ("Click a space to inspect it.\n"
-			+ "WASD / arrows: pan    Wheel: zoom    Right-drag: pan")
+			+ "WASD or arrows: pan\nWheel: zoom\nRight-drag: pan")
+
+	message_window.hide()
+	info_panel.hide()
+	fade.show()
+	var tween := create_tween()
+	tween.tween_property(fade, "modulate:a", 0.0, 0.8)
+	tween.tween_callback(fade.hide)
 
 	roll_button.disabled = true
 	_show_status("Choose the number of players.")
@@ -153,6 +190,7 @@ func _on_roll_button_pressed() -> void:
 	if turn_manager.phase != TurnManager.Phase.ACTION:
 		return
 	turn_manager.go_to(TurnManager.Phase.ROLLING)
+	_stop_button_pulse()
 	roll_button.disabled = true
 
 	var player := _active_player()
@@ -166,6 +204,9 @@ func _on_roll_button_pressed() -> void:
 
 	# The tokens left behind move back to the center of their space.
 	_arrange_tokens(player)
+	# The active token walks from the middle of its space.
+	player.set_rest_offset(Vector2.ZERO)
+	player.is_active = false
 	turn_manager.go_to(TurnManager.Phase.MOVING)
 	# move_steps() runs over several frames. It returns right away here and
 	# reports back later through the signals connected in _ready().
@@ -188,10 +229,12 @@ func _on_path_choice_required(available_nodes: Array[BoardNode]) -> void:
 
 	_show_status("%s - Rolled %d\nFork! Click a glowing space:" % [_turn_title(), _last_roll])
 	_path_options = available_nodes
+	roll_button.hide()
 	for node in available_nodes:
 		node.is_path_choice = true
 		var button := Button.new()
-		button.text = "#%d %s" % [node.node_id, node.get_display_name()]
+		button.text = "%s: %s" % [_direction_name(_active_player().current_node, node),
+				node.get_display_name()]
 		# bind() remembers which space this button stands for.
 		button.pressed.connect(_choose_path.bind(node))
 		choice_box.add_child(button)
@@ -220,6 +263,8 @@ func _on_space_clicked(node: BoardNode) -> void:
 		node.get_type_name(),
 		", ".join(neighbor_texts),
 	]
+	# A PanelContainer never shrinks by itself when its text gets shorter.
+	info_panel.reset_size()
 
 
 func _on_movement_finished(final_node: BoardNode) -> void:
@@ -245,8 +290,9 @@ func _on_phase_changed(phase: TurnManager.Phase) -> void:
 func _enter_turn_start() -> void:
 	var player := turn_manager.current_player()
 	camera.follow(_active_player())
+	_active_player().is_active = true
 	_show_status(_after_previous_result(_turn_title()))
-	await banner.play(_turn_title(), player.token_color)
+	await banner.play(_turn_title(), player.token_color, player.character_sheet)
 	turn_manager.go_to(TurnManager.Phase.ACTION)
 
 
@@ -259,6 +305,7 @@ func _enter_action() -> void:
 	roll_button.disabled = false
 	# Give the button keyboard focus, so Space or Enter also rolls.
 	roll_button.grab_focus()
+	_start_button_pulse()
 
 
 func _enter_space_event() -> void:
@@ -274,6 +321,11 @@ func _enter_space_event() -> void:
 		TYPE_DESCRIPTIONS.get(space.node_type, ""),
 	]
 	_show_status(_previous_result)
+	space.bump(1.6)
+	BoardFx.burst(board, space.global_position, BoardNode.TYPE_INFO[space.node_type]["color"])
+	if space.node_type == BoardNode.NodeType.BATTLE or space.node_type == BoardNode.NodeType.TRAP:
+		camera.shake()
+	player.cheer()
 	await get_tree().create_timer(space_event_duration).timeout
 	turn_manager.end_turn()
 
@@ -291,7 +343,7 @@ func _start_game(player_count: int) -> void:
 		var token := players[index]
 		var data := PlayerData.new(token.player_name, token.token_color,
 				index >= player_count - cpu_players)
-		data.sprite_tile = token.sprite_tile
+		data.character_sheet = token.character_sheet
 		data.space_id = token.current_node.node_id
 		roster.append(data)
 		_tokens[data] = token
@@ -305,7 +357,22 @@ func _start_game(player_count: int) -> void:
 	hud.setup(GameState.players)
 	hud.show()
 	_arrange_tokens()
+	_slide_in_windows()
+	camera.set_zoom_index(PLAY_ZOOM, 0.9)
 	turn_manager.start_game()
+
+
+## Brings the message window up from below and the info box in from the right.
+func _slide_in_windows() -> void:
+	message_window.show()
+	info_panel.show()
+	var window_y := message_window.position.y
+	var panel_x := info_panel.position.x
+	message_window.position.y += message_window.size.y + 24.0
+	info_panel.position.x += info_panel.size.x + 24.0
+	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(message_window, "position:y", window_y, 0.5)
+	tween.tween_property(info_panel, "position:x", panel_x, 0.5)
 
 
 func _active_player() -> PlayerMovement:
@@ -321,7 +388,7 @@ func _turn_title() -> String:
 func _after_previous_result(text: String) -> String:
 	if _previous_result == "":
 		return text
-	return "%s\n\n%s" % [_previous_result, text]
+	return "%s\n%s" % [_previous_result, text]
 
 
 func _choose_path(node: BoardNode) -> void:
@@ -330,12 +397,24 @@ func _choose_path(node: BoardNode) -> void:
 		option.is_path_choice = false
 	_path_options = []
 	_clear_choices()
+	roll_button.show()
 	_show_status("%s - Rolled %d\nMoving..." % [_turn_title(), _last_roll])
 	turn_manager.go_to(TurnManager.Phase.MOVING)
 	_active_player().choose_path(node)
 
 
-## Replaces the blue landing rings with rings on `nodes`.
+## "North", "South-East" and so on: which way `to` lies from `from`.
+func _direction_name(from: BoardNode, to: BoardNode) -> String:
+	var direction := (to.global_position - from.global_position).normalized()
+	var name_parts := PackedStringArray()
+	if absf(direction.y) > 0.38:
+		name_parts.append("North" if direction.y < 0.0 else "South")
+	if absf(direction.x) > 0.38:
+		name_parts.append("West" if direction.x < 0.0 else "East")
+	return "-".join(name_parts)
+
+
+## Replaces the landing rings with rings on `nodes`.
 func _set_landing_nodes(nodes: Array[BoardNode]) -> void:
 	for node in _landing_nodes:
 		node.is_landing_spot = false
@@ -356,16 +435,34 @@ func _arrange_tokens(moving_player: PlayerMovement = null) -> void:
 			groups[player.current_node].append(player)
 
 	for group in groups.values():
+		var slots: Array = TOKEN_SLOTS[group.size()]
 		for index in group.size():
-			var offset := Vector2.ZERO
-			if group.size() > 1:
-				# Share a full circle (TAU) equally between the tokens.
-				offset = Vector2.RIGHT.rotated(TAU * index / group.size()) * TOKEN_SPREAD
-			group[index].set_rest_offset(offset)
+			var slot: Vector2 = slots[index]
+			# The lower slots are nearer to the viewer, so they are drawn in front.
+			group[index].set_rest_offset(slot, 1 if slot.y > 0.0 else 0)
 
 
+## Writes `text` into the message window one letter at a time.
 func _show_status(text: String) -> void:
+	if _text_tween != null and _text_tween.is_valid():
+		_text_tween.kill()
 	status_label.text = text
+	status_label.visible_ratio = 0.0
+	_text_tween = create_tween()
+	_text_tween.tween_property(status_label, "visible_ratio", 1.0, text.length() / TEXT_SPEED)
+
+
+func _start_button_pulse() -> void:
+	_stop_button_pulse()
+	_button_tween = create_tween().set_loops().set_trans(Tween.TRANS_SINE)
+	_button_tween.tween_property(roll_button, "modulate", Color(1.35, 1.25, 1.0), 0.5)
+	_button_tween.tween_property(roll_button, "modulate", Color.WHITE, 0.5)
+
+
+func _stop_button_pulse() -> void:
+	if _button_tween != null and _button_tween.is_valid():
+		_button_tween.kill()
+	roll_button.modulate = Color.WHITE
 
 
 ## Removes every path button from the ChoiceBox.

@@ -10,8 +10,8 @@ extends Node2D
 ## Every link is two-way, so each link only has to be set on one of the two
 ## spaces.
 ##
-## Draws the countryside and its roads (see BoardArt), both in the editor and
-## in the game.
+## Builds the island and its roads (see BoardArt), both in the editor and in
+## the game.
 ## Checks the map for mistakes and shows them as warnings (the yellow
 ## triangle next to this node in the Scene dock).
 
@@ -41,6 +41,8 @@ var _nodes_by_id := {}
 var _neighbors := {}
 # Snapshot of the map used by the editor to notice changes.
 var _last_signature := []
+# The island under the board.
+var _art: BoardArt
 
 
 func _ready() -> void:
@@ -53,6 +55,9 @@ func _ready() -> void:
 		push_warning("BoardManager: " + problem)
 	if print_on_ready:
 		print_board()
+	var ambience := WorldAmbience.new()
+	ambience.art = _art
+	add_child(ambience, false, INTERNAL_MODE_BACK)
 	board_ready.emit()
 
 
@@ -105,7 +110,17 @@ func rebuild() -> void:
 			if is_instance_valid(other) and other != node and _neighbors.has(other):
 				_add_link(node, other)
 
-	queue_redraw()
+	_art = BoardArt.paint(self, _nodes, _neighbors)
+
+
+## The painted part of the world. The camera stays inside it.
+func get_world_rect() -> Rect2:
+	return _art.world_rect
+
+
+## The island under the board.
+func get_art() -> BoardArt:
+	return _art
 
 
 ## Returns every space on the board.
@@ -324,9 +339,3 @@ func _assign_missing_ids() -> void:
 		undo_redo.add_undo_property(node, "node_id", node.node_id)
 	undo_redo.commit_action()
 	print("BoardManager: assigned ids to %d space(s)." % needs_id.size())
-
-
-# --- Drawing ----------------------------------------------------------------
-
-func _draw() -> void:
-	BoardArt.paint(self, _nodes, _neighbors)

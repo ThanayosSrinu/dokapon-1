@@ -9,46 +9,53 @@
 [ext_resource type="Script" path="res://ui/TurnHud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://ui/TurnBanner.gd" id="8_banner"]
 [ext_resource type="Script" path="res://ui/SetupMenu.gd" id="9_setup"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Warrior-Red.png" id="10_red"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Soldier-Blue.png" id="11_blue"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Green.png" id="12_green"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Purple.png" id="13_purple"]
 
-[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu")]
+[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu", "fade", "message_window", "info_panel")]
 script = ExtResource("1_r0du0")
 players = [NodePath("Player1"), NodePath("Player2"), NodePath("Player3"), NodePath("Player4")]
-roll_button = NodePath("UI/Panel/VBox/RollButton")
-status_label = NodePath("UI/Panel/VBox/StatusLabel")
-choice_box = NodePath("UI/Panel/VBox/ChoiceBox")
+roll_button = NodePath("UI/Panel/Row/Side/RollButton")
+status_label = NodePath("UI/Panel/Row/StatusLabel")
+choice_box = NodePath("UI/Panel/Row/Side/ChoiceBox")
 board = NodePath("WorldMap")
 camera = NodePath("BoardCamera")
-info_label = NodePath("UI/InfoLabel")
+info_label = NodePath("UI/InfoPanel/InfoLabel")
 dice = NodePath("UI/Dice")
 turn_manager = NodePath("TurnManager")
 hud = NodePath("UI/TurnHud")
 banner = NodePath("UI/TurnBanner")
 setup_menu = NodePath("UI/SetupMenu")
+fade = NodePath("UI/Fade")
+message_window = NodePath("UI/Panel")
+info_panel = NodePath("UI/InfoPanel")
 
 [node name="WorldMap" parent="." instance=ExtResource("2_map")]
 
 [node name="Player1" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Red"
-sprite_tile = 97
+character_sheet = ExtResource("10_red")
 token_color = Color(0.92, 0.26, 0.24, 1)
 
 [node name="Player2" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Blue"
-sprite_tile = 99
+character_sheet = ExtResource("11_blue")
 token_color = Color(0.25, 0.5, 0.95, 1)
 
 [node name="Player3" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Green"
-sprite_tile = 112
+character_sheet = ExtResource("12_green")
 token_color = Color(0.2, 0.72, 0.36, 1)
 
 [node name="Player4" parent="." node_paths=PackedStringArray("board_manager") instance=ExtResource("3_fos0i")]
 board_manager = NodePath("../WorldMap")
 player_name = "Purple"
-sprite_tile = 84
+character_sheet = ExtResource("13_purple")
 token_color = Color(0.65, 0.38, 0.92, 1)
 
 [node name="BoardCamera" type="Camera2D" parent="."]
@@ -59,22 +66,12 @@ script = ExtResource("6_turn")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
-[node name="InfoLabel" type="Label" parent="UI"]
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 620.0
-offset_bottom = 120.0
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 18
-text = "Info"
-
 [node name="TurnHud" type="PanelContainer" parent="UI" node_paths=PackedStringArray("calendar_label", "phase_label", "player_list")]
 visible = false
-offset_left = 20.0
-offset_top = 130.0
-offset_right = 200.0
-offset_bottom = 170.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 212.0
+offset_bottom = 60.0
 mouse_filter = 2
 script = ExtResource("7_hud")
 calendar_label = NodePath("VBox/CalendarLabel")
@@ -88,81 +85,108 @@ theme_override_constants/separation = 6
 
 [node name="CalendarLabel" type="Label" parent="UI/TurnHud/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.96, 0.82, 0.42, 1)
 text = "Week 1 - Day 1"
 
 [node name="PhaseLabel" type="Label" parent="UI/TurnHud/VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.68, 0.72, 0.86, 1)
 text = "Phase"
 
 [node name="PlayerList" type="VBoxContainer" parent="UI/TurnHud/VBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 
-[node name="Dice" type="Control" parent="UI"]
-custom_minimum_size = Vector2(96, 96)
-layout_mode = 3
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -120.0
-offset_top = -120.0
-offset_right = -24.0
-offset_bottom = -24.0
-grow_horizontal = 0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("5_dice")
-
-[node name="Panel" type="PanelContainer" parent="UI"]
+[node name="InfoPanel" type="PanelContainer" parent="UI"]
 custom_minimum_size = Vector2(260, 0)
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -260.0
-offset_bottom = 40.0
+offset_left = -272.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 60.0
 grow_horizontal = 0
+mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+[node name="InfoLabel" type="Label" parent="UI/InfoPanel"]
+custom_minimum_size = Vector2(224, 0)
 layout_mode = 2
-theme_override_constants/separation = 8
+text = "Info"
+autowrap_mode = 3
 
-[node name="StatusLabel" type="Label" parent="UI/Panel/VBox"]
-custom_minimum_size = Vector2(240, 0)
+[node name="Panel" type="PanelContainer" parent="UI"]
+custom_minimum_size = Vector2(840, 148)
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -420.0
+offset_top = -160.0
+offset_right = 420.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Row" type="HBoxContainer" parent="UI/Panel"]
 layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="StatusLabel" type="Label" parent="UI/Panel/Row"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
 text = "Status"
 autowrap_mode = 3
 
-[node name="RollButton" type="Button" parent="UI/Panel/VBox"]
+[node name="Side" type="VBoxContainer" parent="UI/Panel/Row"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 6
+
+[node name="RollButton" type="Button" parent="UI/Panel/Row/Side"]
 layout_mode = 2
 text = "Roll Dice"
 
-[node name="ChoiceBox" type="VBoxContainer" parent="UI/Panel/VBox"]
+[node name="ChoiceBox" type="VBoxContainer" parent="UI/Panel/Row/Side"]
 layout_mode = 2
+theme_override_constants/separation = 4
 
-[node name="TurnBanner" type="Label" parent="UI"]
+[node name="Dice" type="Control" parent="UI"]
 visible = false
+custom_minimum_size = Vector2(144, 144)
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -72.0
+offset_top = -130.0
+offset_right = 72.0
+offset_bottom = 14.0
+mouse_filter = 2
+script = ExtResource("5_dice")
+
+[node name="TurnBanner" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
 anchors_preset = 14
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_top = -190.0
-offset_bottom = -90.0
+offset_top = -150.0
+offset_bottom = -82.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 14
-theme_override_font_sizes/font_size = 56
-text = "Banner"
-horizontal_alignment = 1
-vertical_alignment = 1
+mouse_filter = 2
 script = ExtResource("8_banner")
 
-[node name="SetupMenu" type="CenterContainer" parent="UI" node_paths=PackedStringArray("button_row")]
+[node name="SetupMenu" type="CenterContainer" parent="UI" node_paths=PackedStringArray("button_row", "hero_row")]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -171,6 +195,7 @@ grow_vertical = 2
 mouse_filter = 0
 script = ExtResource("9_setup")
 button_row = NodePath("Panel/VBox/ButtonRow")
+hero_row = NodePath("Panel/VBox/HeroRow")
 
 [node name="Panel" type="PanelContainer" parent="UI/SetupMenu"]
 layout_mode = 2
@@ -181,12 +206,33 @@ theme_override_constants/separation = 16
 
 [node name="Title" type="Label" parent="UI/SetupMenu/Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "How many players?"
+theme_override_colors/font_color = Color(0.96, 0.82, 0.42, 1)
+theme_override_font_sizes/font_size = 32
+text = "A New Adventure"
+horizontal_alignment = 1
+
+[node name="HeroRow" type="HBoxContainer" parent="UI/SetupMenu/Panel/VBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="Subtitle" type="Label" parent="UI/SetupMenu/Panel/VBox"]
+layout_mode = 2
+text = "How many heroes set out?"
 horizontal_alignment = 1
 
 [node name="ButtonRow" type="HBoxContainer" parent="UI/SetupMenu/Panel/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[connection signal="pressed" from="UI/Panel/VBox/RollButton" to="." method="_on_roll_button_pressed"]
+[node name="Fade" type="ColorRect" parent="UI"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.03, 0.03, 0.08, 1)
+
+[connection signal="pressed" from="UI/Panel/Row/Side/RollButton" to="." method="_on_roll_button_pressed"]

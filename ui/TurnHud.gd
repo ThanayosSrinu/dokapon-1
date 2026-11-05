@@ -4,9 +4,9 @@ extends PanelContainer
 ## player highlighted. It only listens to EventBus, so nothing has to tell it
 ## what to display.
 
-const SWATCH_SIZE := Vector2(32, 32)
+const PORTRAIT_SIZE := Vector2(48, 48)
 # The opacity of the rows of players who are not taking their turn.
-const WAITING_OPACITY := 0.45
+const WAITING_OPACITY := 0.55
 
 ## Shows the week and day. Drag CalendarLabel here.
 @export var calendar_label: Label
@@ -19,6 +19,8 @@ const WAITING_OPACITY := 0.45
 
 # PlayerData -> that player's row (HBoxContainer).
 var _rows := {}
+# PlayerData -> the portrait in that player's row.
+var _portraits := {}
 
 
 func _ready() -> void:
@@ -27,33 +29,69 @@ func _ready() -> void:
 	EventBus.phase_changed.connect(_on_phase_changed)
 
 
-## Builds one row per player, in turn order.
+## Builds one row per player, in turn order, and slides in from the left.
 func setup(players: Array[PlayerData]) -> void:
 	for player in players:
 		var row := HBoxContainer.new()
-		var swatch := ColorRect.new()
-		swatch.color = player.token_color
-		swatch.custom_minimum_size = SWATCH_SIZE
-		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var portrait := TextureRect.new()
-		portrait.texture = GameArt.tile_texture(GameArt.DUNGEON, player.sprite_tile)
-		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
-		swatch.add_child(portrait)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_theme_constant_override("separation", 10)
+		var portrait := _make_portrait(player)
 		var label := Label.new()
 		label.text = player.player_name
-		row.add_child(swatch)
+		row.add_child(portrait)
 		row.add_child(label)
 		player_list.add_child(row)
 		_rows[player] = row
+		_portraits[player] = portrait
+
+	# Wait a frame, so the rows are laid out before measuring the panel.
+	await get_tree().process_frame
+	var target := position.x
+	position.x = -size.x
+	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "position:x", target, 0.5)
+
+
+func _make_portrait(player: PlayerData) -> Control:
+	var background := ColorRect.new()
+	background.color = player.token_color.darkened(0.25)
+	background.custom_minimum_size = PORTRAIT_SIZE
+	background.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.pivot_offset = PORTRAIT_SIZE * 0.5
+
+	var face := TextureRect.new()
+	face.texture = GameArt.portrait(player.character_sheet)
+	face.set_anchors_preset(Control.PRESET_FULL_RECT)
+	face.offset_left = 8
+	face.offset_top = 8
+	face.offset_right = -8
+	face.offset_bottom = -8
+	background.add_child(face)
+
+	var frame := TextureRect.new()
+	frame.texture = GameArt.PORTRAIT_FRAME
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.add_child(frame)
+	return background
 
 
 func _on_day_started(_day: int) -> void:
 	calendar_label.text = "Week %d - Day %d" % [GameState.get_week(), GameState.get_day_of_week()]
+	calendar_label.pivot_offset = calendar_label.size * 0.5
+	calendar_label.scale = Vector2(1.2, 1.2)
+	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(calendar_label, "scale", Vector2.ONE, 0.3)
 
 
 func _on_turn_started(active_player: PlayerData) -> void:
 	for player: PlayerData in _rows:
 		_rows[player].modulate.a = 1.0 if player == active_player else WAITING_OPACITY
+
+	var portrait: Control = _portraits[active_player]
+	portrait.scale = Vector2(1.25, 1.25)
+	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(portrait, "scale", Vector2.ONE, 0.3)
 
 
 func _on_phase_changed(phase: TurnManager.Phase) -> void:

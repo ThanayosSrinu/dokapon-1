@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bwkmwtftargak"
-path="res://.godot/imported/button_hover.png-4b92caaef1fac61fa5bd6833aa7648ff.ctex"
+uid="uid://ctq3rr1s3dj16"
+path="res://.godot/imported/Orc-Peon-Red.png-671dfa47f4d8ba1a95f639434d9a4e90.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/button_hover.png"
-dest_files=["res://.godot/imported/button_hover.png-4b92caaef1fac61fa5bd6833aa7648ff.ctex"]
+source_file="res://assets/puny/characters/Orc-Peon-Red.png"
+dest_files=["res://.godot/imported/Orc-Peon-Red.png-671dfa47f4d8ba1a95f639434d9a4e90.ctex"]
 
 [params]
 

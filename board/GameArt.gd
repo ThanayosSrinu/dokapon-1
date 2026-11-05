@@ -1,54 +1,101 @@
 @tool
 class_name GameArt
 extends RefCounted
-## Shared drawing helpers for the Kenney pixel art in res://assets/kenney/.
-## A "tile" is one square of a sprite sheet, counted left to right, top to
-## bottom, starting at 0. See assets/CREDITS.md for where the art came from.
+## Shared art and drawing helpers. See assets/CREDITS.md for where the art came
+## from. Every piece of art is drawn at exactly 2x, so all pixels are the same
+## size on screen. Nothing may be drawn at another scale.
 
-const TOWN: Texture2D = preload("res://assets/kenney/tiny-town/tilemap_packed.png")
-const DUNGEON: Texture2D = preload("res://assets/kenney/tiny-dungeon/tilemap_packed.png")
-const UI_LARGE: Texture2D = preload("res://assets/kenney/ui-pack-pixel-adventure/large_tiles.png")
+const WORLD: Texture2D = preload("res://assets/puny/world/punyworld-overworld-tileset.png")
+const SPACES: Texture2D = preload("res://assets/custom/spaces.png")
+const ICONS: Texture2D = preload("res://assets/custom/space_icons.png")
+const DIE: Texture2D = preload("res://assets/custom/die.png")
+const FX: Texture2D = preload("res://assets/custom/fx.png")
+const CLOUD: Texture2D = preload("res://assets/custom/cloud.png")
+const BIRD: Texture2D = preload("res://assets/custom/bird.png")
+const FLAG: Texture2D = preload("res://assets/custom/flag.png")
+const RIBBON: Texture2D = preload("res://assets/custom/ribbon.png")
+const PORTRAIT_FRAME: Texture2D = preload("res://assets/custom/portrait_frame.png")
 const FONT: Font = preload("res://assets/kenney/fonts/KenneyMiniSquare.ttf")
 
-## Size of a tile in TOWN and DUNGEON, in pixels of the image.
+## Pixels of the world per pixel of art.
+const PIXEL := 2.0
+## Size of a world tile on the sheet.
 const TILE_SIZE := 16
-## Size of a tile in UI_LARGE.
-const UI_TILE_SIZE := 32
-## Size of a TOWN or DUNGEON tile in the world. 40 fits the map well: spaces
-## are 200 apart, so they sit exactly 5 tiles from each other.
-const CELL := 40.0
+## Size of a tile in the world. Spaces are 160 apart, exactly 5 tiles.
+const CELL := 32.0
+## Width of WORLD in tiles.
+const WORLD_COLUMNS := 27
+
+## Size of one frame on a character sheet. There are CHARACTER_COLUMNS frames
+## per row and one row per direction, clockwise from facing the viewer.
+const CHARACTER_FRAME := 32
+const CHARACTER_COLUMNS := 24
+const CHARACTER_ROWS := 8
+## The point on a frame that touches the ground: between the character's feet.
+const CHARACTER_FEET := Vector2(16, 22)
+
+const SPACE_CELL := 40
+## The point on a SPACES image at the middle of the space's top face.
+const SPACE_CENTER := Vector2(20, 18)
+const ICON_CELL := 20
+
+const INK := Color(0.125, 0.086, 0.133)
+const GOLD := Color(0.96, 0.82, 0.42)
+const PARCHMENT := Color(1.0, 0.95, 0.82)
+const NIGHT := Color(0.11, 0.13, 0.27)
 
 
-## The part of `sheet` that holds tile number `id`.
-static func tile_region(sheet: Texture2D, id: int, tile_size := TILE_SIZE) -> Rect2:
-	var columns := sheet.get_width() / tile_size
-	return Rect2((id % columns) * tile_size, (id / columns) * tile_size, tile_size, tile_size)
+## The atlas position of tile number `id` of WORLD.
+static func world_coords(id: int) -> Vector2i:
+	return Vector2i(id % WORLD_COLUMNS, id / WORLD_COLUMNS)
 
 
-## Draws one tile on `canvas` so it fills `rect`. Call this from _draw().
-static func draw_tile(canvas: CanvasItem, sheet: Texture2D, id: int, rect: Rect2,
-		tile_size := TILE_SIZE, tint := Color.WHITE) -> void:
-	canvas.draw_texture_rect_region(sheet, rect, tile_region(sheet, id, tile_size), tint)
-
-
-## A texture holding a single tile, for use in Control nodes like TextureRect.
-static func tile_texture(sheet: Texture2D, id: int) -> AtlasTexture:
+## A texture holding the head and shoulders of a character.
+static func portrait(sheet: Texture2D) -> AtlasTexture:
 	var texture := AtlasTexture.new()
 	texture.atlas = sheet
-	texture.region = tile_region(sheet, id)
+	texture.region = Rect2(8, 3, 16, 16)
 	return texture
 
 
-## Draws white text with a dark outline, centered on `center`.
+## A texture holding one frame of a character.
+static func character_frame(sheet: Texture2D, column: int, row: int) -> AtlasTexture:
+	var texture := AtlasTexture.new()
+	texture.atlas = sheet
+	texture.region = Rect2(column * CHARACTER_FRAME, row * CHARACTER_FRAME,
+			CHARACTER_FRAME, CHARACTER_FRAME)
+	return texture
+
+
+## Draws text with a dark outline, centered on `center`.
 static func draw_centered_text(canvas: CanvasItem, text: String, center: Vector2,
-		font_size: int, box_width := 200.0) -> void:
+		font_size: int, box_width := 200.0, color := Color.WHITE) -> void:
 	if text == "":
 		return
 	# draw_string() places text by its baseline, so shift down by half the text
 	# height to center it vertically.
 	var vertical_offset := (FONT.get_ascent(font_size) - FONT.get_descent(font_size)) * 0.5
-	var origin := center + Vector2(-box_width * 0.5, vertical_offset)
+	var origin := (center + Vector2(-box_width * 0.5, vertical_offset)).round()
 	canvas.draw_string_outline(FONT, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, 6, Color(0.14, 0.09, 0.13))
+			font_size, 4, INK)
 	canvas.draw_string(FONT, origin, text, HORIZONTAL_ALIGNMENT_CENTER, box_width,
-			font_size, Color.WHITE)
+			font_size, color)
+
+
+## Draws a small name plate with text in it, centered on `center`.
+static func draw_plate(canvas: CanvasItem, text: String, center: Vector2, font_size := 16) -> void:
+	var width := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var size := (Vector2(width + 14.0, font_size + 8.0) / 2.0).ceil() * 2.0
+	var rect := Rect2((center - size * 0.5).round(), size)
+	canvas.draw_rect(rect, INK)
+	canvas.draw_rect(rect.grow(-2.0), GOLD)
+	canvas.draw_rect(rect.grow(-4.0), NIGHT)
+	draw_centered_text(canvas, text, center, font_size, size.x, PARCHMENT)
+
+
+## Draws an ellipse outline as flat on the ground as the spaces are.
+static func draw_ground_ring(canvas: CanvasItem, center: Vector2, radius: float, color: Color,
+		width := 4.0, squash := 0.78, from_angle := 0.0, to_angle := TAU) -> void:
+	canvas.draw_set_transform(center, 0.0, Vector2(1.0, squash))
+	canvas.draw_arc(Vector2.ZERO, radius, from_angle, to_angle, 40, color, width)
+	canvas.draw_set_transform(Vector2.ZERO)

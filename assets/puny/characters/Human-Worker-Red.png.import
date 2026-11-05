@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ookcyuo7jr4p"
-path="res://.godot/imported/panel.png-3b9543c06792d57fdee8f168520a6a81.ctex"
+uid="uid://cu2ry2ge2nvg7"
+path="res://.godot/imported/Human-Worker-Red.png-6dbddd8b7f24388471895e73fda1e04b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/panel.png"
-dest_files=["res://.godot/imported/panel.png-3b9543c06792d57fdee8f168520a6a81.ctex"]
+source_file="res://assets/puny/characters/Human-Worker-Red.png"
+dest_files=["res://.godot/imported/Human-Worker-Red.png-6dbddd8b7f24388471895e73fda1e04b.ctex"]
 
 [params]
 

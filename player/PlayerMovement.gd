@@ -25,12 +25,26 @@ signal movement_finished(final_node: BoardNode)
 # Emitted by choose_path() to wake up a move that is waiting at a fork.
 signal _path_chosen
 
-## Width and height of the character in the world.
-const SPRITE_SIZE := 48.0
 ## Radius of the colored ring at the character's feet.
-const RING_RADIUS := 22.0
-# Drawn above idle tokens while moving (z_index of a normal node is 0).
+const RING_RADIUS := 20.0
+## How flat the ring lies on the ground.
+const RING_SQUASH := 0.5
+const RING_WIDTH := 4.0
+## Height of the arrow and the step counter over the character's feet.
+const HEAD_HEIGHT := 46.0
+# Moving tokens are drawn above idle ones, which are above the board.
+const IDLE_Z_INDEX := 1
 const MOVING_Z_INDEX := 10
+
+## Frames of the character sheet: the columns of each animation.
+const IDLE_FRAMES: Array[int] = [0, 1]
+const WALK_FRAMES: Array[int] = [2, 0, 3, 1]
+## The row of the sheet for each direction, clockwise from south. Index 0 is
+## east, because that is angle 0 for Vector2.angle().
+const ROW_BY_OCTANT: Array[int] = [2, 1, 0, 7, 6, 5, 4, 3]
+const ROW_FACING_VIEWER := 0
+const IDLE_FRAME_TIME := 0.45
+const WALK_FRAME_TIME := 0.11
 
 ## The board to walk on. Drag the BoardManager node here in the Inspector.
 @export var board_manager: BoardManager
@@ -47,20 +61,14 @@ const MOVING_Z_INDEX := 10
 		token_color = value
 		queue_redraw()
 
-## This player's character: a tile of the Tiny Dungeon sheet (GameArt.DUNGEON).
-@export var sprite_tile := 97:
-	set(value):
-		sprite_tile = value
-		queue_redraw()
+## This player's character sheet, from res://assets/puny/characters/.
+@export var character_sheet: Texture2D
 
-## Seconds the slide from one space to the next takes.
-@export var step_duration := 0.35
+## Seconds the walk from one space to the next takes.
+@export var step_duration := 0.62
 
-## Short pause after each step, so single steps are easy to count.
-@export var step_pause := 0.05
-
-## How high the token hops on each step, in pixels.
-@export var hop_height := 22.0
+## How high the character hops when it cheers, in pixels.
+@export var hop_height := 26.0
 
 ## When true, a new turn may start in any direction, even back the way the
 ## player came last turn. When false, the player keeps walking forward.
@@ -76,7 +84,15 @@ var is_moving := false
 var steps_left := 0:
 	set(value):
 		steps_left = value
-		queue_redraw()
+		if _overlay != null:
+			_overlay.queue_redraw()
+
+## True while it is this player's turn: an arrow bounces over the character.
+var is_active := false:
+	set(value):
+		is_active = value
+		if _overlay != null:
+			_overlay.queue_redraw()
 
 # The space the player stepped off last. Used to avoid walking straight back.
 var _previous_node: BoardNode
@@ -84,16 +100,22 @@ var _previous_node: BoardNode
 var _pending_choices: Array[BoardNode] = []
 # The space picked through choose_path(), until move_steps() reads it.
 var _chosen_node: BoardNode
-# Current height of the hop. Only the drawing moves up; the position stays on
-# the road, so the camera does not bob up and down.
-var _hop_offset := 0.0
 # The running set_rest_offset() animation.
 var _rest_tween: Tween
-# True after walking left. The sprite is mirrored to face that way.
-var _facing_left := false
+# The character. It is a child, so it is always drawn above the ring.
+var _sprite: Sprite2D
+# Draws the arrow and the step counter, above the character.
+var _overlay: Node2D
+# The row of the character sheet in use.
+var _row := ROW_FACING_VIEWER
+# Seconds since the animation started, offset so players are not in step.
+var _clock := 0.0
 
 
 func _ready() -> void:
+	z_index = IDLE_Z_INDEX
+	_clock = randf() * 2.0
+	_build_nodes()
 	if board_manager == null:
 		push_error("PlayerMovement: 'board_manager' is not set in the Inspector.")
 		return
@@ -102,6 +124,18 @@ func _ready() -> void:
 	if not board_manager.is_node_ready():
 		await board_manager.board_ready
 	spawn_at(board_manager.get_starting_node())
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	var column: int
+	if is_moving and not is_waiting_for_choice():
+		column = WALK_FRAMES[int(_clock / WALK_FRAME_TIME) % WALK_FRAMES.size()]
+	else:
+		column = IDLE_FRAMES[int(_clock / IDLE_FRAME_TIME) % IDLE_FRAMES.size()]
+	_sprite.frame_coords = Vector2i(column, _row)
+	if is_active:
+		_overlay.queue_redraw()
 
 
 # --- Public API -------------------------------------------------------------
@@ -154,7 +188,8 @@ func move_steps(steps: int) -> void:
 		step_finished.emit(current_node, steps_left)
 
 	is_moving = false
-	z_index = 0
+	z_index = IDLE_Z_INDEX
+	_row = ROW_FACING_VIEWER
 	movement_finished.emit(current_node)
 
 
@@ -185,7 +220,9 @@ func get_landing_preview(steps: int) -> Array[BoardNode]:
 
 ## Slides the idle token slightly off the center of its space, so several
 ## tokens on one space stay visible. Vector2.ZERO puts it back in the center.
-func set_rest_offset(offset: Vector2) -> void:
+## `depth` keeps the token further down the screen in front of the others.
+func set_rest_offset(offset: Vector2, depth := 0) -> void:
+	z_index = IDLE_Z_INDEX + depth
 	if _rest_tween != null and _rest_tween.is_valid():
 		_rest_tween.kill()
 	_rest_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -213,44 +250,71 @@ func _ask_for_path(options: Array[BoardNode]) -> BoardNode:
 
 
 func _slide_to(node: BoardNode) -> void:
-	if not is_equal_approx(node.global_position.x, global_position.x):
-		_facing_left = node.global_position.x < global_position.x
+	_face(node.global_position - global_position)
+	# The same speed all the way, so one step runs smoothly into the next.
 	var tween := create_tween()
-	# Sine easing starts and stops gently instead of moving at a fixed speed.
-	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	# set_parallel() runs the slide and the hop at the same time.
-	tween.set_parallel(true)
 	tween.tween_property(self, "global_position", node.global_position, step_duration)
-	tween.tween_method(_set_hop, 0.0, 1.0, step_duration)
-	if step_pause > 0.0:
-		# chain() goes back to one-after-another for this last part.
-		tween.chain().tween_interval(step_pause)
+	await tween.finished
+	node.bump()
+	BoardFx.dust(get_parent(), node.global_position)
+
+
+# Picks the row of the sheet for walking along `direction`.
+func _face(direction: Vector2) -> void:
+	# Eight directions, so each covers an eighth of a circle around its angle.
+	var octant := wrapi(int(round(direction.angle() / (TAU / 8.0))), 0, 8)
+	_row = ROW_BY_OCTANT[octant]
+
+
+## Makes the character jump for joy on the space it landed on.
+func cheer() -> void:
+	var tween := create_tween()
+	for bounce in 2:
+		tween.tween_method(_set_hop, 0.0, 1.0, 0.28)
 	await tween.finished
 
 
 # `progress` goes from 0 to 1. sin() turns that into up, then back down.
 func _set_hop(progress: float) -> void:
-	_hop_offset = sin(progress * PI) * hop_height
-	queue_redraw()
+	_sprite.position.y = -round(sin(progress * PI) * hop_height / GameArt.PIXEL) * GameArt.PIXEL
 
 
 # --- Drawing ----------------------------------------------------------------
 
+func _build_nodes() -> void:
+	_sprite = Sprite2D.new()
+	_sprite.texture = character_sheet
+	_sprite.hframes = GameArt.CHARACTER_COLUMNS
+	_sprite.vframes = GameArt.CHARACTER_ROWS
+	_sprite.centered = false
+	# Puts the point between the character's feet exactly on this node's origin,
+	# the center of the ring, in every frame.
+	_sprite.offset = -GameArt.CHARACTER_FEET
+	_sprite.scale = Vector2.ONE * GameArt.PIXEL
+	add_child(_sprite)
+
+	_overlay = Node2D.new()
+	_overlay.draw.connect(_draw_overlay)
+	add_child(_overlay)
+
+
 func _draw() -> void:
-	# A flat ellipse under the character: a circle drawn with a squashed
-	# transform. It stays on the ground during a hop, which is what makes the
-	# hop readable.
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
-	draw_circle(Vector2.ZERO, RING_RADIUS + 3.0, Color(0.14, 0.09, 0.13, 0.85))
-	draw_circle(Vector2.ZERO, RING_RADIUS, token_color)
+	# The ring lies flat on the ground under the character, so this node draws
+	# it, and the character, a child node, covers it.
+	var ring_scale := Vector2(1.0, RING_SQUASH)
+	draw_set_transform(Vector2.ZERO, 0.0, ring_scale)
+	draw_circle(Vector2.ZERO, RING_RADIUS, Color(0.0, 0.0, 0.0, 0.35))
+	draw_arc(Vector2.ZERO, RING_RADIUS, 0.0, TAU, 40, GameArt.INK, RING_WIDTH + 4.0)
+	draw_arc(Vector2.ZERO, RING_RADIUS, 0.0, TAU, 40, token_color, RING_WIDTH)
 	draw_set_transform(Vector2.ZERO)
 
-	var top := -SPRITE_SIZE - 2.0 - _hop_offset
-	var rect := Rect2(-SPRITE_SIZE * 0.5, top, SPRITE_SIZE, SPRITE_SIZE)
-	if _facing_left:
-		# A rectangle with a negative width draws the image mirrored.
-		rect = Rect2(SPRITE_SIZE * 0.5, top, -SPRITE_SIZE, SPRITE_SIZE)
-	GameArt.draw_tile(self, GameArt.DUNGEON, sprite_tile, rect)
 
+func _draw_overlay() -> void:
 	if steps_left > 0:
-		GameArt.draw_centered_text(self, str(steps_left), Vector2(0, top - 16.0), 24)
+		GameArt.draw_plate(_overlay, str(steps_left), Vector2(0, -HEAD_HEIGHT - 16.0), 24)
+	elif is_active and not is_moving:
+		var bounce: float = round(sin(_clock * 6.0) * 2.0) * GameArt.PIXEL
+		var arrow_size := Vector2.ONE * 16.0 * GameArt.PIXEL
+		_overlay.draw_texture_rect_region(GameArt.FX,
+				Rect2(Vector2(-arrow_size.x * 0.5, -HEAD_HEIGHT - 32.0 + bounce), arrow_size),
+				Rect2(0, 48, 16, 16))

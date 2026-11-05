@@ -30,39 +30,38 @@ enum NodeType {
 	TRAP,      # Lose gold or HP.
 }
 
-## Display data for each type: readable name, plate color, and the icon drawn
-## on the plate. "tile" is a tile of "sheet" (see GameArt). Without a tile, the
-## "symbol" text is drawn instead, if there is one.
+## Display data for each type: readable name and the color of its effects. The
+## art is on GameArt.SPACES and GameArt.ICONS, in the same order as NodeType.
 const TYPE_INFO := {
-	NodeType.CASTLE:   {"name": "Castle",   "color": Color(0.95, 0.75, 0.15), "sheet": GameArt.DUNGEON, "tile": 29},
-	NodeType.NORMAL:   {"name": "Normal",   "color": Color(0.62, 0.62, 0.68)},
-	NodeType.SHOP:     {"name": "Shop",     "color": Color(0.30, 0.75, 0.42), "sheet": GameArt.DUNGEON, "tile": 74},
-	NodeType.EVENT:    {"name": "Event",    "color": Color(0.62, 0.42, 0.90), "symbol": "?"},
-	NodeType.TOWN:     {"name": "Town",     "color": Color(0.90, 0.56, 0.30), "sheet": GameArt.TOWN, "tile": 83},
-	NodeType.ITEM:     {"name": "Item",     "color": Color(0.35, 0.60, 0.98), "sheet": GameArt.DUNGEON, "tile": 115},
-	NodeType.MAGIC:    {"name": "Magic",    "color": Color(0.90, 0.40, 0.68), "sheet": GameArt.DUNGEON, "tile": 129},
-	NodeType.GOLD:     {"name": "Gold",     "color": Color(0.95, 0.85, 0.40), "sheet": GameArt.TOWN, "tile": 93},
-	NodeType.BATTLE:   {"name": "Battle",   "color": Color(0.90, 0.28, 0.28), "sheet": GameArt.DUNGEON, "tile": 110},
-	NodeType.TREASURE: {"name": "Treasure", "color": Color(0.28, 0.75, 0.75), "sheet": GameArt.DUNGEON, "tile": 89},
-	NodeType.SHRINE:   {"name": "Shrine",   "color": Color(0.70, 0.88, 1.00), "sheet": GameArt.TOWN, "tile": 104},
-	NodeType.TRAP:     {"name": "Trap",     "color": Color(0.50, 0.36, 0.42), "sheet": GameArt.TOWN, "tile": 105},
+	NodeType.CASTLE:   {"name": "Castle",   "color": Color(0.95, 0.75, 0.15)},
+	NodeType.NORMAL:   {"name": "Normal",   "color": Color(0.80, 0.76, 0.68)},
+	NodeType.SHOP:     {"name": "Shop",     "color": Color(0.30, 0.75, 0.42)},
+	NodeType.EVENT:    {"name": "Event",    "color": Color(0.62, 0.42, 0.90)},
+	NodeType.TOWN:     {"name": "Town",     "color": Color(0.90, 0.56, 0.30)},
+	NodeType.ITEM:     {"name": "Item",     "color": Color(0.35, 0.60, 0.98)},
+	NodeType.MAGIC:    {"name": "Magic",    "color": Color(0.90, 0.40, 0.68)},
+	NodeType.GOLD:     {"name": "Gold",     "color": Color(0.95, 0.85, 0.40)},
+	NodeType.BATTLE:   {"name": "Battle",   "color": Color(0.90, 0.28, 0.28)},
+	NodeType.TREASURE: {"name": "Treasure", "color": Color(0.28, 0.75, 0.75)},
+	NodeType.SHRINE:   {"name": "Shrine",   "color": Color(0.70, 0.88, 1.00)},
+	NodeType.TRAP:     {"name": "Trap",     "color": Color(0.50, 0.36, 0.42)},
 }
 
-## The plate under every space: a round tile of GameArt.UI_LARGE.
-const PLATE_TILE := 39
-## Size of the plate tile in the world. The round plate fills about 7/8 of it.
-const PLATE_SIZE := 80.0
-const CASTLE_PLATE_SIZE := 96.0
-## Size of the icon on the plate.
-const ICON_SIZE := 40.0
-
-const BASE_RADIUS := 36.0
-const CASTLE_RADIUS := 43.0
-const HIGHLIGHT_COLOR := Color(1.0, 0.95, 0.3)
+## Half the width of the top face of a space, in the world.
+const BASE_RADIUS := 34.0
+## How much of a circle the space keeps in height: it lies flat on the ground.
+const SQUASH := 0.78
+const HIGHLIGHT_COLOR := Color(1.0, 0.95, 0.5)
 const PATH_CHOICE_COLOR := Color(0.45, 1.0, 0.55)
-const LANDING_COLOR := Color(0.35, 0.9, 1.0)
-## How fast the path-choice ring pulses.
+const LANDING_COLOR := Color(1.0, 0.86, 0.3)
+## Where the name plate sits, under the space.
+const PLATE_OFFSET := Vector2(0, 54)
+## How fast the ring pulses, and the icon floats.
 const PULSE_SPEED := 6.0
+const ICON_SPEED := 2.2
+## How fast the dashes of the landing ring turn.
+const DASH_SPEED := 1.6
+const DASHES := 10
 
 ## Unique number of this space. Save files will refer to spaces by this id,
 ## so it must never change once assigned.
@@ -96,33 +95,37 @@ var highlighted := false:
 		queue_redraw()
 
 ## When true, this space is a path the current player can click at a fork.
-## It draws a pulsing green ring. Not saved; set by code while playing.
+## It draws a pulsing green ring and a bouncing arrow. Not saved.
 var is_path_choice := false:
 	set(value):
 		is_path_choice = value
-		# Only spaces that are pulsing need to redraw every frame.
-		set_process(value)
 		queue_redraw()
 
-## When true, the current roll can end on this space. It draws a steady blue
-## ring. Not saved; set by code while playing.
+## When true, the current roll can end on this space. It draws a turning ring of
+## gold dashes. Not saved; set by code while playing.
 var is_landing_spot := false:
 	set(value):
 		is_landing_spot = value
 		queue_redraw()
 
-# Seconds this space has been pulsing.
-var _pulse_time := 0.0
+# Seconds since the game started. Every animation here is worked out from it.
+var _clock := 0.0
+# The height of the floating icon last drawn, in art pixels.
+var _icon_height := 0
 
 
 func _ready() -> void:
-	# Nothing pulses until is_path_choice is turned on.
-	set_process(false)
+	# Each space floats on its own beat, not in step with the others.
+	_clock = node_id * 0.7
+	set_process(not Engine.is_editor_hint())
 
 
 func _process(delta: float) -> void:
-	_pulse_time += delta
-	queue_redraw()
+	_clock += delta
+	var height := int(round(sin(_clock * ICON_SPEED) * 1.0))
+	if height != _icon_height or highlighted or is_landing_spot or is_path_choice:
+		_icon_height = height
+		queue_redraw()
 
 
 func _notification(what: int) -> void:
@@ -141,7 +144,7 @@ func _get_configuration_warnings() -> PackedStringArray:
 
 ## Radius of the drawn circle. Also used to detect mouse clicks.
 func get_radius() -> float:
-	return CASTLE_RADIUS if node_type == NodeType.CASTLE else BASE_RADIUS
+	return BASE_RADIUS
 
 
 ## Readable type name, e.g. "Shop".
@@ -166,35 +169,60 @@ func link_to(other: BoardNode) -> void:
 	connected_nodes = updated
 
 
+## Bounces the space, as if a foot had just landed on it.
+func bump(strength := 1.0) -> void:
+	scale = Vector2(1.0 + 0.16 * strength, 1.0 - 0.14 * strength)
+	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "scale", Vector2.ONE, 0.25)
+
+
 # --- Drawing ----------------------------------------------------------------
 
 func _draw() -> void:
-	var info: Dictionary = TYPE_INFO[node_type]
+	var space_size := Vector2.ONE * GameArt.SPACE_CELL * GameArt.PIXEL
+	var top_left := -GameArt.SPACE_CENTER * GameArt.PIXEL
+	draw_texture_rect_region(GameArt.SPACES, Rect2(top_left, space_size),
+			Rect2(node_type * GameArt.SPACE_CELL, 0, GameArt.SPACE_CELL, GameArt.SPACE_CELL))
+
+	var icon_size := Vector2.ONE * GameArt.ICON_CELL * GameArt.PIXEL
+	var icon_position := -icon_size * 0.5 - Vector2(0, 2 + _icon_height * GameArt.PIXEL)
+	draw_texture_rect_region(GameArt.ICONS, Rect2(icon_position, icon_size),
+			Rect2(node_type * GameArt.ICON_CELL, 0, GameArt.ICON_CELL, GameArt.ICON_CELL))
+
 	var radius := get_radius()
-
 	if highlighted:
-		draw_arc(Vector2.ZERO, radius + 7.0, 0.0, TAU, 48, HIGHLIGHT_COLOR, 5.0, true)
+		GameArt.draw_ground_ring(self, Vector2.ZERO, radius + 8.0, HIGHLIGHT_COLOR, 4.0, SQUASH)
 	if is_landing_spot:
-		draw_arc(Vector2.ZERO, radius + 13.0, 0.0, TAU, 48, LANDING_COLOR, 4.0, true)
+		_draw_landing_ring(radius + 10.0)
 	if is_path_choice:
-		# sin() swings between -1 and 1, so the ring grows and shrinks.
-		var pulse := sin(_pulse_time * PULSE_SPEED) * 4.0
-		draw_arc(Vector2.ZERO, radius + 20.0 + pulse, 0.0, TAU, 48, PATH_CHOICE_COLOR, 6.0, true)
-
-	var plate_size := CASTLE_PLATE_SIZE if node_type == NodeType.CASTLE else PLATE_SIZE
-	GameArt.draw_tile(self, GameArt.UI_LARGE, PLATE_TILE,
-			Rect2(Vector2.ONE * -plate_size * 0.5, Vector2.ONE * plate_size),
-			GameArt.UI_TILE_SIZE, info["color"])
-
-	if info.has("tile"):
-		GameArt.draw_tile(self, info["sheet"], info["tile"],
-				Rect2(Vector2.ONE * -ICON_SIZE * 0.5, Vector2.ONE * ICON_SIZE))
-	else:
-		GameArt.draw_centered_text(self, info.get("symbol", ""), Vector2.ZERO, 32)
+		_draw_path_choice(radius)
 
 	# The id only helps while building the map, so the game does not show it.
 	if Engine.is_editor_hint():
 		GameArt.draw_centered_text(self, "#%d" % node_id, Vector2(0, -radius - 12.0), 16)
 	# Named spaces (castles, towns) show their name underneath.
 	if display_name != "":
-		GameArt.draw_centered_text(self, display_name, Vector2(0, radius + 14.0), 16)
+		GameArt.draw_plate(self, display_name, PLATE_OFFSET)
+
+
+# A ring of gold dashes that slowly turns.
+func _draw_landing_ring(radius: float) -> void:
+	var dash := TAU / DASHES
+	for index in DASHES:
+		var start := index * dash + _clock * DASH_SPEED
+		GameArt.draw_ground_ring(self, Vector2.ZERO, radius, GameArt.INK, 8.0, SQUASH,
+				start, start + dash * 0.55)
+		GameArt.draw_ground_ring(self, Vector2.ZERO, radius, LANDING_COLOR, 4.0, SQUASH,
+				start, start + dash * 0.55)
+
+
+func _draw_path_choice(radius: float) -> void:
+	# sin() swings between -1 and 1, so the ring grows and shrinks.
+	var pulse := sin(_clock * PULSE_SPEED)
+	GameArt.draw_ground_ring(self, Vector2.ZERO, radius + 14.0 + pulse * 4.0, GameArt.INK,
+			10.0, SQUASH)
+	GameArt.draw_ground_ring(self, Vector2.ZERO, radius + 14.0 + pulse * 4.0, PATH_CHOICE_COLOR,
+			6.0, SQUASH)
+	var arrow_size := Vector2.ONE * 16.0 * GameArt.PIXEL
+	var arrow_top := Vector2(-arrow_size.x * 0.5, -radius - 36.0 + round(pulse * 3.0) * GameArt.PIXEL)
+	draw_texture_rect_region(GameArt.FX, Rect2(arrow_top, arrow_size), Rect2(0, 48, 16, 16))
