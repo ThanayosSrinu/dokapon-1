@@ -121,13 +121,18 @@ func run(battle: Battle) -> PackedStringArray:
 	_battle = battle
 	_setup_fighters()
 	show()
+	var outside_tune := Sound.current_tune()
+	Sound.play("battle_start")
+	Sound.music("battle")
+	var levels := _levels_now()
 	await _play_intro()
 	while not battle.is_over():
 		await _play_action()
 	var lines := battle.conclude()
-	await _play_ending(lines)
+	await _play_ending(lines, levels)
 	_clear_fighters()
 	hide()
+	Sound.music(outside_tune)
 	return lines
 
 
@@ -298,12 +303,14 @@ func _play_outcome(outcome: Battle.Outcome) -> void:
 	match outcome.offense:
 		Battle.Offense.FLEE:
 			if outcome.fled:
+				Sound.play("flee")
 				await attacker.run_away()
 			else:
 				await attacker.stumble()
 		Battle.Offense.ITEM:
 			await _play_recovery(outcome, attacker)
 		Battle.Offense.SPELL:
+			Sound.play("magic")
 			await attacker.cast()
 			if outcome.healed > 0:
 				await _play_recovery(outcome, attacker)
@@ -320,6 +327,7 @@ func _play_outcome(outcome: Battle.Outcome) -> void:
 
 
 func _play_recovery(outcome: Battle.Outcome, sprite: BattleSprite) -> void:
+	Sound.play("heal")
 	BoardFx.burst(_arena, sprite.position + Vector2(0, -24), HEAL_COLOR, 8)
 	if outcome.healed > 0:
 		_float_text("+%d" % outcome.healed, sprite, HEAL_COLOR)
@@ -331,23 +339,27 @@ func _play_recovery(outcome: Battle.Outcome, sprite: BattleSprite) -> void:
 
 func _play_hit(outcome: Battle.Outcome, attacker: BattleSprite, defender: BattleSprite) -> void:
 	if outcome.dodged:
+		Sound.play("miss")
 		_float_text("Miss", defender, GameArt.PARCHMENT)
 		await defender.sidestep()
 	elif outcome.reflected > 0:
+		Sound.play("counter")
 		_float_text("Counter!", defender, GameArt.GOLD)
 		_float_text("%d" % outcome.reflected, attacker, HIT_COLOR)
 		_panels[outcome.attacker].refresh()
 		await attacker.hurt()
 	else:
+		Sound.play("hit")
 		_shake_arena()
 		_float_text("%d" % outcome.damage, defender, HIT_COLOR)
 		_panels[outcome.defender].refresh()
 		await defender.hurt()
 
 
-func _play_ending(lines: PackedStringArray) -> void:
+func _play_ending(lines: PackedStringArray, levels: Dictionary) -> void:
 	var battle := _battle
 	if battle.loser != null:
+		Sound.play("victory" if battle.winner.player != null else "defeat")
 		var survivor: BattleSprite = _sprites[battle.winner]
 		survivor.cheer()
 		await _sprites[battle.loser].fall()
@@ -355,7 +367,20 @@ func _play_ending(lines: PackedStringArray) -> void:
 	if battle.winner != null:
 		_panels[battle.winner].refresh()
 	_log.text = "  ".join(lines)
+	for fighter: Fighter in levels:
+		if fighter.player.level > levels[fighter]:
+			Sound.play("level_up")
+			_float_text("Level Up!", _sprites[fighter], GameArt.GOLD)
 	await _wait(ENDING_PAUSE * 1.5)
+
+
+## The level of each player fighting, to spot a level up after the fight.
+func _levels_now() -> Dictionary:
+	var levels := {}
+	for fighter in _sprites:
+		if fighter.player != null:
+			levels[fighter] = fighter.player.level
+	return levels
 
 
 func _float_text(text: String, sprite: BattleSprite, color: Color) -> void:
@@ -375,6 +400,8 @@ func _float_text(text: String, sprite: BattleSprite, color: Color) -> void:
 
 
 func _shake_arena() -> void:
+	if not Settings.screen_shake:
+		return
 	var tween := create_tween()
 	var home := _arena.position
 	for offset: float in [8.0, -6.0, 4.0, 0.0]:

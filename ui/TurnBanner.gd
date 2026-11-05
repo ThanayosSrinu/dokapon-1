@@ -57,6 +57,7 @@ func play(message: String, color: Color, sheet: Texture2D) -> void:
 	_label.text = message
 	_ribbon.modulate = color
 	_portrait.texture = GameArt.portrait(sheet)
+	Sound.play("whoosh")
 
 	var content: Control = get_node("Content")
 	var middle := (size.x - RIBBON_SIZE.x) * 0.5

@@ -54,8 +54,9 @@ func _ready() -> void:
 	hide()
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if visible and not _final and event.is_action_pressed("ui_cancel"):
+		Sound.play("back")
 		hide()
 		get_viewport().set_input_as_handled()
 

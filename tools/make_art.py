@@ -358,6 +358,13 @@ def make_crown():
                 crown.putpixel((x, y), colors[key])
     crown.save(OUT / "shadow_crown.png")
 
+    # The window's icon: the crown, on a dark tile with a gold edge.
+    icon = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(icon).rounded_rectangle((1, 1, 62, 62), 10, fill=hexc("#141633"), outline=hexc("#d9a441"), width=2)
+    big = crown.resize((crown.width * 4, crown.height * 4), Image.NEAREST)
+    icon.alpha_composite(big, ((64 - big.width) // 2, (64 - big.height) // 2))
+    icon.resize((256, 256), Image.NEAREST).save(OUT / "icon.png")
+
 
 # --- Interface --------------------------------------------------------------
 

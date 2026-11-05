@@ -48,6 +48,8 @@ extends Node2D
 ##       ├── StandingsScreen
 ##       ├── PauseMenu
 ##       ├── SaveMenu
+##       ├── OptionsMenu
+##       ├── HelpScreen
 ##       └── Fade (ColorRect)
 
 ## Emitted by the buttons from _ask(), with the value of the one pressed.
@@ -86,6 +88,8 @@ const TYPE_DESCRIPTIONS := {
 const GOLD_TEXT_COLOR := Color(0.96, 0.82, 0.42)
 const LOSS_TEXT_COLOR := Color(1.0, 0.55, 0.5)
 const EVENT_COLOR := Color(0.62, 0.42, 0.90)
+## How long the winner's fanfare runs before the title tune comes back.
+const FANFARE_SECONDS := 3.0
 
 ## Every token in the scene. The setup menu decides how many are used, and the
 ## turn order is drawn at random when the game starts.
@@ -164,6 +168,12 @@ const EVENT_COLOR := Color(0.62, 0.42, 0.90)
 ## Opens the pause menu. Drag MenuButton here.
 @export var menu_button: Button
 
+## Sound, speed and screen settings. Drag OptionsMenu here.
+@export var options_menu: OptionsMenu
+
+## How to play. Drag HelpScreen here.
+@export var help_screen: HelpScreen
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -232,7 +242,8 @@ func _ready() -> void:
 			or character_sheet == null or character_button == null or battle_screen == null
 			or shop_screen == null or bag_prompt == null or standings_screen == null
 			or standings_button == null or field_button == null or title_screen == null
-			or pause_menu == null or save_menu == null or menu_button == null):
+			or pause_menu == null or save_menu == null or menu_button == null
+			or options_menu == null or help_screen == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -255,10 +266,17 @@ func _ready() -> void:
 	title_screen.new_game_pressed.connect(_on_new_game)
 	title_screen.continue_pressed.connect(_on_continue)
 	title_screen.load_pressed.connect(save_menu.open.bind(false))
+	title_screen.options_pressed.connect(options_menu.open)
+	title_screen.help_pressed.connect(help_screen.open)
+	pause_menu.options_pressed.connect(options_menu.open)
+	pause_menu.help_pressed.connect(help_screen.open)
+	options_menu.closed.connect(_on_side_window_closed)
+	help_screen.closed.connect(_on_side_window_closed)
 	pause_menu.save_pressed.connect(save_menu.open.bind(true))
 	pause_menu.load_pressed.connect(save_menu.open.bind(false))
 	pause_menu.title_pressed.connect(_restart_scene)
 	pause_menu.closed.connect(_on_character_sheet_hidden)
+	pause_menu.closed.connect(_set_pace)
 	save_menu.slot_chosen.connect(_on_slot_chosen)
 	save_menu.closed.connect(_on_save_menu_closed)
 	standings_screen.final_closed.connect(_restart_scene)
@@ -297,25 +315,25 @@ func _ready() -> void:
 		_resume_game(save)
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if turn_manager.phase == TurnManager.Phase.GAME_OVER:
 		return
-	if event.is_action_pressed("ui_cancel"):
+	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("game_menu"):
 		if character_sheet.visible:
 			character_sheet.close_sheet()
 		else:
 			_open_pause_menu()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_C:
+	elif event.is_action_pressed("game_character"):
 		if character_sheet.visible:
 			character_sheet.close_sheet()
 		else:
 			_open_character_sheet()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_R:
+	elif event.is_action_pressed("game_standings"):
 		if standings_screen.visible:
 			standings_screen.hide()
 		else:
 			_open_standings()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_F:
+	elif event.is_action_pressed("game_field"):
 		_open_field_magic()
 
 
@@ -362,6 +380,7 @@ func _on_roll_button_pressed() -> void:
 func _on_step_finished(node: BoardNode, steps_remaining: int) -> void:
 	# Every step, and every choice at a fork, narrows down where the move ends.
 	var player := _active_player()
+	Sound.play("step")
 	_set_landing_nodes(player.get_landing_preview(steps_remaining))
 	if node.node_type == BoardNode.NodeType.TOWN:
 		_quest_news += _advance_quest(turn_manager.current_player(), Quest.Kind.VISIT, node.node_id)
@@ -388,6 +407,7 @@ func _on_path_choice_required(available_nodes: Array[BoardNode]) -> void:
 		# bind() remembers which space this button stands for.
 		button.pressed.connect(_choose_path.bind(node))
 		choice_box.add_child(button)
+	choice_box.get_child(0).grab_focus()
 
 
 func _on_space_clicked(node: BoardNode) -> void:
@@ -478,12 +498,15 @@ func _on_day_started(_day: int) -> void:
 	if GameState.get_day_of_week() != 1:
 		return
 	var payments := PackedStringArray()
+	Sound.play("week")
 	var paid := Town.collect_income()
 	for player: PlayerData in paid:
 		payments.append("%s %d G" % [player.player_name, paid[player]])
 		BoardFx.pop_text(board, _tokens[player].global_position, "+%d G" % paid[player], GOLD_TEXT_COLOR)
 	Quest.new_week()
 	hud.refresh()
+	if not paid.is_empty():
+		Sound.play("coin")
 	_previous_result = "Week %d. Royal quest: %s, for %d G." % [GameState.get_week(),
 			Quest.task_text(), GameState.quest["reward"]]
 	if not payments.is_empty():
@@ -515,6 +538,7 @@ func _enter_turn_start() -> void:
 		SaveGame.write(SaveGame.AUTO, _turn_snapshot)
 
 	var player := turn_manager.current_player()
+	_set_pace()
 	camera.follow(_active_player())
 	_active_player().is_active = true
 	_field_cast = false
@@ -522,6 +546,7 @@ func _enter_turn_start() -> void:
 	if _crown_news != "":
 		var news := _crown_news
 		_crown_news = ""
+		Sound.play("crown")
 		await banner.play(news, ShadowCrown.COLOR, _crown_face)
 	if player.turns_to_skip > 0:
 		player.turns_to_skip -= 1
@@ -606,8 +631,10 @@ func _play_space(space: BoardNode) -> void:
 		BoardNode.NodeType.ITEM:
 			await _apply_result(SpaceEffects.item_space(data))
 		BoardNode.NodeType.MAGIC:
+			Sound.play("magic")
 			await _apply_result(SpaceEffects.magic_space(data))
 		BoardNode.NodeType.SHRINE:
+			Sound.play("heal")
 			await _apply_result(SpaceEffects.shrine_space(data))
 		BoardNode.NodeType.TRAP:
 			await _apply_result(SpaceEffects.trap_space(data))
@@ -645,7 +672,9 @@ func _apply_result(result: SpaceEffects.Result) -> void:
 	if result.harmful:
 		_landing_went_badly = true
 		camera.shake()
+		Sound.play("trap")
 	if result.gold != 0:
+		Sound.play("coin" if result.gold > 0 else "coin_loss")
 		data.add_gold(result.gold)
 		BoardFx.pop_text(board, token.global_position, "%+d G" % result.gold,
 				GOLD_TEXT_COLOR if result.gold > 0 else LOSS_TEXT_COLOR)
@@ -668,6 +697,7 @@ func _apply_result(result: SpaceEffects.Result) -> void:
 func _give_item(data: PlayerData, item_id: String) -> void:
 	var item_name := Database.get_item(item_id).display_name
 	if data.add_item(item_id):
+		Sound.play("item")
 		BoardFx.pop_text(board, _active_player().global_position, item_name, Color.WHITE)
 		return
 	var kept := false
@@ -696,7 +726,9 @@ func _visit_shop(space: BoardNode) -> void:
 		line = "%s bought %s." % [data.player_name, ", ".join(bought)] if not bought.is_empty() \
 				else "%s found nothing to buy." % data.player_name
 	else:
+		Sound.music("shop")
 		line = await shop_screen.run(data, shelves, space.get_display_name())
+		Sound.music("board")
 	_previous_result += " " + line
 	_show_status(_previous_result)
 
@@ -755,6 +787,7 @@ func _free_town(space: BoardNode) -> void:
 	if not _won(battle, data):
 		return
 	Town.claim(id, data)
+	Sound.play("town")
 	_show_town(space)
 	BoardFx.burst(board, space.global_position, data.token_color)
 	_say("%s is free, and it is %s's town now!" % [space.get_display_name(), data.player_name])
@@ -782,6 +815,7 @@ func _manage_town(space: BoardNode) -> void:
 	if not invest:
 		return
 	Town.invest(data, id)
+	Sound.play("town")
 	_show_town(space)
 	BoardFx.pop_text(board, space.global_position, "-%d G" % cost, LOSS_TEXT_COLOR)
 	_say("%s grew to level %d!" % [space.get_display_name(), Town.level(id)])
@@ -803,6 +837,7 @@ func _enter_rival_town(space: BoardNode, town_owner: PlayerData) -> void:
 		await _play_battle(battle)
 		if _won(battle, data):
 			Town.seize(id, data)
+			Sound.play("town")
 			_show_town(space)
 			_say("%s takes %s from %s!" % [data.player_name, space.get_display_name(), town_owner.player_name])
 			return
@@ -812,6 +847,7 @@ func _enter_rival_town(space: BoardNode, town_owner: PlayerData) -> void:
 	_landing_went_badly = true
 	_say("%s pays %s a toll of %d G." % [data.player_name, town_owner.player_name, paid])
 	if paid > 0:
+		Sound.play("coin_loss")
 		BoardFx.pop_text(board, _tokens[data].global_position, "-%d G" % paid, LOSS_TEXT_COLOR)
 		BoardFx.pop_text(board, _tokens[town_owner].global_position, "+%d G" % paid, GOLD_TEXT_COLOR)
 
@@ -826,7 +862,11 @@ func _play_battle(battle: Battle) -> void:
 	turn_manager.go_to(TurnManager.Phase.BATTLE)
 	camera.shake()
 	await _wait(space_event_duration * 0.5)
+	# A person fights at normal speed, even on a CPU's turn.
+	if _has_human(battle):
+		_set_pace(1.0)
 	var lines: PackedStringArray = await battle_screen.run(battle)
+	_set_pace()
 	_previous_result = " ".join(lines)
 	_show_status(_previous_result)
 	if battle.loser != null and battle.loser.player != null:
@@ -879,6 +919,7 @@ func _cast_field_spell(caster: PlayerData, spell_id: String, target: PlayerData)
 	var spell := Database.get_spell(spell_id)
 	_previous_result = "%s casts %s." % [caster.player_name, spell.display_name]
 	var aimed_at: PlayerData = target if target != null else caster
+	Sound.play("magic")
 	BoardFx.burst(board, _tokens[aimed_at].global_position, EVENT_COLOR)
 	await _apply_result(FieldMagic.cast(caster, spell_id, target))
 
@@ -919,13 +960,21 @@ func _enter_game_over() -> void:
 	SaveGame.erase(SaveGame.AUTO)
 	menu_button.hide()
 	roll_button.disabled = true
+	_set_pace(1.0)
+	Sound.music("")
 	var winner: PlayerData = Town.ranking()[0]
 	print("Game over: %s wins, worth %d G" % [winner.player_name, Town.net_worth(winner)])
 	_show_status("The last week is over!")
 	camera.follow(_tokens[winner])
 	_tokens[winner].cheer()
+	Sound.play("fanfare")
 	await banner.play("%s Wins!" % winner.player_name, winner.token_color, winner.character_sheet)
 	standings_screen.open_final()
+	var confetti := Confetti.new()
+	standings_screen.add_sibling(confetti)
+	confetti.start([winner.token_color, GameArt.GOLD, Color.WHITE])
+	await _wait(FANFARE_SECONDS)
+	Sound.music("title")
 
 
 # --- Internal helpers -------------------------------------------------------
@@ -1029,6 +1078,7 @@ func _show_board() -> void:
 	_arrange_tokens()
 	_slide_in_windows()
 	camera.set_zoom_index(PLAY_ZOOM, 0.9)
+	Sound.music("board")
 
 
 ## The game as it stands, to save. `in_turn` says whether it is a person's ACTION
@@ -1080,12 +1130,39 @@ func _load_slot(slot: String) -> String:
 ## GameState.load_on_start holds one. Nothing of the old game survives this.
 func _restart_scene() -> void:
 	get_tree().paused = false
+	_set_pace(1.0)
 	fade.modulate.a = 0.0
 	fade.show()
 	var tween := create_tween()
 	tween.tween_property(fade, "modulate:a", 1.0, 0.3)
 	await tween.finished
 	get_tree().reload_current_scene()
+
+
+## Back from Options or How to Play, to the menu that opened them.
+func _on_side_window_closed() -> void:
+	if pause_menu.visible:
+		pause_menu.take_focus()
+	else:
+		title_screen.take_focus()
+
+
+## Sets the game's speed: `speed`, or else the Options setting on a CPU's turn. Tests
+## set their own speed, so this only acts when the game itself is running.
+func _set_pace(speed := 0.0) -> void:
+	if get_tree().current_scene != self:
+		return
+	if speed == 0.0:
+		speed = Settings.cpu_speed if turn_manager.current_player().is_cpu else 1.0
+	Engine.time_scale = speed
+
+
+## True if a person is in `battle`.
+func _has_human(battle: Battle) -> bool:
+	for fighter: Fighter in [battle.challenger, battle.opponent]:
+		if fighter.player != null and not fighter.player.is_cpu:
+			return true
+	return false
 
 
 ## Stops the game, unless something else fills the screen.
@@ -1226,6 +1303,7 @@ func _send_to_castle(player: PlayerData) -> void:
 ## Pulls a player's token straight to `space`, which does nothing to them.
 func _warp(player: PlayerData, space: BoardNode) -> void:
 	var token: PlayerMovement = _tokens[player]
+	Sound.play("whoosh")
 	BoardFx.play(board, token.global_position, BoardFx.Kind.SMOKE, 0.5)
 	token.spawn_at(space)
 	player.space_id = space.node_id

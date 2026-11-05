@@ -18,12 +18,14 @@
 [ext_resource type="Script" path="res://ui/TitleScreen.gd" id="20_title"]
 [ext_resource type="Script" path="res://ui/PauseMenu.gd" id="21_pause"]
 [ext_resource type="Script" path="res://ui/SaveMenu.gd" id="22_save"]
+[ext_resource type="Script" path="res://ui/OptionsMenu.gd" id="23_options"]
+[ext_resource type="Script" path="res://ui/HelpScreen.gd" id="24_help"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Warrior-Red.png" id="10_red"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Soldier-Blue.png" id="11_blue"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Green.png" id="12_green"]
 [ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Purple.png" id="13_purple"]
 
-[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu", "fade", "message_window", "info_panel", "class_menu", "character_sheet", "character_button", "battle_screen", "shop_screen", "bag_prompt", "standings_screen", "standings_button", "field_button", "title_screen", "pause_menu", "save_menu", "menu_button")]
+[node name="Main" type="Node2D" node_paths=PackedStringArray("players", "roll_button", "status_label", "choice_box", "board", "camera", "info_label", "dice", "turn_manager", "hud", "banner", "setup_menu", "fade", "message_window", "info_panel", "class_menu", "character_sheet", "character_button", "battle_screen", "shop_screen", "bag_prompt", "standings_screen", "standings_button", "field_button", "title_screen", "pause_menu", "save_menu", "menu_button", "options_menu", "help_screen")]
 script = ExtResource("1_r0du0")
 class_menu = NodePath("UI/ClassMenu")
 character_sheet = NodePath("UI/CharacterSheet")
@@ -38,6 +40,8 @@ title_screen = NodePath("UI/TitleScreen")
 pause_menu = NodePath("UI/PauseMenu")
 save_menu = NodePath("UI/SaveMenu")
 menu_button = NodePath("UI/MenuButton")
+options_menu = NodePath("UI/OptionsMenu")
+help_screen = NodePath("UI/HelpScreen")
 players = [NodePath("Player1"), NodePath("Player2"), NodePath("Player3"), NodePath("Player4")]
 roll_button = NodePath("UI/Panel/Row/Side/RollButton")
 status_label = NodePath("UI/Panel/Row/StatusLabel")
@@ -366,6 +370,22 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("22_save")
+
+[node name="OptionsMenu" type="CenterContainer" parent="UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("23_options")
+
+[node name="HelpScreen" type="CenterContainer" parent="UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("24_help")
 
 [node name="Fade" type="ColorRect" parent="UI"]
 visible = false

@@ -1,8 +1,9 @@
 class_name BoardCamera
 extends Camera2D
 ## Camera for looking around the board.
-##   - WASD / arrow keys: pan (Input Map actions camera_left/right/up/down)
+##   - WASD / arrow keys / right stick: pan (Input Map actions camera_left/right/up/down)
 ##   - Mouse wheel: zoom toward the cursor, through ZOOM_LEVELS
+##   - Q / E, or LB / RB: zoom on the center of the screen
 ##   - Hold the right or middle mouse button and drag: pan
 ##   - follow(): keeps a node (a player token) in the center until the player
 ##     pans by hand
@@ -46,7 +47,11 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
+	if event.is_action_pressed("camera_zoom_in"):
+		set_zoom_index(_zoom_index + 1, zoom_duration)
+	elif event.is_action_pressed("camera_zoom_out"):
+		set_zoom_index(_zoom_index - 1, zoom_duration)
+	elif event is InputEventMouseButton:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
 				if event.pressed:
@@ -98,6 +103,8 @@ func set_zoom_index(index: int, duration := 0.6) -> void:
 
 ## A short shake, for moments that deserve weight.
 func shake(strength := 6.0, duration := 0.25) -> void:
+	if not Settings.screen_shake:
+		return
 	var tween := create_tween()
 	tween.tween_method(func(left: float) -> void:
 			offset = (Vector2(randf_range(-1, 1), randf_range(-1, 1)) * strength * left).round(),

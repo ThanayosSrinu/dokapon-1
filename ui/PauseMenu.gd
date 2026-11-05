@@ -7,6 +7,8 @@ extends CenterContainer
 signal save_pressed
 signal load_pressed
 signal title_pressed
+signal options_pressed
+signal help_pressed
 ## Emitted when the game carries on.
 signal closed
 
@@ -37,6 +39,8 @@ func _ready() -> void:
 	_resume = _add_button(box, "Resume", close)
 	_add_button(box, "Save Game", save_pressed.emit)
 	_add_button(box, "Load Game", load_pressed.emit)
+	_add_button(box, "Options", options_pressed.emit)
+	_add_button(box, "How to Play", help_pressed.emit)
 	_add_button(box, "Back to Title", title_pressed.emit)
 	_add_button(box, "Quit", func() -> void: get_tree().quit())
 	_note = Label.new()
@@ -50,8 +54,9 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), SHADE)
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed("ui_cancel"):
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("game_menu")):
+		Sound.play("back")
 		close()
 		get_viewport().set_input_as_handled()
 

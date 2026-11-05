@@ -53,6 +53,7 @@ func roll() -> int:
 	modulate.a = 1.0
 	value = 0
 	show()
+	Sound.play("dice_roll")
 
 	var tween := create_tween().set_parallel(true)
 	# Across the screen at an even speed, while bouncing to a stop on the way down.
@@ -68,6 +69,7 @@ func roll() -> int:
 	await tween.finished
 
 	value = result
+	Sound.play("dice_land")
 	scale = Vector2(1.35, 0.8)
 	var settle := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	settle.tween_property(self, "scale", Vector2.ONE, 0.24)

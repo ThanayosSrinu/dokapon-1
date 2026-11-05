@@ -85,8 +85,9 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), SHADE)
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("ui_cancel"):
+		Sound.play("back")
 		get_viewport().set_input_as_handled()
 		_left.emit()
 
@@ -393,9 +394,11 @@ func _on_main_pressed() -> void:
 	var item := Database.get_item(_selected)
 	if _selling:
 		if Shop.sell(_player, _selected):
+			Sound.play("coin")
 			_sold += 1
 			_speech.text = "%d gold for the %s. A fair price!" % [Shop.sell_price(item.id), item.display_name]
 	elif Shop.buy(_player, _selected):
+		Sound.play("coin")
 		_bought += 1
 		_speech.text = "One %s. Thank you!" % item.display_name
 	_redraw()
@@ -404,6 +407,7 @@ func _on_main_pressed() -> void:
 func _on_wear_pressed() -> void:
 	var item := Database.get_item(_selected)
 	if Shop.buy(_player, _selected):
+		Sound.play("coin")
 		_player.equip(_selected)
 		_bought += 1
 		_speech.text = "That %s suits you!" % item.display_name
