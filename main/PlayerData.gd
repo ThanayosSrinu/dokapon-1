@@ -1,7 +1,7 @@
 class_name PlayerData
 extends RefCounted
 ## Everything the game remembers about one player, separate from the token on
-## the board. Rules code reads this, and a save file will store it (Section 10).
+## the board. Rules code reads this, and to_save() turns it into plain values.
 ## Items, spells and the class are stored by stable id, never as resources.
 
 ## Emitted after anything on the character sheet changes, so UI can redraw.
@@ -65,6 +65,51 @@ func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void
 	player_name = new_name
 	token_color = new_color
 	is_cpu = cpu
+
+
+## Everything worth keeping, as plain values. The color and the character sheet
+## are left out, because they come from this player's token.
+func to_save() -> Dictionary:
+	return {
+		"name": player_name,
+		"is_cpu": is_cpu,
+		"difficulty": difficulty,
+		"space_id": space_id,
+		"class_id": class_id,
+		"level": level,
+		"experience": experience,
+		"gold": gold,
+		"hp": hp,
+		"mp": mp,
+		"inventory": inventory.duplicate(),
+		"equipment": equipment.duplicate(),
+		"spells": spells.duplicate(),
+		"turns_to_skip": turns_to_skip,
+		"quest_progress": quest_progress,
+		"roll_bonus": roll_bonus,
+		"grudges": grudges.duplicate(),
+	}
+
+
+## Rebuilds a player from what to_save() returned.
+static func from_save(saved: Dictionary) -> PlayerData:
+	var player := PlayerData.new(saved["name"], Color.WHITE, saved["is_cpu"])
+	player.difficulty = saved["difficulty"] as CpuBrain.Level
+	player.space_id = saved["space_id"]
+	player.class_id = saved["class_id"]
+	player.level = saved["level"]
+	player.experience = saved["experience"]
+	player.gold = saved["gold"]
+	player.hp = saved["hp"]
+	player.mp = saved["mp"]
+	player.inventory.assign(saved["inventory"])
+	player.equipment = saved["equipment"].duplicate()
+	player.spells.assign(saved["spells"])
+	player.turns_to_skip = saved["turns_to_skip"]
+	player.quest_progress = saved["quest_progress"]
+	player.roll_bonus = saved["roll_bonus"]
+	player.grudges.assign(saved["grudges"])
+	return player
 
 
 ## Sets up a level 1 character of the class `id`, at full HP and MP.

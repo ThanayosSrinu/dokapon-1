@@ -101,8 +101,14 @@ func _make_portrait(player: PlayerData) -> Control:
 	return background
 
 
+## Writes the calendar. A loaded game calls this, since no new day begins there.
+func show_calendar() -> void:
+	calendar_label.text = "Week %d of %d - Day %d" % [GameState.get_week(), GameState.game_weeks,
+			GameState.get_day_of_week()]
+
+
 func _on_day_started(_day: int) -> void:
-	calendar_label.text = "Week %d - Day %d" % [GameState.get_week(), GameState.get_day_of_week()]
+	show_calendar()
 	calendar_label.pivot_offset = calendar_label.size * 0.5
 	calendar_label.scale = Vector2(1.2, 1.2)
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

@@ -1,11 +1,17 @@
 class_name SetupMenu
 extends CenterContainer
-## The menu shown before a game starts. It shows the heroes, asks how many will
-## play, how many of them the computer runs and how well, and covers the board, so
-## the board cannot be clicked behind it.
+## The menu shown before a new game. It shows the heroes, asks how many will play,
+## how many of them the computer runs and how well, and how long the game lasts. It
+## covers the board, so the board cannot be clicked behind it.
 
 ## Emitted once, right before player_count_chosen.
 signal cpus_chosen(count: int, level: CpuBrain.Level)
+
+## Emitted once, right before player_count_chosen.
+signal weeks_chosen(weeks: int)
+
+## Emitted by the Back button.
+signal back_pressed
 
 ## Emitted once when the last question is answered. The menu then hides itself.
 signal player_count_chosen(count: int)
@@ -20,6 +26,9 @@ const HERO_SIZE := Vector2(64, 64)
 ## Darkens the board behind the menu.
 const SHADE := Color(0.03, 0.04, 0.12, 0.5)
 const FRAME_TIME := 0.45
+## Each game length, as [name, weeks]. Space or Enter picks DEFAULT_LENGTH.
+const GAME_LENGTHS := [["Quick", 4], ["Short", 8], ["Standard", GameState.DEFAULT_WEEKS], ["Long", 24]]
+const DEFAULT_LENGTH := 2
 
 @export var min_players := 2
 @export var max_players := 4
@@ -38,6 +47,7 @@ var _clock := 0.0
 # The answers so far, kept for the later questions.
 var _player_count := 0
 var _cpu_count := 0
+var _level := CpuBrain.Level.NORMAL
 
 
 func _ready() -> void:
@@ -49,6 +59,12 @@ func _ready() -> void:
 		hero.custom_minimum_size = HERO_SIZE
 		hero_row.add_child(hero)
 
+	_ask_player_count()
+
+
+## Starts the questions from the top and shows the menu.
+func open() -> void:
+	show()
 	_ask_player_count()
 
 	var panel: Control = get_node("Panel")
@@ -79,7 +95,9 @@ func _ask_player_count() -> void:
 	for count in range(min_players, max_players + 1):
 		options.append(["%d Players" % count, _ask_cpu_count.bind(count)])
 	# Space or Enter starts a full game.
-	_show_question("How many heroes set out?", options, options.size() - 1)
+	var focused := options.size() - 1
+	options.append(["Back", func() -> void: back_pressed.emit()])
+	_show_question("How many heroes set out?", options, focused)
 
 
 func _ask_cpu_count(count: int) -> void:
@@ -94,17 +112,26 @@ func _ask_cpu_count(count: int) -> void:
 func _ask_level(cpus: int) -> void:
 	_cpu_count = cpus
 	if cpus == 0:
-		_finish(CpuBrain.Level.NORMAL)
+		_ask_length(CpuBrain.Level.NORMAL)
 		return
 	var options := []
 	for level: CpuBrain.Level in CpuBrain.LEVEL_NAMES:
-		options.append([CpuBrain.LEVEL_NAMES[level], _finish.bind(level)])
+		options.append([CpuBrain.LEVEL_NAMES[level], _ask_length.bind(level)])
 	_show_question("How well does the computer play?", options, 1)
 
 
-func _finish(level: CpuBrain.Level) -> void:
+func _ask_length(level: CpuBrain.Level) -> void:
+	_level = level
+	var options := []
+	for length: Array in GAME_LENGTHS:
+		options.append(["%s: %d weeks" % length, _finish.bind(length[1])])
+	_show_question("How long will the game last?", options, DEFAULT_LENGTH)
+
+
+func _finish(weeks: int) -> void:
 	hide()
-	cpus_chosen.emit(_cpu_count, level)
+	cpus_chosen.emit(_cpu_count, _level)
+	weeks_chosen.emit(weeks)
 	player_count_chosen.emit(_player_count)
 
 
@@ -119,4 +146,5 @@ func _show_question(question: String, options: Array, focused: int) -> void:
 		button.text = option[0]
 		button.pressed.connect(option[1])
 		button_row.add_child(button)
-	button_row.get_child(focused).grab_focus()
+	if is_visible_in_tree():
+		button_row.get_child(focused).grab_focus()

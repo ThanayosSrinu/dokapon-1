@@ -9,6 +9,7 @@ extends Node
 ##       |                           CHOOSING_PATH    BATTLE --------+
 ##       +-------------------------------------------------------> (rest)
 ##
+## After the last turn of the last day comes GAME_OVER instead of a new day.
 ## A knocked out player goes straight from TURN_START to TURN_END.
 ## TRANSITIONS lists every legal step, and go_to() refuses all others. Other
 ## scripts check `phase` before acting, so a stray click cannot start a second
@@ -25,11 +26,12 @@ enum Phase {
 	SPACE_EVENT,    # The landed space takes effect.
 	BATTLE,         # A fight is on screen.
 	TURN_END,       # Passing play to the next player.
+	GAME_OVER,      # The last week is over.
 }
 
 ## The phases each phase may lead to.
 const TRANSITIONS := {
-	Phase.IDLE: [Phase.TURN_START],
+	Phase.IDLE: [Phase.TURN_START, Phase.ACTION],
 	Phase.TURN_START: [Phase.ACTION, Phase.TURN_END],
 	Phase.ACTION: [Phase.ROLLING],
 	Phase.ROLLING: [Phase.MOVING],
@@ -37,7 +39,7 @@ const TRANSITIONS := {
 	Phase.CHOOSING_PATH: [Phase.MOVING],
 	Phase.SPACE_EVENT: [Phase.BATTLE, Phase.TURN_END],
 	Phase.BATTLE: [Phase.TURN_END],
-	Phase.TURN_END: [Phase.TURN_START],
+	Phase.TURN_END: [Phase.TURN_START, Phase.GAME_OVER],
 }
 
 ## The phase the game is in right now.
@@ -52,6 +54,20 @@ func start_game() -> void:
 	_turn_index = 0
 	EventBus.day_started.emit(GameState.day)
 	_begin_turn()
+
+
+## Carries on a loaded game. It starts the turn of the player at `index`, or, if
+## `in_turn`, goes straight back to that player's ACTION phase. No new day begins,
+## so nothing weekly happens twice.
+func resume(index: int, in_turn: bool) -> void:
+	_turn_index = index
+	EventBus.turn_started.emit(current_player())
+	go_to(Phase.ACTION if in_turn else Phase.TURN_START)
+
+
+## The place in GameState.players of the player whose turn it is.
+func turn_index() -> int:
+	return _turn_index
 
 
 ## The player whose turn it is.
@@ -80,6 +96,9 @@ func end_turn() -> void:
 
 	_turn_index = (_turn_index + 1) % GameState.players.size()
 	if _turn_index == 0:
+		if GameState.is_last_day():
+			go_to(Phase.GAME_OVER)
+			return
 		GameState.day += 1
 		EventBus.day_started.emit(GameState.day)
 	_begin_turn()

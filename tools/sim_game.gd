@@ -16,6 +16,8 @@ func _ready() -> void:
 	var main: GameController = load("res://main/Main.tscn").instantiate()
 	main.cpu_players = 4
 	main.game_seed = int(args[1]) if args.size() > 1 else 1
+	# One week more than is played, so the game never ends before the numbers print.
+	main.game_weeks = weeks + 1
 	add_child(main)
 	await get_tree().process_frame
 	main.setup_menu.player_count_chosen.emit(4)

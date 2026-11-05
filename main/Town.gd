@@ -200,6 +200,30 @@ static func net_worth(player: PlayerData) -> int:
 	return player.gold + gear_value(player) + town_value(player)
 
 
+## The prizes shown at the end of a game. Nobody wins a prize for having none of it,
+## and a tie goes to whoever is higher in the ranking.
+static func awards() -> PackedStringArray:
+	var lines := PackedStringArray()
+	var order := ranking()
+	var richest := _best(order, func(player: PlayerData) -> int: return player.gold)
+	if richest.gold > 0:
+		lines.append("Deepest Purse: %s, %d G" % [richest.player_name, richest.gold])
+	var landlord := _best(order, func(player: PlayerData) -> int: return towns_of(player).size())
+	if not towns_of(landlord).is_empty():
+		lines.append("Greatest Landlord: %s, %d towns" % [landlord.player_name, towns_of(landlord).size()])
+	var strongest := _best(order, func(player: PlayerData) -> int: return player.level)
+	lines.append("Mightiest Hero: %s, level %d" % [strongest.player_name, strongest.level])
+	return lines
+
+
+static func _best(order: Array[PlayerData], score: Callable) -> PlayerData:
+	var best := order[0]
+	for player in order:
+		if score.call(player) > score.call(best):
+			best = player
+	return best
+
+
 ## Every player, richest first. Ties stay in turn order.
 static func ranking() -> Array[PlayerData]:
 	var order: Array[PlayerData] = GameState.players.duplicate()

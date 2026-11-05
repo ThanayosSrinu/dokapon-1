@@ -4,7 +4,7 @@ extends RefCounted
 ## same quest, the first to finish it takes the reward, and whatever is unfinished
 ## at the end of the week is dropped.
 ##
-## GameState.quest holds plain values, so that Section 10 can save it:
+## GameState.quest holds plain values, so that SaveGame can store it:
 ##   kind     a Kind
 ##   target   the space id of a VISIT quest, else -1
 ##   place    the name of that space

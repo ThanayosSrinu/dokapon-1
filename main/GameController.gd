@@ -16,7 +16,10 @@ extends Node2D
 ## Each new week pays the owners of towns, posts a royal quest (Quest.gd) and checks
 ## on the Shadow Crown (ShadowCrown.gd).
 ## Press C or the Character button to open the active player's sheet, and R or
-## the Standings button to see who is ahead.
+## the Standings button to see who is ahead. Esc or the Menu button pauses.
+## Main.tscn is also the whole of the game's flow: it opens on the title screen, runs
+## one game, and reloads itself to go back to the title or to load a save. The last
+## week ends in GAME_OVER and the final standings. SaveGame.gd saves the game.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
 ## Scene layout:
@@ -36,11 +39,15 @@ extends Node2D
 ##       │           └── ChoiceBox (VBoxContainer)
 ##       ├── Dice (DiceRoller)
 ##       ├── TurnBanner
+##       ├── MenuButton
+##       ├── TitleScreen
 ##       ├── SetupMenu
 ##       ├── BattleScreen
 ##       ├── ShopScreen
 ##       ├── BagPrompt
 ##       ├── StandingsScreen
+##       ├── PauseMenu
+##       ├── SaveMenu
 ##       └── Fade (ColorRect)
 
 ## Emitted by the buttons from _ask(), with the value of the one pressed.
@@ -145,6 +152,18 @@ const EVENT_COLOR := Color(0.62, 0.42, 0.90)
 ## Casts field magic. Drag FieldButton here.
 @export var field_button: Button
 
+## The first screen. Drag TitleScreen here.
+@export var title_screen: TitleScreen
+
+## Stops the game and offers saving. Drag PauseMenu here.
+@export var pause_menu: PauseMenu
+
+## Lists the save slots. Drag SaveMenu here.
+@export var save_menu: SaveMenu
+
+## Opens the pause menu. Drag MenuButton here.
+@export var menu_button: Button
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -157,6 +176,9 @@ const EVENT_COLOR := Color(0.62, 0.42, 0.90)
 
 ## How well they play. The setup menu overwrites this too.
 @export var cpu_level := CpuBrain.Level.NORMAL
+
+## How many weeks the game lasts. The setup menu overwrites this too.
+@export var game_weeks := GameState.DEFAULT_WEEKS
 
 ## The black cover that fades away at the start. Drag Fade here.
 @export var fade: ColorRect
@@ -197,6 +219,8 @@ var _field_cast := false
 var _crown_news := ""
 # The portrait for that banner.
 var _crown_face: Texture2D
+# The game as it stood when this turn started. See SaveGame.
+var _turn_snapshot := {}
 
 
 func _ready() -> void:
@@ -207,7 +231,8 @@ func _ready() -> void:
 			or message_window == null or info_panel == null or class_menu == null
 			or character_sheet == null or character_button == null or battle_screen == null
 			or shop_screen == null or bag_prompt == null or standings_screen == null
-			or standings_button == null or field_button == null):
+			or standings_button == null or field_button == null or title_screen == null
+			or pause_menu == null or save_menu == null or menu_button == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -224,7 +249,20 @@ func _ready() -> void:
 	EventBus.phase_changed.connect(_on_phase_changed)
 	EventBus.day_started.connect(_on_day_started)
 	setup_menu.cpus_chosen.connect(_on_cpus_chosen)
+	setup_menu.weeks_chosen.connect(_on_weeks_chosen)
 	setup_menu.player_count_chosen.connect(_start_game)
+	setup_menu.back_pressed.connect(_on_setup_back)
+	title_screen.new_game_pressed.connect(_on_new_game)
+	title_screen.continue_pressed.connect(_on_continue)
+	title_screen.load_pressed.connect(save_menu.open.bind(false))
+	pause_menu.save_pressed.connect(save_menu.open.bind(true))
+	pause_menu.load_pressed.connect(save_menu.open.bind(false))
+	pause_menu.title_pressed.connect(_restart_scene)
+	pause_menu.closed.connect(_on_character_sheet_hidden)
+	save_menu.slot_chosen.connect(_on_slot_chosen)
+	save_menu.closed.connect(_on_save_menu_closed)
+	standings_screen.final_closed.connect(_restart_scene)
+	menu_button.pressed.connect(_open_pause_menu)
 	character_button.pressed.connect(_open_character_sheet)
 	character_sheet.hidden.connect(_on_character_sheet_hidden)
 	standings_button.pressed.connect(_open_standings)
@@ -246,14 +284,27 @@ func _ready() -> void:
 	tween.tween_callback(fade.hide)
 
 	roll_button.disabled = true
-	_show_status("Choose the number of players.")
+	menu_button.hide()
 	_clear_choices()
 	_arrange_tokens()
 
+	if GameState.load_on_start.is_empty():
+		_show_status("Choose the number of players.")
+		title_screen.open()
+	else:
+		var save := GameState.load_on_start
+		GameState.load_on_start = {}
+		_resume_game(save)
+
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and character_sheet.visible:
-		character_sheet.close_sheet()
+	if turn_manager.phase == TurnManager.Phase.GAME_OVER:
+		return
+	if event.is_action_pressed("ui_cancel"):
+		if character_sheet.visible:
+			character_sheet.close_sheet()
+		else:
+			_open_pause_menu()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_C:
 		if character_sheet.visible:
 			character_sheet.close_sheet()
@@ -295,7 +346,7 @@ func _on_roll_button_pressed() -> void:
 	else:
 		_show_status("%s\nRolled a %d, %+d: %d step(s)!" % [_turn_title(), rolled, bonus, _last_roll])
 	_set_landing_nodes(player.get_landing_preview(_last_roll))
-	await get_tree().create_timer(preview_duration).timeout
+	await _wait(preview_duration)
 
 	# The tokens left behind move back to the center of their space.
 	_arrange_tokens(player)
@@ -383,6 +434,44 @@ func _on_cpus_chosen(count: int, level: CpuBrain.Level) -> void:
 	cpu_level = level
 
 
+func _on_weeks_chosen(weeks: int) -> void:
+	game_weeks = weeks
+
+
+func _on_new_game() -> void:
+	title_screen.hide()
+	setup_menu.open()
+
+
+func _on_setup_back() -> void:
+	setup_menu.hide()
+	title_screen.open()
+
+
+## Loads whatever was saved last.
+func _on_continue() -> void:
+	var problem := _load_slot(SaveGame.newest())
+	if problem != "":
+		title_screen.note(problem)
+
+
+func _on_slot_chosen(slot: String) -> void:
+	if not save_menu.saving:
+		save_menu.note(_load_slot(slot))
+	elif SaveGame.write(slot, _snapshot_now()):
+		save_menu.refresh()
+		save_menu.note("Saved.")
+	else:
+		save_menu.note("The game could not be saved.")
+
+
+func _on_save_menu_closed() -> void:
+	if pause_menu.visible:
+		pause_menu.take_focus()
+	else:
+		title_screen.open()
+
+
 ## Each week begins by paying the town owners, posting a new quest and checking on
 ## the Shadow Crown.
 func _on_day_started(_day: int) -> void:
@@ -399,6 +488,8 @@ func _on_day_started(_day: int) -> void:
 			Quest.task_text(), GameState.quest["reward"]]
 	if not payments.is_empty():
 		_previous_result += "\nTown income: %s." % ", ".join(payments)
+	if GameState.get_week() == GameState.game_weeks:
+		_previous_result += "\nThis is the final week!"
 	_update_crown(ShadowCrown.weekly_check())
 
 
@@ -411,11 +502,18 @@ func _on_phase_changed(phase: TurnManager.Phase) -> void:
 			_enter_action()
 		TurnManager.Phase.SPACE_EVENT:
 			_enter_space_event()
+		TurnManager.Phase.GAME_OVER:
+			_enter_game_over()
 
 
 # --- Phases -----------------------------------------------------------------
 
 func _enter_turn_start() -> void:
+	# This comes first: nothing of this turn has happened yet, so a load replays it.
+	_turn_snapshot = _capture(false)
+	if get_tree().current_scene == self:
+		SaveGame.write(SaveGame.AUTO, _turn_snapshot)
+
 	var player := turn_manager.current_player()
 	camera.follow(_active_player())
 	_active_player().is_active = true
@@ -495,7 +593,7 @@ func _enter_space_event() -> void:
 		await _play_space(space)
 	if not _landing_went_badly:
 		player.cheer()
-	await get_tree().create_timer(space_event_duration).timeout
+	await _wait(space_event_duration)
 	turn_manager.end_turn()
 
 
@@ -727,7 +825,7 @@ func _won(battle: Battle, player: PlayerData) -> bool:
 func _play_battle(battle: Battle) -> void:
 	turn_manager.go_to(TurnManager.Phase.BATTLE)
 	camera.shake()
-	await get_tree().create_timer(space_event_duration * 0.5).timeout
+	await _wait(space_event_duration * 0.5)
 	var lines: PackedStringArray = await battle_screen.run(battle)
 	_previous_result = " ".join(lines)
 	_show_status(_previous_result)
@@ -816,13 +914,40 @@ func _open_field_magic() -> void:
 	_wait_for_roll()
 
 
+## The last week is over: the richest player takes the realm.
+func _enter_game_over() -> void:
+	SaveGame.erase(SaveGame.AUTO)
+	menu_button.hide()
+	roll_button.disabled = true
+	var winner: PlayerData = Town.ranking()[0]
+	print("Game over: %s wins, worth %d G" % [winner.player_name, Town.net_worth(winner)])
+	_show_status("The last week is over!")
+	camera.follow(_tokens[winner])
+	_tokens[winner].cheer()
+	await banner.play("%s Wins!" % winner.player_name, winner.token_color, winner.character_sheet)
+	standings_screen.open_final()
+
+
 # --- Internal helpers -------------------------------------------------------
+
+## Keeps only `kept` of the tokens and listens to them.
+func _keep_tokens(kept: Array[PlayerMovement]) -> void:
+	for token in players:
+		if not kept.has(token):
+			token.queue_free()
+	players = kept
+	for token in players:
+		# Only the active player ever moves, so one set of handlers works for
+		# all of the tokens.
+		token.step_finished.connect(_on_step_finished)
+		token.movement_finished.connect(_on_movement_finished)
+		token.path_choice_required.connect(_on_path_choice_required)
+
 
 ## Uses the first `player_count` tokens, removes the rest and starts day 1.
 func _start_game(player_count: int) -> void:
-	for unused_token in players.slice(player_count):
-		unused_token.queue_free()
-	players = players.slice(0, player_count)
+	title_screen.hide()
+	_keep_tokens(players.slice(0, player_count))
 
 	var roster: Array[PlayerData] = []
 	for index in players.size():
@@ -834,13 +959,8 @@ func _start_game(player_count: int) -> void:
 		data.space_id = token.current_node.node_id
 		roster.append(data)
 		_tokens[data] = token
-		# Only the active player ever moves, so one set of handlers works for
-		# all of the tokens.
-		token.step_finished.connect(_on_step_finished)
-		token.movement_finished.connect(_on_movement_finished)
-		token.path_choice_required.connect(_on_path_choice_required)
 
-	GameState.start_new_game(roster, game_seed)
+	GameState.start_new_game(roster, game_seed, game_weeks)
 	Town.setup(board.get_town_info())
 	GameState.castle_id = board.get_starting_node().node_id
 	for id in Town.ids():
@@ -855,11 +975,132 @@ func _start_game(player_count: int) -> void:
 		print("%s is a %s%s" % [player.player_name, player.get_class_name_text(), mind])
 
 	hud.setup(GameState.players)
+	_show_board()
+	turn_manager.start_game()
+
+
+## Sets the board up from a save and carries on from it. Check it first with
+## SaveGame.problem().
+func _resume_game(save: Dictionary) -> void:
+	# Wait a frame, so the windows are laid out before they slide in.
+	await get_tree().process_frame
+	SaveGame.restore(save)
+	Town.setup(board.get_town_info())
+	GameState.castle_id = board.get_starting_node().node_id
+
+	var kept: Array[PlayerMovement] = []
+	for data in GameState.players:
+		for token in players:
+			if token.player_name == data.player_name:
+				kept.append(token)
+				data.token_color = token.token_color
+				data.character_sheet = token.character_sheet
+				_tokens[data] = token
+				token.spawn_at(board.get_board_node(data.space_id))
+	_keep_tokens(kept)
+	for id in Town.ids():
+		_show_town(board.get_board_node(id))
+
+	var notes: Dictionary = save["notes"]
+	_previous_result = notes["previous_result"]
+	_crown_news = notes["crown_news"]
+	_field_cast = notes["field_cast"]
+	for data in GameState.players:
+		if data.player_name == notes["crown_face"]:
+			_crown_face = data.character_sheet
+	_turn_snapshot = save
+	print("Loaded: week %d day %d, seed %d" % [GameState.get_week(), GameState.get_day_of_week(), GameState.game_seed])
+
+	hud.setup(GameState.players)
+	hud.show_calendar()
+	_update_crown({})
+	_show_board()
+	if save["in_turn"]:
+		var token: PlayerMovement = _tokens[GameState.players[save["turn_index"]]]
+		camera.follow(token)
+		token.is_active = true
+	turn_manager.resume(save["turn_index"], save["in_turn"])
+
+
+## Brings up everything that sits around the board during a game.
+func _show_board() -> void:
 	hud.show()
+	menu_button.show()
 	_arrange_tokens()
 	_slide_in_windows()
 	camera.set_zoom_index(PLAY_ZOOM, 0.9)
-	turn_manager.start_game()
+
+
+## The game as it stands, to save. `in_turn` says whether it is a person's ACTION
+## phase rather than the start of a turn.
+func _capture(in_turn: bool) -> Dictionary:
+	var face_of := ""
+	for data in GameState.players:
+		if data.character_sheet == _crown_face:
+			face_of = data.player_name
+	return SaveGame.capture(turn_manager.turn_index(), in_turn, {
+		"previous_result": _previous_result,
+		"crown_news": _crown_news,
+		"crown_face": face_of,
+		"field_cast": _field_cast,
+	})
+
+
+## True while a person is deciding what to do before they roll, with nothing else
+## going on. Only then can the game be saved as it is right now.
+func _can_save_this_moment() -> bool:
+	return (turn_manager.phase == TurnManager.Phase.ACTION
+			and not turn_manager.current_player().is_cpu
+			and roll_button.visible and not roll_button.disabled
+			and choice_box.get_child_count() == 0)
+
+
+## What the Save button stores: this moment if it can, else the start of this turn.
+func _snapshot_now() -> Dictionary:
+	return _capture(true) if _can_save_this_moment() else _turn_snapshot
+
+
+## Reads a slot and, if it can be played, starts it. Returns why not, or "".
+func _load_slot(slot: String) -> String:
+	var space_ids: Array[int] = []
+	for node in board.get_all_nodes():
+		space_ids.append(node.node_id)
+	var token_names: Array[String] = []
+	for token in players:
+		token_names.append(token.player_name)
+	var save := SaveGame.read(slot)
+	var problem := SaveGame.problem(save, space_ids, token_names)
+	if problem == "":
+		GameState.load_on_start = save
+		_restart_scene()
+	return problem
+
+
+## Fades out and starts Main.tscn again: on the title screen, or on a save if
+## GameState.load_on_start holds one. Nothing of the old game survives this.
+func _restart_scene() -> void:
+	get_tree().paused = false
+	fade.modulate.a = 0.0
+	fade.show()
+	var tween := create_tween()
+	tween.tween_property(fade, "modulate:a", 1.0, 0.3)
+	await tween.finished
+	get_tree().reload_current_scene()
+
+
+## Stops the game, unless something else fills the screen.
+func _open_pause_menu() -> void:
+	if not hud.visible or _a_window_is_open():
+		return
+	var keeps := "Saving keeps the game as it is now."
+	if not _can_save_this_moment():
+		keeps = "Saving keeps the game from the start of this turn."
+	pause_menu.open(keeps)
+
+
+## Waits, stopping while the game is paused.
+func _wait(seconds: float) -> Signal:
+	return get_tree().create_timer(seconds, false).timeout
 
 
 ## Asks the active player whether to fight someone sharing `space`. Returns the

@@ -1,6 +1,6 @@
 extends Node
 ## All the data of the game in progress. Registered as the "GameState" autoload,
-## so every script can read it and it will be easy to save in Section 10.
+## so every script can read it. SaveGame writes it to a file.
 ##
 ## This script only holds data. TurnManager decides when things change.
 ##
@@ -9,6 +9,8 @@ extends Node
 ## makes bugs repeatable. Purely visual randomness may keep using randi().
 
 const DAYS_PER_WEEK := 7
+## How many weeks a game lasts unless the setup menu says otherwise.
+const DEFAULT_WEEKS := 16
 
 ## The generator for all game-affecting randomness.
 var rng := RandomNumberGenerator.new()
@@ -21,6 +23,9 @@ var players: Array[PlayerData] = []
 
 ## The current day, starting at 1. A day is one turn by each player.
 var day := 1
+
+## The game ends after the last day of this week.
+var game_weeks := DEFAULT_WEEKS
 
 ## Town space ID -> {"name", "steps"}: its name and how far it is from the castle.
 ## It comes from the map, so it does not need saving.
@@ -47,14 +52,18 @@ var crown_left_week := 0
 ## The castle's space ID. It comes from the map, so it does not need saving.
 var castle_id := -1
 
+## A save waiting for Main.tscn to start up and resume it. See SaveGame.
+var load_on_start := {}
+
 
 ## Resets everything for a new game and decides the turn order at random.
 ## A `seed_value` of 0 picks a new random seed.
-func start_new_game(new_players: Array[PlayerData], seed_value := 0) -> void:
+func start_new_game(new_players: Array[PlayerData], seed_value := 0, weeks := DEFAULT_WEEKS) -> void:
 	game_seed = seed_value if seed_value != 0 else randi_range(1, 2147483647)
 	rng.seed = game_seed
 	players = _shuffled(new_players)
 	day = 1
+	game_weeks = weeks
 	towns = {}
 	town_owners.clear()
 	town_levels.clear()
@@ -77,6 +86,11 @@ func get_player_names() -> PackedStringArray:
 func get_week() -> int:
 	@warning_ignore("integer_division")
 	return (day - 1) / DAYS_PER_WEEK + 1
+
+
+## True on the last day of the game.
+func is_last_day() -> bool:
+	return day >= game_weeks * DAYS_PER_WEEK
 
 
 ## The day within the current week, from 1 to DAYS_PER_WEEK.

@@ -9,7 +9,7 @@ extends RefCounted
 ## every turn.
 ## Any player who beats the wearer in a duel shatters it and earns a bounty.
 ##
-## GameState.shadow_crown holds plain values, so that Section 10 can save it:
+## GameState.shadow_crown holds plain values, so that SaveGame can store it:
 ##   wearer    the name of the player wearing it
 ##   ends_day  the day it lifts
 ## An empty Dictionary means nobody wears it.

@@ -10,7 +10,7 @@ extends RefCounted
 ## Bullying: challenge and beat someone far below your level and you earn no EXP,
 ## and the crown fines you. Revenge and the Shadow Crown are never bullying.
 ##
-## Grudges are stored as player names, so that Section 10 can save them directly.
+## Grudges are stored as player names, so that SaveGame can store them directly.
 
 enum Spoil { GOLD, ITEM, TOWN }
 
