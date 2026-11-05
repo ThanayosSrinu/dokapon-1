@@ -120,3 +120,19 @@ script = ExtResource("2_space")
 node_id = 15
 node_type = 8
 connected_nodes = [NodePath("../S07")]
+
+[node name="S16" type="Marker2D" parent="." node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(600, 300)
+script = ExtResource("2_space")
+node_id = 16
+node_type = 4
+display_name = "Eastmarsh"
+connected_nodes = [NodePath("../S12")]
+
+[node name="S17" type="Marker2D" parent="." node_paths=PackedStringArray("connected_nodes")]
+position = Vector2(0, -500)
+script = ExtResource("2_space")
+node_id = 17
+node_type = 4
+display_name = "Northgate"
+connected_nodes = [NodePath("../S05"), NodePath("../S09")]
