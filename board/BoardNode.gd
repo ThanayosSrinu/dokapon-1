@@ -54,6 +54,15 @@ const PATH_CHOICE_COLOR := Color(0.45, 1.0, 0.55)
 const LANDING_COLOR := Color(1.0, 0.86, 0.3)
 ## Where the name plate sits, under the space.
 const PLATE_OFFSET := Vector2(0, 54)
+## Where a town's level is marked, under the name plate.
+const PIPS_OFFSET := Vector2(0, 74)
+const PIP_SIZE := 6.0
+const PIP_GAP := 4.0
+## Where the foot of an owner's flag stands.
+const FLAG_FOOT := Vector2(-42, -6)
+const FLAG_HEIGHT := 42.0
+## Where the feet of a town's guard stand, beside the space.
+const GUARD_FEET := Vector2(46, -8)
 ## How fast the ring pulses, and the icon floats.
 const PULSE_SPEED := 6.0
 const ICON_SPEED := 2.2
@@ -101,6 +110,13 @@ var is_landing_spot := false:
 	set(value):
 		is_landing_spot = value
 		queue_redraw()
+
+## The color of the flag over a town, or clear when nobody owns it. Not saved.
+var town_flag := Color.TRANSPARENT
+## A town's level, shown under its name. 0 while monsters hold it. Not saved.
+var town_level := 0
+## The character sheet of the monster holding a town, if any. Not saved.
+var town_guard: Texture2D
 
 # Seconds since the game started. Every animation here is worked out from it.
 var _clock := 0.0
@@ -151,6 +167,14 @@ func get_display_name() -> String:
 	return display_name if display_name != "" else get_type_name()
 
 
+## Shows who holds a town. Pass a clear color and a guard while monsters hold it.
+func show_town(flag: Color, level: int, guard: Texture2D) -> void:
+	town_flag = flag
+	town_level = level
+	town_guard = guard
+	queue_redraw()
+
+
 ## Bounces the space, as if a foot had just landed on it.
 func bump(strength := 1.0) -> void:
 	scale = Vector2(1.0 + 0.16 * strength, 1.0 - 0.14 * strength)
@@ -185,6 +209,44 @@ func _draw() -> void:
 	# Named spaces (castles, towns) show their name underneath.
 	if display_name != "":
 		GameArt.draw_plate(self, display_name, PLATE_OFFSET)
+	if town_guard != null:
+		_draw_town_guard()
+	if town_flag.a > 0.0:
+		_draw_town_flag()
+	_draw_town_level()
+
+
+# The monster holding this town, shuffling on the spot.
+func _draw_town_guard() -> void:
+	var frame := GameArt.CHARACTER_FRAME
+	var column := 1 if _icon_height > 0 else 0
+	var top_left := GUARD_FEET - GameArt.CHARACTER_FEET * GameArt.PIXEL
+	draw_texture_rect_region(town_guard, Rect2(top_left, Vector2.ONE * frame * GameArt.PIXEL),
+			Rect2(column * frame, 0, frame, frame))
+
+
+# A pole with a pennant in the owner's color, stepped to stay on the pixel grid.
+func _draw_town_flag() -> void:
+	var top := FLAG_FOOT + Vector2(0, -FLAG_HEIGHT)
+	draw_rect(Rect2(top + Vector2(-2, -2), Vector2(6, FLAG_HEIGHT + 4.0)), GameArt.INK)
+	draw_rect(Rect2(top, Vector2(2, FLAG_HEIGHT)), GameArt.PARCHMENT)
+	for row in 5:
+		var width := 24.0 - absf(row - 2.0) * 8.0
+		var cloth := Rect2(top + Vector2(2, row * 4.0), Vector2(width, 4))
+		draw_rect(cloth.grow_individual(0, 2, 2, 2), GameArt.INK)
+	for row in 5:
+		var width := 24.0 - absf(row - 2.0) * 8.0
+		draw_rect(Rect2(top + Vector2(2, row * 4.0), Vector2(width, 4)), town_flag)
+
+
+# One gold pip per level of the town.
+func _draw_town_level() -> void:
+	var step := PIP_SIZE + PIP_GAP
+	var left := PIPS_OFFSET.x - (step * town_level - PIP_GAP) * 0.5
+	for index in town_level:
+		var pip := Rect2(left + step * index, PIPS_OFFSET.y, PIP_SIZE, PIP_SIZE)
+		draw_rect(pip.grow(2.0), GameArt.INK)
+		draw_rect(pip, GameArt.GOLD)
 
 
 # A ring of gold dashes that slowly turns.

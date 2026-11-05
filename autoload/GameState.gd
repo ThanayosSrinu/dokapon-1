@@ -22,8 +22,18 @@ var players: Array[PlayerData] = []
 ## The current day, starting at 1. A day is one turn by each player.
 var day := 1
 
-## Town space ID -> owning PlayerData. Filled in Section 7.
+## Town space ID -> {"name", "steps"}: its name and how far it is from the castle.
+## It comes from the map, so it does not need saving.
+var towns := {}
+
+## Town space ID -> owning PlayerData. A town with no owner is held by monsters.
 var town_owners := {}
+
+## Town space ID -> its level, for towns with an owner. See Town.
+var town_levels := {}
+
+## This week's royal quest. See Quest.
+var quest := {}
 
 ## Treasure space ID -> the day its chest was emptied. See SpaceEffects.
 var emptied_chests := {}
@@ -36,7 +46,10 @@ func start_new_game(new_players: Array[PlayerData], seed_value := 0) -> void:
 	rng.seed = game_seed
 	players = _shuffled(new_players)
 	day = 1
+	towns = {}
 	town_owners.clear()
+	town_levels.clear()
+	quest = {}
 	emptied_chests.clear()
 	print("New game: seed %d, turn order %s" % [game_seed, ", ".join(get_player_names())])
 

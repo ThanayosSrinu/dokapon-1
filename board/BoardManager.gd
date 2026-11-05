@@ -138,6 +138,24 @@ func get_starting_node() -> BoardNode:
 	return null
 
 
+## Every town on the map: space id -> {"name", "steps"}, where `steps` is the
+## shortest walk from the castle. Town.gd works out its numbers from this.
+func get_town_info() -> Dictionary:
+	var steps := {get_starting_node(): 0}
+	var queue: Array[BoardNode] = [get_starting_node()]
+	while not queue.is_empty():
+		var current: BoardNode = queue.pop_front()
+		for neighbor in get_neighbors(current):
+			if not steps.has(neighbor):
+				steps[neighbor] = steps[current] + 1
+				queue.append(neighbor)
+	var towns := {}
+	for node in _nodes:
+		if node.node_type == BoardNode.NodeType.TOWN:
+			towns[node.node_id] = {"name": node.get_display_name(), "steps": steps.get(node, 0)}
+	return towns
+
+
 ## Returns all spaces linked to `node`, from either end.
 func get_neighbors(node: BoardNode) -> Array[BoardNode]:
 	var result: Array[BoardNode] = []

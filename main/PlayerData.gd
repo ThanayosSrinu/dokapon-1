@@ -51,6 +51,8 @@ var equipment := {}
 var spells: Array[String] = []
 ## Turns left to sit out, after a knockout or a snare.
 var turns_to_skip := 0
+## How much of this week's royal quest this player has done.
+var quest_progress := 0
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:

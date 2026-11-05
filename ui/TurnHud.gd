@@ -17,12 +17,17 @@ const WAITING_OPACITY := 0.55
 ## Gets one row per player. Drag PlayerList here.
 @export var player_list: Container
 
+## Shows this week's royal quest. Drag QuestLabel here.
+@export var quest_label: Label
+
 # PlayerData -> that player's row (HBoxContainer).
 var _rows := {}
 # PlayerData -> the portrait in that player's row.
 var _portraits := {}
 # PlayerData -> the label with that player's numbers.
 var _labels := {}
+# The player whose turn it is, whose quest progress is shown.
+var _active: PlayerData
 
 
 func _ready() -> void:
@@ -41,13 +46,13 @@ func setup(players: Array[PlayerData]) -> void:
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", 14)
 		_labels[player] = label
-		player.changed.connect(_show_numbers.bind(player))
-		_show_numbers(player)
+		player.changed.connect(refresh)
 		row.add_child(portrait)
 		row.add_child(label)
 		player_list.add_child(row)
 		_rows[player] = row
 		_portraits[player] = portrait
+	refresh()
 
 	# Wait a frame, so the rows are laid out before measuring the panel.
 	await get_tree().process_frame
@@ -57,9 +62,17 @@ func setup(players: Array[PlayerData]) -> void:
 	tween.tween_property(self, "position:x", target, 0.5)
 
 
-func _show_numbers(player: PlayerData) -> void:
-	_labels[player].text = "%s Lv %d %s\nHP %d/%d  %d G" % [player.player_name, player.level,
-			player.get_class_name_text(), player.hp, player.get_stat("max_hp"), player.gold]
+## Rewrites every number. Anyone's gold can change everyone's place.
+func refresh() -> void:
+	var place := 0
+	for player in Town.ranking():
+		place += 1
+		_labels[player].text = "#%d %s Lv %d %s\nHP %d/%d  %d G\nWorth %d  Towns %d" % [place,
+				player.player_name, player.level, player.get_class_name_text(), player.hp,
+				player.get_stat("max_hp"), player.gold, Town.net_worth(player),
+				Town.towns_of(player).size()]
+	if _active != null:
+		quest_label.text = Quest.status_text(_active)
 
 
 func _make_portrait(player: PlayerData) -> Control:
@@ -95,6 +108,8 @@ func _on_day_started(_day: int) -> void:
 
 
 func _on_turn_started(active_player: PlayerData) -> void:
+	_active = active_player
+	refresh()
 	for player: PlayerData in _rows:
 		_rows[player].modulate.a = 1.0 if player == active_player else WAITING_OPACITY
 

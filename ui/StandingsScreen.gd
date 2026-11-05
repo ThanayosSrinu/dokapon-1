@@ -1,0 +1,88 @@
+class_name StandingsScreen
+extends CenterContainer
+## Who is ahead: everyone's net worth, richest first. It only reads the rules in
+## Town.gd, and changes nothing.
+
+const WIDTH := 560.0
+const PORTRAIT_SIZE := Vector2(32, 32)
+const HEADINGS: Array[String] = ["", "", "Gold", "Gear", "Towns", "Worth"]
+
+var _grid: GridContainer
+var _towns: Label
+var _quest: Label
+var _close: Button
+
+
+func _ready() -> void:
+	# Keeps clicks from reaching the board and buttons behind the window.
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var panel := PanelContainer.new()
+	add_child(panel)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(WIDTH, 0)
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+
+	var heading := Label.new()
+	heading.text = "Standings"
+	heading.add_theme_color_override("font_color", GameArt.GOLD)
+	heading.add_theme_font_size_override("font_size", 22)
+	box.add_child(heading)
+	_grid = GridContainer.new()
+	_grid.columns = HEADINGS.size()
+	_grid.add_theme_constant_override("h_separation", 18)
+	_grid.add_theme_constant_override("v_separation", 6)
+	box.add_child(_grid)
+	_towns = Label.new()
+	box.add_child(_towns)
+	_quest = Label.new()
+	box.add_child(_quest)
+	_close = Button.new()
+	_close.text = "Close"
+	_close.pressed.connect(hide)
+	box.add_child(_close)
+	hide()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if visible and event.is_action_pressed("ui_cancel"):
+		hide()
+
+
+## Reads the standings and shows them. `viewer` decides whose quest progress to show.
+func open(viewer: PlayerData) -> void:
+	for child in _grid.get_children():
+		_grid.remove_child(child)
+		child.queue_free()
+	for text in HEADINGS:
+		_add_cell(text, GameArt.GOLD)
+	var place := 0
+	for player in Town.ranking():
+		place += 1
+		_add_portrait(player)
+		_add_cell("%d. %s" % [place, player.player_name], Color.WHITE)
+		_add_cell(str(player.gold), Color.WHITE)
+		_add_cell(str(Town.gear_value(player)), Color.WHITE)
+		_add_cell("%d (%d)" % [Town.towns_of(player).size(), Town.town_value(player)], Color.WHITE)
+		_add_cell(str(Town.net_worth(player)), GameArt.GOLD)
+	_towns.text = "Monsters still hold %d of %d towns." % [Town.unclaimed().size(), Town.ids().size()]
+	_quest.text = Quest.status_text(viewer)
+	show()
+	_close.grab_focus()
+
+
+func _add_cell(text: String, color: Color) -> void:
+	var cell := Label.new()
+	cell.text = text
+	cell.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cell.add_theme_color_override("font_color", color)
+	_grid.add_child(cell)
+
+
+func _add_portrait(player: PlayerData) -> void:
+	var face := TextureRect.new()
+	face.texture = GameArt.portrait(player.character_sheet)
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.custom_minimum_size = PORTRAIT_SIZE
+	_grid.add_child(face)

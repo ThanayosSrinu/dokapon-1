@@ -24,6 +24,8 @@ func _ready() -> void:
 			var gear := PackedStringArray()
 			for item_id: String in player.equipment.values():
 				gear.append(item_id)
-			print("%-7s %-8s Lv %2d  %5d G  %s" % [player.player_name, player.get_class_name_text(),
-					player.level, player.gold, ", ".join(gear)])
+			print("%-7s %-8s Lv %2d  %5d G  %d towns  worth %5d  %s" % [player.player_name,
+					player.get_class_name_text(), player.level, player.gold, Town.towns_of(player).size(),
+					Town.net_worth(player), ", ".join(gear)])
+		print("Quest: %s, won by %s" % [Quest.task_text(), GameState.quest["winner"]])
 	get_tree().quit()

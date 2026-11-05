@@ -8,9 +8,11 @@ extends Node2D
 ##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
 ##   SPACE_EVENT    Offer to fight anyone on the space. If nobody is challenged,
-##                  the space takes effect. SpaceEffects and Shop hold the rules.
+##                  the space takes effect. SpaceEffects, Shop and Town hold the rules.
 ##   BATTLE         BattleScreen plays the fight.
-## Press C or the Character button to open the active player's sheet.
+## Each new week pays the owners of towns and posts a royal quest (Quest.gd).
+## Press C or the Character button to open the active player's sheet, and R or
+## the Standings button to see who is ahead.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
 ## Scene layout:
@@ -34,6 +36,7 @@ extends Node2D
 ##       ├── BattleScreen
 ##       ├── ShopScreen
 ##       ├── BagPrompt
+##       ├── StandingsScreen
 ##       └── Fade (ColorRect)
 
 ## Emitted by the buttons from _ask(), with the value of the one pressed.
@@ -59,7 +62,7 @@ const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.NORMAL: "An ordinary space. Nothing happens.",
 	BoardNode.NodeType.SHOP: "A shop, with new stock every week.",
 	BoardNode.NodeType.EVENT: "An event space! (Events are not implemented yet.)",
-	BoardNode.NodeType.TOWN: "A town. (Towns are not implemented yet.)",
+	BoardNode.NodeType.TOWN: "One of the towns of the realm.",
 	BoardNode.NodeType.ITEM: "Something glints on the ground.",
 	BoardNode.NodeType.MAGIC: "The air hums with old magic.",
 	BoardNode.NodeType.GOLD: "Coins shine in the dirt.",
@@ -131,6 +134,12 @@ const CPU_CHALLENGE_CHANCE := 0.5
 ## Asks what to drop when the bag is full. Drag BagPrompt here.
 @export var bag_prompt: BagPrompt
 
+## Shows who is ahead. Drag StandingsScreen here.
+@export var standings_screen: StandingsScreen
+
+## Opens the standings. Drag StandingsButton here.
+@export var standings_button: Button
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -172,6 +181,8 @@ var _text_tween: Tween
 var _button_tween: Tween
 # True if the space just played hurt the active player, so nobody cheers.
 var _landing_went_badly := false
+# A quest won on the way, to add to the landing message.
+var _quest_news := ""
 
 
 func _ready() -> void:
@@ -181,7 +192,8 @@ func _ready() -> void:
 			or hud == null or banner == null or setup_menu == null or fade == null
 			or message_window == null or info_panel == null or class_menu == null
 			or character_sheet == null or character_button == null or battle_screen == null
-			or shop_screen == null or bag_prompt == null):
+			or shop_screen == null or bag_prompt == null or standings_screen == null
+			or standings_button == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -196,9 +208,12 @@ func _ready() -> void:
 	# Board clicks and phase changes arrive through the global EventBus autoload.
 	EventBus.space_clicked.connect(_on_space_clicked)
 	EventBus.phase_changed.connect(_on_phase_changed)
+	EventBus.day_started.connect(_on_day_started)
 	setup_menu.player_count_chosen.connect(_start_game)
 	character_button.pressed.connect(_open_character_sheet)
 	character_sheet.hidden.connect(_on_character_sheet_hidden)
+	standings_button.pressed.connect(_open_standings)
+	standings_screen.hidden.connect(_on_character_sheet_hidden)
 
 	camera.world_limit = board.get_world_rect()
 	camera.global_position = board.get_bounds().get_center()
@@ -228,6 +243,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			character_sheet.close_sheet()
 		else:
 			_open_character_sheet()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_R:
+		if standings_screen.visible:
+			standings_screen.hide()
+		else:
+			_open_standings()
 
 
 # --- Signal handlers --------------------------------------------------------
@@ -262,10 +282,12 @@ func _on_roll_button_pressed() -> void:
 	player.move_steps(_last_roll)
 
 
-func _on_step_finished(_node: BoardNode, steps_remaining: int) -> void:
+func _on_step_finished(node: BoardNode, steps_remaining: int) -> void:
 	# Every step, and every choice at a fork, narrows down where the move ends.
 	var player := _active_player()
 	_set_landing_nodes(player.get_landing_preview(steps_remaining))
+	if node.node_type == BoardNode.NodeType.TOWN:
+		_quest_news += _advance_quest(turn_manager.current_player(), Quest.Kind.VISIT, node.node_id)
 	_show_status("%s - Rolled %d\n%d step(s) left" % [_turn_title(), _last_roll, steps_remaining])
 
 
@@ -306,11 +328,14 @@ func _on_space_clicked(node: BoardNode) -> void:
 	var neighbor_texts := PackedStringArray()
 	for neighbor in board.get_neighbors(node):
 		neighbor_texts.append("#%d %s" % [neighbor.node_id, neighbor.get_display_name()])
+	var about: String = TYPE_DESCRIPTIONS.get(node.node_type, "")
+	if GameState.towns.has(node.node_id):
+		about = _town_text(node.node_id)
 	info_label.text = "Space #%d: %s\nType: %s\n%s\nNeighbors: %s" % [
 		node.node_id,
 		node.get_display_name(),
 		node.get_type_name(),
-		TYPE_DESCRIPTIONS.get(node.node_type, ""),
+		about,
 		", ".join(neighbor_texts),
 	]
 	# A PanelContainer never shrinks by itself when its text gets shorter.
@@ -323,6 +348,23 @@ func _on_movement_finished(final_node: BoardNode) -> void:
 	_set_landing_nodes(no_nodes)
 	_arrange_tokens()
 	turn_manager.go_to(TurnManager.Phase.SPACE_EVENT)
+
+
+## Each week begins by paying the town owners and posting a new quest.
+func _on_day_started(_day: int) -> void:
+	if GameState.get_day_of_week() != 1:
+		return
+	var payments := PackedStringArray()
+	var paid := Town.collect_income()
+	for player: PlayerData in paid:
+		payments.append("%s %d G" % [player.player_name, paid[player]])
+		BoardFx.pop_text(board, _tokens[player].global_position, "+%d G" % paid[player], GOLD_TEXT_COLOR)
+	Quest.new_week()
+	hud.refresh()
+	_previous_result = "Week %d. Royal quest: %s, for %d G." % [GameState.get_week(),
+			Quest.task_text(), GameState.quest["reward"]]
+	if not payments.is_empty():
+		_previous_result += "\nTown income: %s." % ", ".join(payments)
 
 
 func _on_phase_changed(phase: TurnManager.Phase) -> void:
@@ -377,6 +419,8 @@ func _enter_space_event() -> void:
 		space.get_display_name(),
 		TYPE_DESCRIPTIONS.get(space.node_type, ""),
 	]
+	_previous_result += _quest_news
+	_quest_news = ""
 	_show_status(_previous_result)
 	space.bump(1.6)
 	BoardFx.burst(board, space.global_position, BoardNode.TYPE_INFO[space.node_type]["color"])
@@ -413,6 +457,8 @@ func _play_space(space: BoardNode) -> void:
 			await _visit_shop(space)
 		BoardNode.NodeType.TREASURE:
 			await _visit_chest(space)
+		BoardNode.NodeType.TOWN:
+			await _visit_town(space)
 		BoardNode.NodeType.BATTLE:
 			await _play_battle(Battle.new(Fighter.from_player(data), Fighter.from_monster(_pick_monster(data))))
 
@@ -488,10 +534,105 @@ func _visit_chest(space: BoardNode) -> void:
 		_show_status("%s\nThe %s guards it!" % [_previous_result, chest.guardian.display_name])
 		var battle := Battle.new(Fighter.from_player(data), Fighter.from_monster(chest.guardian))
 		await _play_battle(battle)
-		if battle.winner == null or battle.winner.player != data:
+		if not _won(battle, data):
 			return
 	SpaceEffects.empty_chest(space.node_id)
 	await _apply_result(chest)
+
+
+## Does what a town does for whoever stopped there.
+func _visit_town(space: BoardNode) -> void:
+	var town_owner := Town.owner_of(space.node_id)
+	if town_owner == null:
+		await _free_town(space)
+	elif town_owner == turn_manager.current_player():
+		await _manage_town(space)
+	else:
+		await _enter_rival_town(space, town_owner)
+
+
+## Offers a fight with the monster holding the town. The winner owns it.
+func _free_town(space: BoardNode) -> void:
+	var data := turn_manager.current_player()
+	var id := space.node_id
+	var guard := Town.guard(id)
+	var line := "%s (level %d) holds %s." % [guard.display_name, guard.level, space.get_display_name()]
+	var fight: Variant = Town.cpu_will_fight(data, id)
+	if not data.is_cpu:
+		fight = await _ask("%s\n%s Free it, and it pays %d G a week." % [_previous_result, line, Town.income(id)],
+				[["Fight", true], ["Leave it", false]])
+	if not fight:
+		_say("%s %s kept away." % [line, data.player_name])
+		return
+	var battle := Battle.new(Fighter.from_player(data), Fighter.from_monster(guard))
+	await _play_battle(battle)
+	if not _won(battle, data):
+		return
+	Town.claim(id, data)
+	_show_town(space)
+	BoardFx.burst(board, space.global_position, data.token_color)
+	_say("%s is free, and it is %s's town now!" % [space.get_display_name(), data.player_name])
+	_say(_advance_quest(data, Quest.Kind.FREE))
+
+
+## Offers to raise the player's own town.
+func _manage_town(space: BoardNode) -> void:
+	var data := turn_manager.current_player()
+	var id := space.node_id
+	if Town.level(id) >= Town.MAX_LEVEL:
+		_say("%s is as grand as a town can be." % space.get_display_name())
+		return
+	var cost := Town.invest_cost(id)
+	var problem := Town.why_not_invest(data, id)
+	if problem != "":
+		_say("Growing %s costs %d G. %s" % [space.get_display_name(), cost, problem])
+		return
+	var invest: Variant = Town.cpu_will_invest(data, id)
+	if not data.is_cpu:
+		invest = await _ask("%s\nGrow %s to level %d? It would pay %d G a week instead of %d G."
+				% [_previous_result, space.get_display_name(), Town.level(id) + 1,
+				Town.income(id, Town.level(id) + 1), Town.income(id)],
+				[["Invest %d G" % cost, true], ["Not now", false]])
+	if not invest:
+		return
+	Town.invest(data, id)
+	_show_town(space)
+	BoardFx.pop_text(board, space.global_position, "-%d G" % cost, LOSS_TEXT_COLOR)
+	_say("%s grew to level %d!" % [space.get_display_name(), Town.level(id)])
+
+
+## Someone else's town: pay the toll, or fight its guard to take it. Running from
+## the guard, or fighting it to a draw, still costs the toll.
+func _enter_rival_town(space: BoardNode, town_owner: PlayerData) -> void:
+	var data := turn_manager.current_player()
+	var id := space.node_id
+	var guard := Town.guard(id)
+	var storm: Variant = Town.cpu_will_fight(data, id)
+	if not data.is_cpu:
+		storm = await _ask("%s\n%s owns this town. %s (level %d) guards it." % [_previous_result,
+				town_owner.player_name, guard.display_name, guard.level],
+				[["Pay %d G" % Town.toll(id), false], ["Storm it", true]])
+	if storm:
+		var battle := Battle.new(Fighter.from_player(data), Fighter.from_monster(guard))
+		await _play_battle(battle)
+		if _won(battle, data):
+			Town.seize(id, data)
+			_show_town(space)
+			_say("%s takes %s from %s!" % [data.player_name, space.get_display_name(), town_owner.player_name])
+			return
+		if battle.loser != null:
+			return
+	var paid := Town.pay_toll(data, id)
+	_landing_went_badly = true
+	_say("%s pays %s a toll of %d G." % [data.player_name, town_owner.player_name, paid])
+	if paid > 0:
+		BoardFx.pop_text(board, _tokens[data].global_position, "-%d G" % paid, LOSS_TEXT_COLOR)
+		BoardFx.pop_text(board, _tokens[town_owner].global_position, "+%d G" % paid, GOLD_TEXT_COLOR)
+
+
+## True if `player` won `battle` by a knockout.
+func _won(battle: Battle, player: PlayerData) -> bool:
+	return battle.winner != null and battle.winner.player == player
 
 
 ## Plays `battle`, then sends the loser home.
@@ -505,6 +646,9 @@ func _play_battle(battle: Battle) -> void:
 	if battle.loser != null and battle.loser.player != null:
 		_send_to_castle(battle.loser.player)
 		_landing_went_badly = true
+	if battle.winner != null and battle.winner.player != null:
+		var kind := Quest.Kind.HUNT if battle.loser.monster != null else Quest.Kind.DUEL
+		_say(_advance_quest(battle.winner.player, kind))
 
 
 # --- Internal helpers -------------------------------------------------------
@@ -531,6 +675,9 @@ func _start_game(player_count: int) -> void:
 		token.path_choice_required.connect(_on_path_choice_required)
 
 	GameState.start_new_game(roster, game_seed)
+	Town.setup(board.get_town_info())
+	for id in Town.ids():
+		_show_town(board.get_board_node(id))
 	for player in GameState.players:
 		if player.is_cpu:
 			var ids := Database.sorted_ids(Database.classes)
@@ -571,6 +718,46 @@ func _ask_about_rivals(space: BoardNode) -> PlayerData:
 	return await _ask("%s\nChallenge someone here?" % _previous_result, options)
 
 
+## Counts a deed toward the royal quest, and pays out if that finished it. Returns
+## a sentence about it, or "".
+func _advance_quest(player: PlayerData, kind: Quest.Kind, target := -1) -> String:
+	var reward := Quest.record(player, kind, target)
+	hud.refresh()
+	if reward == 0:
+		return ""
+	player.add_gold(reward)
+	BoardFx.pop_text(board, _tokens[player].global_position, "Quest! +%d G" % reward, GOLD_TEXT_COLOR)
+	return " Royal quest done! %s earns %d G." % [player.player_name, reward]
+
+
+## Adds a sentence to the message window. An empty one changes nothing.
+func _say(line: String) -> void:
+	if line == "":
+		return
+	_previous_result += " " + line.strip_edges()
+	_show_status(_previous_result)
+
+
+## Draws who holds a town on its space.
+func _show_town(space: BoardNode) -> void:
+	var town_owner := Town.owner_of(space.node_id)
+	if town_owner == null:
+		space.show_town(Color.TRANSPARENT, 0, Town.guard(space.node_id).sheet)
+	else:
+		space.show_town(town_owner.token_color, Town.level(space.node_id), null)
+
+
+## What the info box says about a town.
+func _town_text(id: int) -> String:
+	var town_owner := Town.owner_of(id)
+	var guard := Town.guard(id)
+	if town_owner == null:
+		return "Held by %s, level %d. Free it for %d G a week." % [guard.display_name, guard.level, Town.income(id)]
+	return "%s's town, level %d of %d. Pays %d G a week. Toll %d G. Guard: %s, level %d." % [
+			town_owner.player_name, Town.level(id), Town.MAX_LEVEL, Town.income(id), Town.toll(id),
+			guard.display_name, guard.level]
+
+
 ## Shows `question` with one button per option, each a [text, value] pair.
 ## Returns the value of the one pressed.
 func _ask(question: String, options: Array) -> Variant:
@@ -605,11 +792,22 @@ func _send_to_castle(player: PlayerData) -> void:
 
 ## Only the active human player may change things, and only before rolling.
 func _open_character_sheet() -> void:
-	# The HUD appears once every player has a class. These fill the screen.
-	if not hud.visible or battle_screen.visible or shop_screen.visible or bag_prompt.visible:
+	# The HUD appears once every player has a class.
+	if not hud.visible or _a_window_is_open():
 		return
 	var player := turn_manager.current_player()
 	character_sheet.open(player, not player.is_cpu and turn_manager.phase == TurnManager.Phase.ACTION)
+
+
+func _open_standings() -> void:
+	if hud.visible and not _a_window_is_open():
+		standings_screen.open(turn_manager.current_player())
+
+
+## These fill the screen.
+func _a_window_is_open() -> bool:
+	return (battle_screen.visible or shop_screen.visible or bag_prompt.visible
+			or character_sheet.visible or standings_screen.visible)
 
 
 func _on_character_sheet_hidden() -> void:
