@@ -38,6 +38,15 @@ var quest := {}
 ## Treasure space ID -> the day its chest was emptied. See SpaceEffects.
 var emptied_chests := {}
 
+## Who wears the Shadow Crown and until when. Empty if nobody does. See ShadowCrown.
+var shadow_crown := {}
+
+## The week the Shadow Crown last left someone, or 0 if it never has.
+var crown_left_week := 0
+
+## The castle's space ID. It comes from the map, so it does not need saving.
+var castle_id := -1
+
 
 ## Resets everything for a new game and decides the turn order at random.
 ## A `seed_value` of 0 picks a new random seed.
@@ -51,6 +60,9 @@ func start_new_game(new_players: Array[PlayerData], seed_value := 0) -> void:
 	town_levels.clear()
 	quest = {}
 	emptied_chests.clear()
+	shadow_crown = {}
+	crown_left_week = 0
+	castle_id = -1
 	print("New game: seed %d, turn order %s" % [game_seed, ", ".join(get_player_names())])
 
 

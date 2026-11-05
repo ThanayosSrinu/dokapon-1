@@ -48,7 +48,7 @@ static func from_player(source: PlayerData) -> Fighter:
 	fighter.display_name = source.player_name
 	fighter.level = source.level
 	fighter.sheet = source.character_sheet
-	fighter.color = source.token_color
+	fighter.color = ShadowCrown.COLOR if ShadowCrown.is_worn_by(source) else source.token_color
 	return fighter
 
 
@@ -64,7 +64,7 @@ static func from_monster(source: MonsterData) -> Fighter:
 
 
 func get_stat(stat: String) -> int:
-	return player.get_stat(stat) if player != null else monster.stats[stat]
+	return ShadowCrown.boost(player, stat, player.get_stat(stat)) if player != null else monster.stats[stat]
 
 
 ## True when nobody chooses this fighter's moves on screen.
@@ -72,8 +72,12 @@ func is_cpu() -> bool:
 	return player == null or player.is_cpu
 
 
+## The spells usable in battle. Field magic is for the board.
 func get_spells() -> Array[String]:
-	return player.spells if player != null else monster.spells
+	if player == null:
+		return monster.spells
+	return player.spells.filter(func(id: String) -> bool:
+			return Database.get_spell(id).kind != SpellData.Kind.FIELD)
 
 
 ## The healing items in the bag, without repeats. Monsters carry none.

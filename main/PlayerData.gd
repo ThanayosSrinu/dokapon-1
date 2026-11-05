@@ -53,6 +53,10 @@ var spells: Array[String] = []
 var turns_to_skip := 0
 ## How much of this week's royal quest this player has done.
 var quest_progress := 0
+## Added to this player's next roll, then cleared. Below 0 after a Mire spell.
+var roll_bonus := 0
+## The names of the rivals who knocked this player out. See Rivalry.
+var grudges: Array[String] = []
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:
@@ -184,6 +188,23 @@ func heal_fully() -> void:
 	hp = get_stat("max_hp")
 	mp = get_stat("max_mp")
 	changed.emit()
+
+
+func spend_mp(amount: int) -> void:
+	mp = maxi(mp - amount, 0)
+	changed.emit()
+
+
+func add_roll_bonus(amount: int) -> void:
+	roll_bonus += amount
+	changed.emit()
+
+
+## Returns the bonus for this roll and clears it.
+func take_roll_bonus() -> int:
+	var bonus := roll_bonus
+	roll_bonus = 0
+	return bonus
 
 
 func refill_mp() -> void:

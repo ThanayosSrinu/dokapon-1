@@ -233,8 +233,7 @@ func _test_pvp_rewards() -> void:
 	battle.opponent.level = 3
 	battle.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.COUNTER)
 	battle.conclude()
-	_expect(red.gold == 50, "the winner takes the loser's dropped gold")
-	_expect(blue.gold == 150, "the loser pays it")
+	_expect(red.gold == 0 and blue.gold == 200, "a rival's spoils are left to Rivalry")
 	_expect(_total_exp(red) == Battle.PVP_EXP_PER_LEVEL * 3, "PvP EXP depends on the loser's level")
 
 

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SpellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/SpellData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "mire"
+display_name = "Mire"
+description = "Turns a rival's road to mud. Their next roll gets -2."
+kind = 2
+mp_cost = 3
+field_effect = 2
+field_level = 1

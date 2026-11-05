@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SpellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/SpellData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "gold_leech"
+display_name = "Gold Leech"
+description = "Draws a tenth of a rival's gold into your purse."
+kind = 2
+mp_cost = 6
+field_effect = 4
+field_level = 3

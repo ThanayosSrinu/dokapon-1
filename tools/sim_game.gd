@@ -28,4 +28,7 @@ func _ready() -> void:
 					player.get_class_name_text(), player.level, player.gold, Town.towns_of(player).size(),
 					Town.net_worth(player), ", ".join(gear)])
 		print("Quest: %s, won by %s" % [Quest.task_text(), GameState.quest["winner"]])
+		if ShadowCrown.wearer() != null:
+			print(ShadowCrown.status_text())
+		print(Rivalry.grudge_text())
 	get_tree().quit()

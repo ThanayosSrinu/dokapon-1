@@ -159,12 +159,27 @@ static func seize(id: int, player: PlayerData) -> void:
 	player.changed.emit()
 
 
-## Pays every owner for the week. Returns PlayerData -> gold, for those with towns.
+## Monsters attack a town: it drops a level, or falls to them from level 1. Returns
+## true if its owner lost it.
+static func raid(id: int) -> bool:
+	var old_owner := owner_of(id)
+	var lost := level(id) <= 1
+	if lost:
+		GameState.town_owners.erase(id)
+		GameState.town_levels.erase(id)
+	else:
+		GameState.town_levels[id] = level(id) - 1
+	old_owner.changed.emit()
+	return lost
+
+
+## Pays every owner for the week, except the wearer of the Shadow Crown. Returns
+## PlayerData -> gold, for those paid.
 static func collect_income() -> Dictionary:
 	var paid := {}
 	for id in ids():
 		var town_owner := owner_of(id)
-		if town_owner != null:
+		if town_owner != null and not ShadowCrown.is_worn_by(town_owner):
 			paid[town_owner] = paid.get(town_owner, 0) + income(id)
 	for player: PlayerData in paid:
 		player.add_gold(paid[player])

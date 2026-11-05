@@ -32,6 +32,8 @@ const RING_SQUASH := 0.5
 const RING_WIDTH := 4.0
 ## Height of the arrow and the step counter over the character's feet.
 const HEAD_HEIGHT := 46.0
+## The shadow that falls over whoever wears the Shadow Crown.
+const CROWNED_TINT := Color(0.68, 0.55, 0.92)
 # Moving tokens are drawn above idle ones, which are above the board.
 const IDLE_Z_INDEX := 1
 const MOVING_Z_INDEX := 10
@@ -79,6 +81,9 @@ var current_node: BoardNode
 
 ## True while move_steps() is running (sliding or waiting at a fork).
 var is_moving := false
+
+## True while this player wears the Shadow Crown.
+var is_crowned := false
 
 ## Steps still to walk in this move. Drawn above the token while moving.
 var steps_left := 0:
@@ -139,6 +144,13 @@ func _process(delta: float) -> void:
 
 
 # --- Public API -------------------------------------------------------------
+
+## Shows or hides the Shadow Crown on this token.
+func set_crowned(crowned: bool) -> void:
+	is_crowned = crowned
+	_sprite.modulate = CROWNED_TINT if crowned else Color.WHITE
+	_overlay.queue_redraw()
+
 
 ## Places the player on `node` instantly, without animation.
 func spawn_at(node: BoardNode) -> void:
@@ -310,6 +322,10 @@ func _draw() -> void:
 
 
 func _draw_overlay() -> void:
+	if is_crowned:
+		var crown_size := GameArt.SHADOW_CROWN.get_size() * GameArt.PIXEL
+		_overlay.draw_texture_rect(GameArt.SHADOW_CROWN,
+				Rect2(Vector2(-crown_size.x * 0.5, -HEAD_HEIGHT - crown_size.y + 12.0), crown_size), false)
 	if steps_left > 0:
 		GameArt.draw_plate(_overlay, str(steps_left), Vector2(0, -HEAD_HEIGHT - 16.0), 24)
 	elif is_active and not is_moving:

@@ -335,6 +335,30 @@ def make_fx():
     flag.save(OUT / "flag.png")
 
 
+# --- Shadow Crown -----------------------------------------------------------
+
+def make_crown():
+    rows = [
+        "..#...#...#..",
+        "..#...#...#..",
+        ".#m#.#m#.#m#.",
+        ".#m#.#m#.#m#.",
+        "#mmm#mmm#mmm#",
+        "#mmmmmgmmmmm#",
+        "#mmmmgGgmmmm#",
+        "#dddddgddddd#",
+        ".###########.",
+    ]
+    colors = {"#": INK, "m": hexc("#6a3fb5"), "d": hexc("#43277d"),
+              "g": hexc("#d8423f"), "G": hexc("#f6a0a0")}
+    crown = Image.new("RGBA", (len(rows[0]), len(rows)), (0, 0, 0, 0))
+    for y, row in enumerate(rows):
+        for x, key in enumerate(row):
+            if key in colors:
+                crown.putpixel((x, y), colors[key])
+    crown.save(OUT / "shadow_crown.png")
+
+
 # --- Interface --------------------------------------------------------------
 
 GOLD, GOLD_LIGHT, GOLD_DARK = hexc("#d9a441"), hexc("#f6dc86"), hexc("#8a5a1f")
@@ -766,6 +790,7 @@ if __name__ == "__main__":
     make_icons()
     make_die()
     make_fx()
+    make_crown()
     make_ui()
     make_battle()
     make_items()

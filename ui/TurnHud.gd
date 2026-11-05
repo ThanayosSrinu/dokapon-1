@@ -71,6 +71,8 @@ func refresh() -> void:
 				player.player_name, player.level, player.get_class_name_text(), player.hp,
 				player.get_stat("max_hp"), player.gold, Town.net_worth(player),
 				Town.towns_of(player).size()]
+		if ShadowCrown.is_worn_by(player):
+			_labels[player].text += "\nShadow Crown: %d day(s)" % ShadowCrown.days_left()
 	if _active != null:
 		quest_label.text = Quest.status_text(_active)
 

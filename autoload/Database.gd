@@ -129,7 +129,10 @@ func _check_item(item: ItemData, problems: PackedStringArray) -> void:
 
 
 func _check_spell(spell: SpellData, problems: PackedStringArray) -> void:
-	if spell.mp_cost <= 0 or spell.power <= 0:
+	if spell.kind == SpellData.Kind.FIELD:
+		if spell.mp_cost <= 0 or spell.field_effect == SpellData.FieldEffect.NONE:
+			problems.append("field spell %s needs mp_cost above 0 and a field_effect" % spell.id)
+	elif spell.mp_cost <= 0 or spell.power <= 0:
 		problems.append("spell %s needs mp_cost and power above 0" % spell.id)
 
 

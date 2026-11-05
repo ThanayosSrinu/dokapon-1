@@ -10,6 +10,7 @@ const HEADINGS: Array[String] = ["", "", "Gold", "Gear", "Towns", "Worth"]
 var _grid: GridContainer
 var _towns: Label
 var _quest: Label
+var _rivalry: Label
 var _close: Button
 
 
@@ -38,6 +39,10 @@ func _ready() -> void:
 	box.add_child(_towns)
 	_quest = Label.new()
 	box.add_child(_quest)
+	_rivalry = Label.new()
+	_rivalry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_rivalry.add_theme_color_override("font_color", GameArt.GOLD)
+	box.add_child(_rivalry)
 	_close = Button.new()
 	_close.text = "Close"
 	_close.pressed.connect(hide)
@@ -68,6 +73,12 @@ func open(viewer: PlayerData) -> void:
 		_add_cell(str(Town.net_worth(player)), GameArt.GOLD)
 	_towns.text = "Monsters still hold %d of %d towns." % [Town.unclaimed().size(), Town.ids().size()]
 	_quest.text = Quest.status_text(viewer)
+	var notes := PackedStringArray()
+	for note: String in [ShadowCrown.status_text(), Rivalry.grudge_text()]:
+		if note != "":
+			notes.append(note)
+	_rivalry.text = "\n".join(notes)
+	_rivalry.visible = not notes.is_empty()
 	show()
 	_close.grab_focus()
 

@@ -8,9 +8,12 @@ extends Node2D
 ##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
 ##   SPACE_EVENT    Offer to fight anyone on the space. If nobody is challenged,
-##                  the space takes effect. SpaceEffects, Shop and Town hold the rules.
-##   BATTLE         BattleScreen plays the fight.
-## Each new week pays the owners of towns and posts a royal quest (Quest.gd).
+##                  the space takes effect. SpaceEffects, Events, Shop and Town hold
+##                  the rules.
+##   BATTLE         BattleScreen plays the fight. Rivalry settles a duel afterwards.
+## During ACTION a player may also cast one field spell (FieldMagic.gd).
+## Each new week pays the owners of towns, posts a royal quest (Quest.gd) and checks
+## on the Shadow Crown (ShadowCrown.gd).
 ## Press C or the Character button to open the active player's sheet, and R or
 ## the Standings button to see who is ahead.
 ## Clicking any other space shows its details in the InfoLabel.
@@ -61,7 +64,7 @@ const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.CASTLE: "Back home at the castle.",
 	BoardNode.NodeType.NORMAL: "An ordinary space. Nothing happens.",
 	BoardNode.NodeType.SHOP: "A shop, with new stock every week.",
-	BoardNode.NodeType.EVENT: "An event space! (Events are not implemented yet.)",
+	BoardNode.NodeType.EVENT: "The wind changes. Anything could happen here.",
 	BoardNode.NodeType.TOWN: "One of the towns of the realm.",
 	BoardNode.NodeType.ITEM: "Something glints on the ground.",
 	BoardNode.NodeType.MAGIC: "The air hums with old magic.",
@@ -74,6 +77,7 @@ const TYPE_DESCRIPTIONS := {
 
 const GOLD_TEXT_COLOR := Color(0.96, 0.82, 0.42)
 const LOSS_TEXT_COLOR := Color(1.0, 0.55, 0.5)
+const EVENT_COLOR := Color(0.62, 0.42, 0.90)
 ## How often a CPU player challenges a rival it lands next to. Section 9 replaces
 ## this with real thinking.
 const CPU_CHALLENGE_CHANCE := 0.5
@@ -140,6 +144,9 @@ const CPU_CHALLENGE_CHANCE := 0.5
 ## Opens the standings. Drag StandingsButton here.
 @export var standings_button: Button
 
+## Casts field magic. Drag FieldButton here.
+@export var field_button: Button
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -183,6 +190,12 @@ var _button_tween: Tween
 var _landing_went_badly := false
 # A quest won on the way, to add to the landing message.
 var _quest_news := ""
+# True once the active player has cast field magic this turn.
+var _field_cast := false
+# What the Shadow Crown just did, for a banner before the next turn.
+var _crown_news := ""
+# The portrait for that banner.
+var _crown_face: Texture2D
 
 
 func _ready() -> void:
@@ -193,7 +206,7 @@ func _ready() -> void:
 			or message_window == null or info_panel == null or class_menu == null
 			or character_sheet == null or character_button == null or battle_screen == null
 			or shop_screen == null or bag_prompt == null or standings_screen == null
-			or standings_button == null):
+			or standings_button == null or field_button == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -213,6 +226,7 @@ func _ready() -> void:
 	character_button.pressed.connect(_open_character_sheet)
 	character_sheet.hidden.connect(_on_character_sheet_hidden)
 	standings_button.pressed.connect(_open_standings)
+	field_button.pressed.connect(_open_field_magic)
 	standings_screen.hidden.connect(_on_character_sheet_hidden)
 
 	camera.world_limit = board.get_world_rect()
@@ -248,6 +262,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			standings_screen.hide()
 		else:
 			_open_standings()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F:
+		_open_field_magic()
 
 
 # --- Signal handlers --------------------------------------------------------
@@ -262,12 +278,20 @@ func _on_roll_button_pressed() -> void:
 	_stop_button_pulse()
 	roll_button.disabled = true
 
+	field_button.hide()
+
 	var player := _active_player()
+	var data := turn_manager.current_player()
 	camera.follow(player)
 	_show_status("%s\nRolling..." % _turn_title())
-	_last_roll = await dice.roll()
+	var rolled: int = await dice.roll()
+	var bonus := data.take_roll_bonus() + ShadowCrown.roll_bonus(data)
+	_last_roll = maxi(rolled + bonus, 1)
 
-	_show_status("%s\nRolled a %d!" % [_turn_title(), _last_roll])
+	if bonus == 0:
+		_show_status("%s\nRolled a %d!" % [_turn_title(), _last_roll])
+	else:
+		_show_status("%s\nRolled a %d, %+d: %d step(s)!" % [_turn_title(), rolled, bonus, _last_roll])
 	_set_landing_nodes(player.get_landing_preview(_last_roll))
 	await get_tree().create_timer(preview_duration).timeout
 
@@ -350,7 +374,8 @@ func _on_movement_finished(final_node: BoardNode) -> void:
 	turn_manager.go_to(TurnManager.Phase.SPACE_EVENT)
 
 
-## Each week begins by paying the town owners and posting a new quest.
+## Each week begins by paying the town owners, posting a new quest and checking on
+## the Shadow Crown.
 func _on_day_started(_day: int) -> void:
 	if GameState.get_day_of_week() != 1:
 		return
@@ -365,9 +390,11 @@ func _on_day_started(_day: int) -> void:
 			Quest.task_text(), GameState.quest["reward"]]
 	if not payments.is_empty():
 		_previous_result += "\nTown income: %s." % ", ".join(payments)
+	_update_crown(ShadowCrown.weekly_check())
 
 
 func _on_phase_changed(phase: TurnManager.Phase) -> void:
+	field_button.hide()
 	match phase:
 		TurnManager.Phase.TURN_START:
 			_enter_turn_start()
@@ -383,7 +410,12 @@ func _enter_turn_start() -> void:
 	var player := turn_manager.current_player()
 	camera.follow(_active_player())
 	_active_player().is_active = true
+	_field_cast = false
 	_show_status(_after_previous_result(_turn_title()))
+	if _crown_news != "":
+		var news := _crown_news
+		_crown_news = ""
+		await banner.play(news, ShadowCrown.COLOR, _crown_face)
 	if player.turns_to_skip > 0:
 		player.turns_to_skip -= 1
 		await banner.play("%s rests" % player.player_name, player.token_color, player.character_sheet)
@@ -392,16 +424,31 @@ func _enter_turn_start() -> void:
 		turn_manager.end_turn()
 		return
 	await banner.play(_turn_title(), player.token_color, player.character_sheet)
+	if ShadowCrown.is_worn_by(player):
+		BoardFx.pop_text(board, _active_player().global_position,
+				"-%d HP" % ShadowCrown.drain(player), LOSS_TEXT_COLOR)
 	turn_manager.go_to(TurnManager.Phase.ACTION)
 
 
 func _enter_action() -> void:
-	if turn_manager.current_player().is_cpu:
+	var data := turn_manager.current_player()
+	if data.is_cpu:
+		var plan := FieldMagic.cpu_plan(data)
+		if not plan.is_empty():
+			await _cast_field_spell(data, plan["spell"], plan["target"])
 		_on_roll_button_pressed()
 		return
+	_wait_for_roll()
 
-	_show_status(_after_previous_result("%s\nPress \"Roll Dice\"." % _turn_title()))
+
+## Shows the prompt and lets the human player act.
+func _wait_for_roll() -> void:
+	var data := turn_manager.current_player()
+	var coming := data.roll_bonus + ShadowCrown.roll_bonus(data)
+	var note := "" if coming == 0 else " Your roll gets %+d." % coming
+	_show_status(_after_previous_result("%s\nPress \"Roll Dice\".%s" % [_turn_title(), note]))
 	roll_button.disabled = false
+	field_button.visible = not _field_cast and not FieldMagic.known(data).is_empty()
 	# Give the button keyboard focus, so Space or Enter also rolls.
 	roll_button.grab_focus()
 	_start_button_pulse()
@@ -453,6 +500,8 @@ func _play_space(space: BoardNode) -> void:
 			await _apply_result(SpaceEffects.shrine_space(data))
 		BoardNode.NodeType.TRAP:
 			await _apply_result(SpaceEffects.trap_space(data))
+		BoardNode.NodeType.EVENT:
+			await _play_event()
 		BoardNode.NodeType.SHOP:
 			await _visit_shop(space)
 		BoardNode.NodeType.TREASURE:
@@ -461,6 +510,19 @@ func _play_space(space: BoardNode) -> void:
 			await _visit_town(space)
 		BoardNode.NodeType.BATTLE:
 			await _play_battle(Battle.new(Fighter.from_player(data), Fighter.from_monster(_pick_monster(data))))
+
+
+## Draws an event, shows its banner, and fights if it is an ambush.
+func _play_event() -> void:
+	var data := turn_manager.current_player()
+	var spaces: Array[int] = []
+	for node in board.get_all_nodes():
+		spaces.append(node.node_id)
+	var result := Events.draw(data, spaces)
+	await banner.play(result.title, EVENT_COLOR, data.character_sheet)
+	await _apply_result(result)
+	if result.guardian != null:
+		await _play_battle(Battle.new(Fighter.from_player(data), Fighter.from_monster(result.guardian)))
 
 
 ## Pays out a Result and shows it in the message window.
@@ -478,6 +540,15 @@ func _apply_result(result: SpaceEffects.Result) -> void:
 				GOLD_TEXT_COLOR if result.gold > 0 else LOSS_TEXT_COLOR)
 	if result.item_id != "":
 		await _give_item(data, result.item_id)
+	for player: PlayerData in result.gold_changes:
+		var change: int = result.gold_changes[player]
+		player.add_gold(change)
+		BoardFx.pop_text(board, _tokens[player].global_position, "%+d G" % change,
+				GOLD_TEXT_COLOR if change > 0 else LOSS_TEXT_COLOR)
+	if result.town_id >= 0:
+		_show_town(board.get_board_node(result.town_id))
+	if result.warp_to >= 0:
+		_warp(data, board.get_board_node(result.warp_to))
 	if result.to_castle:
 		_send_to_castle(data)
 
@@ -504,6 +575,9 @@ func _give_item(data: PlayerData, item_id: String) -> void:
 ## People browse the ShopScreen. CPU players buy what they need straight away.
 func _visit_shop(space: BoardNode) -> void:
 	var data := turn_manager.current_player()
+	if ShadowCrown.is_worn_by(data):
+		_say("The shopkeeper sees the Shadow Crown and bars the door.")
+		return
 	var shelves := Shop.stock(space.node_id, GameState.get_week())
 	var line := ""
 	if data.is_cpu:
@@ -647,8 +721,85 @@ func _play_battle(battle: Battle) -> void:
 		_send_to_castle(battle.loser.player)
 		_landing_went_badly = true
 	if battle.winner != null and battle.winner.player != null:
+		if battle.loser.player != null:
+			await _settle_duel(battle)
 		var kind := Quest.Kind.HUNT if battle.loser.monster != null else Quest.Kind.DUEL
 		_say(_advance_quest(battle.winner.player, kind))
+
+
+## After a duel: the wearer of the Shadow Crown pays with the crown, and anyone else
+## with a spoil of the winner's choice.
+func _settle_duel(battle: Battle) -> void:
+	var winner := battle.winner.player
+	var loser := battle.loser.player
+	if ShadowCrown.is_worn_by(loser):
+		var bounty := ShadowCrown.shatter(winner)
+		_crown_face = loser.character_sheet
+		_update_crown({"shattered": loser.player_name})
+		BoardFx.pop_text(board, _tokens[winner].global_position, "+%d G" % bounty, GOLD_TEXT_COLOR)
+		_say("The Shadow Crown shatters! %s earns a bounty of %d G." % [winner.player_name, bounty])
+	else:
+		await _take_spoil(winner, loser)
+	_say(Rivalry.after_duel(winner, loser, battle.winner == battle.challenger))
+
+
+## Asks the winner what to take from the loser.
+func _take_spoil(winner: PlayerData, loser: PlayerData) -> void:
+	var options := Rivalry.spoils(winner, loser)
+	if options.is_empty():
+		_say("%s has nothing worth taking." % loser.player_name)
+		return
+	var spoil := Rivalry.cpu_spoil(options)
+	if not winner.is_cpu:
+		var buttons := []
+		for option in options:
+			buttons.append([option["text"], option])
+		spoil = await _ask("%s\n%s, choose your spoils." % [_previous_result, winner.player_name], buttons)
+	_say(Rivalry.take(winner, loser, spoil))
+	if spoil["kind"] == Rivalry.Spoil.TOWN:
+		_show_town(board.get_board_node(spoil["town"]))
+
+
+## Spends the MP, works the spell and shows it. `target` is null for a spell on the
+## caster.
+func _cast_field_spell(caster: PlayerData, spell_id: String, target: PlayerData) -> void:
+	_field_cast = true
+	var spell := Database.get_spell(spell_id)
+	_previous_result = "%s casts %s." % [caster.player_name, spell.display_name]
+	var aimed_at: PlayerData = target if target != null else caster
+	BoardFx.burst(board, _tokens[aimed_at].global_position, EVENT_COLOR)
+	await _apply_result(FieldMagic.cast(caster, spell_id, target))
+
+
+## Lets the active human player pick a field spell and a target. They can back out.
+func _open_field_magic() -> void:
+	if not field_button.visible or _a_window_is_open():
+		return
+	var data := turn_manager.current_player()
+	field_button.hide()
+	_stop_button_pulse()
+	var lines := PackedStringArray(["MP %d/%d. Cast one spell before you roll." % [data.mp, data.get_stat("max_mp")]])
+	var options := []
+	for id in FieldMagic.known(data):
+		var spell := Database.get_spell(id)
+		var problem := FieldMagic.why_not(data, id)
+		lines.append("%s, %d MP: %s %s" % [spell.display_name, spell.mp_cost, spell.description, problem])
+		if problem == "":
+			options.append([spell.display_name, id])
+	options.append(["Back", ""])
+	var spell_id: String = await _ask("\n".join(lines), options)
+	var target: PlayerData = null
+	if spell_id != "" and FieldMagic.targets_rival(spell_id):
+		var rivals := []
+		for rival in FieldMagic.valid_targets(data, spell_id):
+			rivals.append([rival.player_name, rival])
+		rivals.append(["Back", null])
+		target = await _ask("Cast %s at whom?" % Database.get_spell(spell_id).display_name, rivals)
+		if target == null:
+			spell_id = ""
+	if spell_id != "":
+		await _cast_field_spell(data, spell_id, target)
+	_wait_for_roll()
 
 
 # --- Internal helpers -------------------------------------------------------
@@ -676,6 +827,7 @@ func _start_game(player_count: int) -> void:
 
 	GameState.start_new_game(roster, game_seed)
 	Town.setup(board.get_town_info())
+	GameState.castle_id = board.get_starting_node().node_id
 	for id in Town.ids():
 		_show_town(board.get_board_node(id))
 	for player in GameState.players:
@@ -712,10 +864,14 @@ func _ask_about_rivals(space: BoardNode) -> PlayerData:
 		return null
 
 	var options := []
+	var question := "%s\nChallenge someone here?" % _previous_result
 	for rival in rivals:
 		options.append(["Challenge %s" % rival.player_name, rival])
+		var warning := Rivalry.warning(turn_manager.current_player(), rival)
+		if warning != "":
+			question += " " + warning
 	options.append(["Leave them be", null])
-	return await _ask("%s\nChallenge someone here?" % _previous_result, options)
+	return await _ask(question, options)
 
 
 ## Counts a deed toward the royal quest, and pays out if that finished it. Returns
@@ -728,6 +884,28 @@ func _advance_quest(player: PlayerData, kind: Quest.Kind, target := -1) -> Strin
 	player.add_gold(reward)
 	BoardFx.pop_text(board, _tokens[player].global_position, "Quest! +%d G" % reward, GOLD_TEXT_COLOR)
 	return " Royal quest done! %s earns %d G." % [player.player_name, reward]
+
+
+## Draws the crown on the right token, and queues a banner about `news`, which comes
+## from ShadowCrown.weekly_check() or _settle_duel().
+func _update_crown(news: Dictionary) -> void:
+	for player: PlayerData in _tokens:
+		_tokens[player].set_crowned(ShadowCrown.is_worn_by(player))
+	hud.refresh()
+	if news.has("shattered"):
+		_crown_news = "Crown Shattered"
+	if news.has("lifted"):
+		for player: PlayerData in _tokens:
+			if player.player_name == news["lifted"]:
+				_crown_face = player.character_sheet
+		_crown_news = "The Crown Lifts"
+		_previous_result += "\nThe Shadow Crown lifts from %s." % news["lifted"]
+	if news.has("fell"):
+		var wearer := ShadowCrown.wearer()
+		_crown_face = wearer.character_sheet
+		_crown_news = "The Crown Falls"
+		_previous_result += ("\nThe Shadow Crown falls on %s! Stronger and faster, but no town "
+				+ "income, no shops, and it feeds on HP.") % wearer.player_name
 
 
 ## Adds a sentence to the message window. An empty one changes nothing.
@@ -788,6 +966,16 @@ func _send_to_castle(player: PlayerData) -> void:
 	token.spawn_at(board.get_starting_node())
 	player.space_id = token.current_node.node_id
 	_arrange_tokens()
+
+
+## Pulls a player's token straight to `space`, which does nothing to them.
+func _warp(player: PlayerData, space: BoardNode) -> void:
+	var token: PlayerMovement = _tokens[player]
+	BoardFx.play(board, token.global_position, BoardFx.Kind.SMOKE, 0.5)
+	token.spawn_at(space)
+	player.space_id = space.node_id
+	_arrange_tokens()
+	BoardFx.play(board, token.global_position, BoardFx.Kind.SMOKE, 0.5)
 
 
 ## Only the active human player may change things, and only before rolling.
@@ -921,4 +1109,6 @@ func _stop_button_pulse() -> void:
 ## Removes every path button from the ChoiceBox.
 func _clear_choices() -> void:
 	for child in choice_box.get_children():
+		# Removed now, because the next question may open before the frame ends.
+		choice_box.remove_child(child)
 		child.queue_free()

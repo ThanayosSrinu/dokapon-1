@@ -52,8 +52,8 @@ const FLEE_MAX := 0.9
 
 ## The winner of a player fight earns this much EXP per level of the loser.
 const PVP_EXP_PER_LEVEL := 30
-## The share of their gold a knocked out player loses. The winner takes it, if
-## the winner is a player. Section 8 adds penalties for picking on rivals.
+## The share of their gold a player knocked out by a monster loses. A rival takes
+## spoils instead: see Rivalry.
 const KO_GOLD_SHARE := 0.25
 
 ## Below this share of HP, a CPU fighter tries to heal.
@@ -332,7 +332,14 @@ func _reward(player: PlayerData, lines: PackedStringArray) -> void:
 	if loser.monster != null:
 		exp_gain = loser.monster.exp_reward
 		gold_gain = loser.monster.gold_reward
-	if gold_gain > 0:
+	else:
+		var usual := exp_gain
+		exp_gain = Rivalry.duel_exp(player, loser.player, winner == challenger, usual)
+		if exp_gain > usual:
+			lines.append("Revenge! Double EXP.")
+	if exp_gain == 0:
+		lines.append("No EXP for beating someone so far below you.")
+	elif gold_gain > 0:
 		player.add_gold(gold_gain)
 		lines.append("Earned %d EXP and %d gold." % [exp_gain, gold_gain])
 	else:
@@ -360,12 +367,11 @@ func _roll_for_loot(player: PlayerData, monster: MonsterData, lines: PackedStrin
 
 
 func _knock_out(player: PlayerData, lines: PackedStringArray) -> void:
-	var lost := int(player.gold * KO_GOLD_SHARE)
-	player.add_gold(-lost)
-	if lost > 0:
-		lines.append("%s drops %d gold." % [player.player_name, lost])
-		if winner.player != null:
-			winner.player.add_gold(lost)
+	if winner.player == null:
+		var lost := int(player.gold * KO_GOLD_SHARE)
+		player.add_gold(-lost)
+		if lost > 0:
+			lines.append("%s drops %d gold." % [player.player_name, lost])
 	player.knock_out()
 	lines.append("%s is carried back to the castle." % player.player_name)
 

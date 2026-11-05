@@ -64,8 +64,16 @@ class Result:
 	var to_castle := false
 	## Something hurt or trapped the player, so the screen should shake.
 	var harmful := false
-	## A chest's guardian. Its prize is only paid if the player wins.
+	## A chest's guardian or an event's ambusher. A prize is only paid if the player wins.
 	var guardian: MonsterData
+	## An event's name, for the banner.
+	var title := ""
+	## PlayerData -> gold to add or take, for what touches other players.
+	var gold_changes := {}
+	## The space the player is pulled to, or -1.
+	var warp_to := -1
+	## A town that changed and needs redrawing, or -1.
+	var town_id := -1
 
 	func _init(new_text := "") -> void:
 		text = new_text
@@ -106,7 +114,7 @@ static func shrine_space(player: PlayerData) -> Result:
 static func trap_space(player: PlayerData) -> Result:
 	if GameState.rng.randf() < trap_dodge_chance(player):
 		return Result.new("%s steps around it just in time." % player.player_name)
-	var trap := _weighted_pick(TRAP_WEIGHTS)
+	var trap := weighted_pick(TRAP_WEIGHTS)
 	# Someone with no gold has nothing to steal.
 	if trap == "thief" and player.gold <= 0:
 		trap = "spikes"
@@ -176,7 +184,7 @@ static func pick_item(min_value: int, max_value: int) -> String:
 		var item := Database.get_item(id)
 		if item.price >= min_value and item.price <= max_value:
 			weights[id] = CONSUMABLE_WEIGHT if item.kind == ItemData.Kind.CONSUMABLE else 1
-	return _weighted_pick(weights)
+	return weighted_pick(weights)
 
 
 ## The spells a Magic space could teach this player, sorted like sorted_ids().
@@ -189,6 +197,10 @@ static func learnable_spells(player: PlayerData) -> Array[String]:
 			if (learned_at <= player.level + MAGIC_LEVELS_AHEAD
 					and not player.spells.has(spell_id) and not found.has(spell_id)):
 				found.append(spell_id)
+	for spell_id in FieldMagic.all_ids():
+		if Database.get_spell(spell_id).field_level <= player.level + MAGIC_LEVELS_AHEAD \
+				and not player.spells.has(spell_id):
+			found.append(spell_id)
 	found.sort()
 	return found
 
@@ -212,7 +224,8 @@ static func _spread(amount: int) -> int:
 	return int(amount * GameState.rng.randf_range(1.0 - GOLD_SPREAD, 1.0 + GOLD_SPREAD))
 
 
-static func _weighted_pick(weights: Dictionary) -> String:
+## Picks a key at random, in proportion to its value.
+static func weighted_pick(weights: Dictionary) -> String:
 	var total := 0
 	for weight: int in weights.values():
 		total += weight
