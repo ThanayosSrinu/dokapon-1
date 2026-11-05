@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Mage-Red.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "hedge_mage"
+display_name = "Hedge Mage"
+description = "Sparks crawl over its fingers. It trusts magic, not armor."
+sheet = ExtResource("2")
+level = 3
+min_level = 2
+max_level = 6
+stats = Dictionary[String, int]({
+"attack": 5,
+"defense": 3,
+"magic": 9,
+"max_hp": 20,
+"max_mp": 12,
+"speed": 7
+})
+spells = Array[String](["spark"])
+offense_weights = Dictionary[String, int]({
+"attack": 3,
+"spell": 7
+})
+defense_weights = Dictionary[String, int]({
+"guard": 4,
+"dodge": 4,
+"counter": 1
+})
+exp_reward = 55
+gold_reward = 45
+loot = Array[String](["mana_drop", "potion"])
+loot_chance = 0.25

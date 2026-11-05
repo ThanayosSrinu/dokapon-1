@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Orc-Peon-Red.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "orc_peon"
+display_name = "Orc Peon"
+description = "It swings wildly, and loves a big hit."
+sheet = ExtResource("2")
+level = 2
+min_level = 1
+max_level = 4
+stats = Dictionary[String, int]({
+"attack": 11,
+"defense": 4,
+"magic": 1,
+"max_hp": 24,
+"max_mp": 1,
+"speed": 5
+})
+spells = Array[String]([])
+offense_weights = Dictionary[String, int]({
+"attack": 5,
+"smash": 4
+})
+defense_weights = Dictionary[String, int]({
+"guard": 5,
+"dodge": 1,
+"counter": 2
+})
+exp_reward = 40
+gold_reward = 30
+loot = Array[String](["herb", "mana_drop"])
+loot_chance = 0.2

@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Orc-Grunt.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "orc_grunt"
+display_name = "Orc Grunt"
+description = "Slow and heavy. Every blow is a smash."
+sheet = ExtResource("2")
+level = 6
+min_level = 5
+max_level = 10
+stats = Dictionary[String, int]({
+"attack": 19,
+"defense": 7,
+"magic": 1,
+"max_hp": 50,
+"max_mp": 1,
+"speed": 7
+})
+spells = Array[String]([])
+offense_weights = Dictionary[String, int]({
+"attack": 3,
+"smash": 6
+})
+defense_weights = Dictionary[String, int]({
+"guard": 6,
+"counter": 2
+})
+exp_reward = 110
+gold_reward = 80
+loot = Array[String](["potion", "leather_vest"])
+loot_chance = 0.2

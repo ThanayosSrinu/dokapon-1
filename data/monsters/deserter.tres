@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Human-Soldier-Red.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "deserter"
+display_name = "Deserter"
+description = "A trained soldier. It waits for you to overreach."
+sheet = ExtResource("2")
+level = 8
+min_level = 7
+max_level = 13
+stats = Dictionary[String, int]({
+"attack": 24,
+"defense": 9,
+"magic": 2,
+"max_hp": 70,
+"max_mp": 1,
+"speed": 10
+})
+spells = Array[String]([])
+offense_weights = Dictionary[String, int]({
+"attack": 6,
+"smash": 2
+})
+defense_weights = Dictionary[String, int]({
+"guard": 3,
+"dodge": 1,
+"counter": 6
+})
+exp_reward = 160
+gold_reward = 120
+loot = Array[String](["iron_sword", "chain_mail"])
+loot_chance = 0.15

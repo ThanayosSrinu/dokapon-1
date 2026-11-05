@@ -7,7 +7,8 @@ extends Node2D
 ##   ROLLING        Tumble the die, then show the landing rings.
 ##   MOVING         The token walks while the camera follows it.
 ##   CHOOSING_PATH  The paths glow green. Click one, or use its button.
-##   SPACE_EVENT    Celebrate the landed space. Sections 5 and 6 add real effects.
+##   SPACE_EVENT    Celebrate the landed space, and offer to fight anyone on it.
+##   BATTLE         BattleScreen plays the fight. Section 6 adds the other effects.
 ## Press C or the Character button to open the active player's sheet.
 ## Clicking any other space shows its details in the InfoLabel.
 ##
@@ -29,7 +30,12 @@ extends Node2D
 ##       ├── Dice (DiceRoller)
 ##       ├── TurnBanner
 ##       ├── SetupMenu
+##       ├── BattleScreen
 ##       └── Fade (ColorRect)
+
+## Emitted by the buttons that ask whether to challenge a rival. Carries the
+## chosen player, or null to leave them be.
+signal _rival_chosen(rival: PlayerData)
 
 ## Where tokens stand when they share a space, by how many there are. Each one
 ## stays inside the top of the space.
@@ -55,15 +61,17 @@ const TYPE_DESCRIPTIONS := {
 	BoardNode.NodeType.ITEM: "An item space.",
 	BoardNode.NodeType.MAGIC: "A magic space. (Spells are not implemented yet.)",
 	BoardNode.NodeType.GOLD: "A gold space.",
-	BoardNode.NodeType.BATTLE: "A monster appears! (Real battles arrive in Section 5.)",
+	BoardNode.NodeType.BATTLE: "Something stirs nearby...",
 	BoardNode.NodeType.TREASURE: "Treasure may be buried here. (Not implemented yet.)",
 	BoardNode.NodeType.SHRINE: "A shrine. (Healing is not implemented yet.)",
 	BoardNode.NodeType.TRAP: "A trap! (Traps are not implemented yet.)",
 }
 
-## Placeholder rewards until Sections 5 and 6 give these spaces real effects.
+## Placeholder reward until Section 6 gives these spaces real effects.
 const GOLD_SPACE_REWARD := 50
-const BATTLE_SPACE_EXPERIENCE := 60
+## How often a CPU player challenges a rival it lands next to. Section 9 replaces
+## this with real thinking.
+const CPU_CHALLENGE_CHANCE := 0.5
 
 ## Every token in the scene. The setup menu decides how many are used, and the
 ## turn order is drawn at random when the game starts.
@@ -112,6 +120,9 @@ const BATTLE_SPACE_EXPERIENCE := 60
 ## Opens the character sheet. Drag CharacterButton here.
 @export var character_button: Button
 
+## Plays fights. Drag BattleScreen here.
+@export var battle_screen: BattleScreen
+
 ## Seconds the landing preview is shown before the token starts moving.
 @export var preview_duration := 0.7
 
@@ -159,7 +170,7 @@ func _ready() -> void:
 			or info_label == null or dice == null or turn_manager == null
 			or hud == null or banner == null or setup_menu == null or fade == null
 			or message_window == null or info_panel == null or class_menu == null
-			or character_sheet == null or character_button == null):
+			or character_sheet == null or character_button == null or battle_screen == null):
 		push_error("GameController: fill in every empty slot of Main in the Inspector.")
 		return
 
@@ -319,6 +330,13 @@ func _enter_turn_start() -> void:
 	camera.follow(_active_player())
 	_active_player().is_active = true
 	_show_status(_after_previous_result(_turn_title()))
+	if player.turns_to_skip > 0:
+		player.turns_to_skip -= 1
+		await banner.play("%s rests" % player.player_name, player.token_color, player.character_sheet)
+		_previous_result = "%s rested at the castle." % player.player_name
+		_active_player().is_active = false
+		turn_manager.end_turn()
+		return
 	await banner.play(_turn_title(), player.token_color, player.character_sheet)
 	turn_manager.go_to(TurnManager.Phase.ACTION)
 
@@ -353,9 +371,40 @@ func _enter_space_event() -> void:
 	_show_status(_previous_result)
 	space.bump(1.6)
 	BoardFx.burst(board, space.global_position, BoardNode.TYPE_INFO[space.node_type]["color"])
-	if space.node_type == BoardNode.NodeType.BATTLE or space.node_type == BoardNode.NodeType.TRAP:
+
+	var battle := await _find_battle(space)
+	if battle != null:
+		await _enter_battle(battle)
+		return
+	if space.node_type == BoardNode.NodeType.TRAP:
 		camera.shake()
 	player.cheer()
+	await get_tree().create_timer(space_event_duration).timeout
+	turn_manager.end_turn()
+
+
+## Returns the fight this landing starts, or null if there is none. A rival on
+## the space comes first, and a Battle space only counts if nobody was challenged.
+func _find_battle(space: BoardNode) -> Battle:
+	var data := turn_manager.current_player()
+	var rival := await _ask_about_rivals(space)
+	if rival != null:
+		return Battle.new(Fighter.from_player(data), Fighter.from_player(rival))
+	if space.node_type == BoardNode.NodeType.BATTLE:
+		return Battle.new(Fighter.from_player(data), Fighter.from_monster(_pick_monster(data)))
+	return null
+
+
+## Plays `battle`, then sends the loser home.
+func _enter_battle(battle: Battle) -> void:
+	turn_manager.go_to(TurnManager.Phase.BATTLE)
+	camera.shake()
+	await get_tree().create_timer(space_event_duration * 0.5).timeout
+	var lines: PackedStringArray = await battle_screen.run(battle)
+	_previous_result = " ".join(lines)
+	_show_status(_previous_result)
+	if battle.loser != null and battle.loser.player != null:
+		_send_to_castle(battle.loser.player)
 	await get_tree().create_timer(space_event_duration).timeout
 	turn_manager.end_turn()
 
@@ -400,7 +449,7 @@ func _start_game(player_count: int) -> void:
 	turn_manager.start_game()
 
 
-## Temporary: lets stats and items change before battles and shops exist.
+## Temporary: lets gold and items change before shops exist.
 ## Returns a line for the message window, or "" if nothing happened.
 func _give_placeholder_reward(space: BoardNode) -> String:
 	var player := turn_manager.current_player()
@@ -408,11 +457,6 @@ func _give_placeholder_reward(space: BoardNode) -> String:
 		BoardNode.NodeType.GOLD:
 			player.add_gold(GOLD_SPACE_REWARD)
 			return "Found %d gold." % GOLD_SPACE_REWARD
-		BoardNode.NodeType.BATTLE:
-			var levels := player.add_experience(BATTLE_SPACE_EXPERIENCE)
-			if levels > 0:
-				return "Level up! Now level %d." % player.level
-			return "Gained %d EXP." % BATTLE_SPACE_EXPERIENCE
 		BoardNode.NodeType.ITEM:
 			var ids := Database.sorted_ids(Database.items)
 			var item_id := ids[GameState.rng.randi_range(0, ids.size() - 1)]
@@ -423,10 +467,61 @@ func _give_placeholder_reward(space: BoardNode) -> String:
 	return ""
 
 
+## Asks the active player whether to fight someone sharing `space`. Returns the
+## rival, or null. Nobody fights at the castle: it is the safe place to wake up.
+func _ask_about_rivals(space: BoardNode) -> PlayerData:
+	if space.node_type == BoardNode.NodeType.CASTLE:
+		return null
+	var rivals: Array[PlayerData] = []
+	for other in GameState.players:
+		if other != turn_manager.current_player() and other.space_id == space.node_id:
+			rivals.append(other)
+	if rivals.is_empty():
+		return null
+
+	if turn_manager.current_player().is_cpu:
+		if GameState.rng.randf() < CPU_CHALLENGE_CHANCE:
+			return rivals[GameState.rng.randi_range(0, rivals.size() - 1)]
+		return null
+
+	_show_status("%s\nChallenge someone here?" % _previous_result)
+	roll_button.hide()
+	for rival in rivals:
+		_add_rival_button("Challenge %s" % rival.player_name, rival)
+	_add_rival_button("Leave them be", null)
+	choice_box.get_child(0).grab_focus()
+	var chosen: PlayerData = await _rival_chosen
+	_clear_choices()
+	roll_button.show()
+	return chosen
+
+
+func _add_rival_button(text: String, rival: PlayerData) -> void:
+	var button := Button.new()
+	button.text = text
+	button.pressed.connect(func() -> void: _rival_chosen.emit(rival))
+	choice_box.add_child(button)
+
+
+## Picks a monster for a player of this level.
+func _pick_monster(player: PlayerData) -> MonsterData:
+	var ids := Database.monster_ids_for_level(player.level)
+	return Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)])
+
+
+## Moves a knocked out player's token back to the castle.
+func _send_to_castle(player: PlayerData) -> void:
+	var token: PlayerMovement = _tokens[player]
+	BoardFx.play(board, token.global_position, BoardFx.Kind.SMOKE, 0.5)
+	token.spawn_at(board.get_starting_node())
+	player.space_id = token.current_node.node_id
+	_arrange_tokens()
+
+
 ## Only the active human player may change things, and only before rolling.
 func _open_character_sheet() -> void:
-	# The HUD appears once every player has a class.
-	if not hud.visible:
+	# The HUD appears once every player has a class. A fight fills the screen.
+	if not hud.visible or battle_screen.visible:
 		return
 	var player := turn_manager.current_player()
 	character_sheet.open(player, not player.is_cpu and turn_manager.phase == TurnManager.Phase.ACTION)

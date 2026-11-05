@@ -11,7 +11,7 @@ func _initialize() -> void:
 	for problem in problems:
 		print("PROBLEM: ", problem)
 	if problems.is_empty():
-		print("DATA OK: %d items, %d spells, %d classes" % [database.items.size(),
-				database.spells.size(), database.classes.size()])
+		print("DATA OK: %d items, %d spells, %d classes, %d monsters" % [database.items.size(),
+				database.spells.size(), database.classes.size(), database.monsters.size()])
 	database.free()
 	quit(1 if not problems.is_empty() else 0)

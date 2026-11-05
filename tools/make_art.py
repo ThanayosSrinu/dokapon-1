@@ -418,6 +418,62 @@ def make_ui():
     x2(portrait).save(OUT / "portrait_frame.png")
 
 
+# --- Battle -----------------------------------------------------------------
+
+def hill_height(x, width, base, swell, seed):
+    t = x / width * math.tau
+    return int(base + swell * math.sin(t * 1.3 + seed) + swell * 0.45 * math.sin(t * 3.1 + seed * 2.0))
+
+
+def make_battle():
+    """A meadow at dusk for the fighters to stand in, 360 by 150 art pixels."""
+    width, height, horizon = 360, 150, 84
+    sky = [hexc("#23305f"), hexc("#3a4a86"), hexc("#6a6aa8"), hexc("#b98aa8"), hexc("#f0b98a")]
+    grass = [hexc("#3f7d46"), hexc("#4c9650"), hexc("#3f8a4a"), hexc("#357a42")]
+    image = Image.new("RGBA", (width, height), INK)
+    px = image.load()
+    for y in range(horizon):
+        # Dithered bands, so the sky has no smooth gradient in it.
+        level = y / horizon * (len(sky) - 1)
+        for x in range(width):
+            band = int(level + (0.35 if (x + y) % 2 == 0 else -0.35) + 0.5)
+            px[x, y] = sky[max(0, min(len(sky) - 1, band))]
+    # A low sun behind the hills.
+    for y in range(horizon):
+        for x in range(150, 210):
+            if (x - 180) ** 2 + (y - 74) ** 2 < 170:
+                px[x, y] = hexc("#ffe2a0")
+    far, near = hexc("#54517f"), hexc("#37536a")
+    for x in range(width):
+        for y in range(hill_height(x, width, 68, 7, 1.0), horizon):
+            px[x, y] = far
+        for y in range(hill_height(x, width, 77, 4, 4.0), horizon):
+            px[x, y] = near
+    # The tree line sits on the horizon.
+    for x in range(width):
+        top = horizon - 3 - (x * 7 % 5) - (x * 3 % 3)
+        for y in range(top, horizon):
+            px[x, y] = hexc("#25463f")
+    for y in range(horizon, height):
+        depth = (y - horizon) / (height - horizon)
+        band = 0 if depth < 0.08 else 1 if depth < 0.4 else 2 if depth < 0.75 else 3
+        for x in range(width):
+            px[x, y] = grass[band]
+            if (x * 13 + y * 7) % 41 == 0:
+                px[x, y] = shade(grass[band], 1.25)
+            elif (x * 5 + y * 11) % 53 == 0:
+                px[x, y] = shade(grass[band], 0.8)
+    # A worn patch of earth under each fighter.
+    earth, earth_dark = hexc("#8a7350"), hexc("#6d5a42")
+    for cx in (95, 265):
+        for y in range(106, 130):
+            for x in range(cx - 46, cx + 46):
+                d = ((x - cx) / 44) ** 2 + ((y - 118) / 11) ** 2
+                if d < 1.0 - ((x * 7 + y * 3) % 5) * 0.05:
+                    px[x, y] = earth_dark if d > 0.68 or (x + y * 3) % 17 == 0 else earth
+    image.save(OUT / "battle_backdrop.png")
+
+
 # --- Tile table -------------------------------------------------------------
 
 def make_tile_table():
@@ -459,4 +515,5 @@ if __name__ == "__main__":
     make_die()
     make_fx()
     make_ui()
+    make_battle()
     make_tile_table()

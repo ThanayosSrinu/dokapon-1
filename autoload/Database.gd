@@ -1,11 +1,12 @@
 extends Node
-## Every item, spell and class in the game. Registered as the "Database"
+## Every item, spell, class and monster in the game. Registered as the "Database"
 ## autoload. It reads the folders under data/, so adding a .tres file is all it
 ## takes to add content: no code changes.
 
 const ITEM_FOLDER := "res://data/items"
 const SPELL_FOLDER := "res://data/spells"
 const CLASS_FOLDER := "res://data/classes"
+const MONSTER_FOLDER := "res://data/monsters"
 
 ## Every stat a character has.
 const STATS: Array[String] = ["max_hp", "max_mp", "attack", "defense", "magic", "speed"]
@@ -13,6 +14,7 @@ const STATS: Array[String] = ["max_hp", "max_mp", "attack", "defense", "magic", 
 var items := {}
 var spells := {}
 var classes := {}
+var monsters := {}
 
 
 func _ready() -> void:
@@ -23,6 +25,7 @@ func load_all() -> void:
 	items = _load_folder(ITEM_FOLDER)
 	spells = _load_folder(SPELL_FOLDER)
 	classes = _load_folder(CLASS_FOLDER)
+	monsters = _load_folder(MONSTER_FOLDER)
 
 
 func get_item(id: String) -> ItemData:
@@ -37,6 +40,20 @@ func get_class_data(id: String) -> ClassData:
 	return classes.get(id)
 
 
+func get_monster(id: String) -> MonsterData:
+	return monsters.get(id)
+
+
+## The monsters a player of `level` may meet, sorted like sorted_ids().
+func monster_ids_for_level(level: int) -> Array[String]:
+	var ids: Array[String] = []
+	for id in sorted_ids(monsters):
+		var monster: MonsterData = monsters[id]
+		if monster.min_level <= level and level <= monster.max_level:
+			ids.append(id)
+	return ids
+
+
 ## Sorted, so a seeded random pick gives the same result on every computer.
 func sorted_ids(table: Dictionary) -> Array[String]:
 	var ids: Array[String] = []
@@ -48,7 +65,7 @@ func sorted_ids(table: Dictionary) -> Array[String]:
 ## Lists every mistake in the data. tools/check_data.gd prints these.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
-	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER]:
+	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER]:
 		_check_folder(folder, problems)
 	for id: String in items:
 		_check_item(items[id], problems)
@@ -56,6 +73,11 @@ func validate() -> PackedStringArray:
 		_check_spell(spells[id], problems)
 	for id: String in classes:
 		_check_class(classes[id], problems)
+	for id: String in monsters:
+		_check_monster(monsters[id], problems)
+	for level in range(1, PlayerData.MAX_LEVEL + 1):
+		if monster_ids_for_level(level).is_empty():
+			problems.append("no monster for a player of level %d" % level)
 	return problems
 
 
@@ -135,3 +157,34 @@ func _check_class(data: ClassData, problems: PackedStringArray) -> void:
 	for level: int in data.spells_by_level:
 		if not spells.has(data.spells_by_level[level]):
 			problems.append("class %s learns unknown spell at level %d" % [data.id, level])
+
+
+func _check_monster(monster: MonsterData, problems: PackedStringArray) -> void:
+	if monster.sheet == null:
+		problems.append("monster %s needs a sheet" % monster.id)
+	if monster.min_level < 1 or monster.max_level < monster.min_level:
+		problems.append("monster %s has a bad level range" % monster.id)
+	if monster.exp_reward <= 0:
+		problems.append("monster %s needs exp_reward above 0" % monster.id)
+	for stat in STATS:
+		if monster.stats.get(stat, 0) <= 0:
+			problems.append("monster %s needs stat %s above 0" % [monster.id, stat])
+	_check_weights(monster, monster.offense_weights, Battle.OFFENSE_NAMES, problems)
+	_check_weights(monster, monster.defense_weights, Battle.DEFENSE_NAMES, problems)
+	for id in monster.spells:
+		if not spells.has(id):
+			problems.append("monster %s knows unknown spell '%s'" % [monster.id, id])
+	if monster.offense_weights.has("spell") and monster.spells.is_empty():
+		problems.append("monster %s has a spell habit but no spells" % monster.id)
+	for id in monster.loot:
+		if not items.has(id):
+			problems.append("monster %s drops unknown item '%s'" % [monster.id, id])
+
+
+func _check_weights(monster: MonsterData, weights: Dictionary, names: Dictionary,
+		problems: PackedStringArray) -> void:
+	if weights.is_empty():
+		problems.append("monster %s has an empty habit" % monster.id)
+	for key: String in weights:
+		if not names.has(key) or weights[key] <= 0:
+			problems.append("monster %s has bad habit '%s'" % [monster.id, key])

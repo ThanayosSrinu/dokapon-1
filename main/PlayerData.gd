@@ -14,6 +14,8 @@ const INVENTORY_SIZE := 6
 const MAX_LEVEL := 30
 ## Reaching the next level takes this much experience, times the current level.
 const EXP_PER_LEVEL := 100
+## Turns a knocked out player spends recovering at the castle.
+const KO_TURNS_LOST := 1
 ## The slots a player can wear something in.
 const EQUIPMENT_SLOTS: Array[ItemData.Kind] = [
 	ItemData.Kind.WEAPON, ItemData.Kind.ARMOR, ItemData.Kind.ACCESSORY,
@@ -47,6 +49,8 @@ var inventory: Array[String] = []
 var equipment := {}
 ## The ids of the spells this player knows.
 var spells: Array[String] = []
+## Turns left to sit out after a knockout.
+var turns_to_skip := 0
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:
@@ -128,20 +132,34 @@ func add_item(item_id: String) -> bool:
 	return true
 
 
-## Uses a consumable from the bag. Returns false if it would do nothing.
-func use_item(item_id: String) -> bool:
+## True if a consumable is in the bag and would do something right now.
+func can_use_item(item_id: String) -> bool:
 	var item := Database.get_item(item_id)
 	if not inventory.has(item_id) or item.kind != ItemData.Kind.CONSUMABLE:
 		return false
 	var heals_hp := item.heal_hp > 0 and hp < get_stat("max_hp")
 	var heals_mp := item.heal_mp > 0 and mp < get_stat("max_mp")
-	if not heals_hp and not heals_mp:
+	return heals_hp or heals_mp
+
+
+## Uses a consumable from the bag. Returns false if it would do nothing.
+func use_item(item_id: String) -> bool:
+	if not can_use_item(item_id):
 		return false
+	var item := Database.get_item(item_id)
 	hp = mini(hp + item.heal_hp, get_stat("max_hp"))
 	mp = mini(mp + item.heal_mp, get_stat("max_mp"))
 	inventory.erase(item_id)
 	changed.emit()
 	return true
+
+
+## Lost a battle: back to full health, but sitting out the next turn.
+func knock_out() -> void:
+	hp = get_stat("max_hp")
+	mp = get_stat("max_mp")
+	turns_to_skip = KO_TURNS_LOST
+	changed.emit()
 
 
 ## Wears an item from the bag. What it replaces goes back into the bag.

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Orc-Peon-Cyan.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "orc_scout"
+display_name = "Orc Scout"
+description = "Quick on its feet. Hard to pin down."
+sheet = ExtResource("2")
+level = 4
+min_level = 3
+max_level = 7
+stats = Dictionary[String, int]({
+"attack": 15,
+"defense": 6,
+"magic": 1,
+"max_hp": 36,
+"max_mp": 1,
+"speed": 11
+})
+spells = Array[String]([])
+offense_weights = Dictionary[String, int]({
+"attack": 7,
+"smash": 2
+})
+defense_weights = Dictionary[String, int]({
+"guard": 2,
+"dodge": 6,
+"counter": 2
+})
+exp_reward = 70
+gold_reward = 55
+loot = Array[String](["potion", "dagger"])
+loot_chance = 0.2

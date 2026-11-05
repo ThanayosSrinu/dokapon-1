@@ -15,6 +15,7 @@ const BIRD: Texture2D = preload("res://assets/custom/bird.png")
 const FLAG: Texture2D = preload("res://assets/custom/flag.png")
 const RIBBON: Texture2D = preload("res://assets/custom/ribbon.png")
 const PORTRAIT_FRAME: Texture2D = preload("res://assets/custom/portrait_frame.png")
+const BATTLE_BACKDROP: Texture2D = preload("res://assets/custom/battle_backdrop.png")
 const FONT: Font = preload("res://assets/kenney/fonts/KenneyMiniSquare.ttf")
 
 ## Pixels of the world per pixel of art.

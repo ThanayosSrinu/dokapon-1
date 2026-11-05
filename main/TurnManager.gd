@@ -4,10 +4,12 @@ extends Node
 ## turn the game is in. One turn runs through these phases:
 ##
 ##   TURN_START -> ACTION -> ROLLING -> MOVING -> SPACE_EVENT -> TURN_END
-##                                       ^   |
-##                                       |   v
-##                                   CHOOSING_PATH
+##       |                               ^   |          |            ^
+##       |                               |   v          v            |
+##       |                           CHOOSING_PATH    BATTLE --------+
+##       +-------------------------------------------------------> (rest)
 ##
+## A knocked out player goes straight from TURN_START to TURN_END.
 ## TRANSITIONS lists every legal step, and go_to() refuses all others. Other
 ## scripts check `phase` before acting, so a stray click cannot start a second
 ## roll or skip a step. TurnManager does no animation or UI itself: it announces
@@ -21,18 +23,20 @@ enum Phase {
 	MOVING,         # The token is walking.
 	CHOOSING_PATH,  # The token waits at a fork.
 	SPACE_EVENT,    # The landed space takes effect.
+	BATTLE,         # A fight is on screen.
 	TURN_END,       # Passing play to the next player.
 }
 
 ## The phases each phase may lead to.
 const TRANSITIONS := {
 	Phase.IDLE: [Phase.TURN_START],
-	Phase.TURN_START: [Phase.ACTION],
+	Phase.TURN_START: [Phase.ACTION, Phase.TURN_END],
 	Phase.ACTION: [Phase.ROLLING],
 	Phase.ROLLING: [Phase.MOVING],
 	Phase.MOVING: [Phase.CHOOSING_PATH, Phase.SPACE_EVENT],
 	Phase.CHOOSING_PATH: [Phase.MOVING],
-	Phase.SPACE_EVENT: [Phase.TURN_END],
+	Phase.SPACE_EVENT: [Phase.BATTLE, Phase.TURN_END],
+	Phase.BATTLE: [Phase.TURN_END],
 	Phase.TURN_END: [Phase.TURN_START],
 }
 

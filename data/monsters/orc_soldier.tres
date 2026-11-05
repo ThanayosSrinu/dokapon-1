@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Orc-Soldier-Red.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "orc_soldier"
+display_name = "Orc Soldier"
+description = "Armored and patient. It rarely leaves an opening."
+sheet = ExtResource("2")
+level = 11
+min_level = 10
+max_level = 17
+stats = Dictionary[String, int]({
+"attack": 31,
+"defense": 13,
+"magic": 2,
+"max_hp": 100,
+"max_mp": 1,
+"speed": 9
+})
+spells = Array[String]([])
+offense_weights = Dictionary[String, int]({
+"attack": 5,
+"smash": 3
+})
+defense_weights = Dictionary[String, int]({
+"guard": 6,
+"dodge": 1,
+"counter": 3
+})
+exp_reward = 240
+gold_reward = 180
+loot = Array[String](["elixir", "war_hammer"])
+loot_chance = 0.15

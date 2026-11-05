@@ -1,7 +1,7 @@
 class_name SpellData
 extends Resource
 ## One spell. Each spell is a .tres file in data/spells, and `id` must match the
-## file name. Section 5 casts them in battle.
+## file name. combat/Battle.gd casts them.
 
 enum Kind { ATTACK, HEAL }
 
