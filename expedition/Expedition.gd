@@ -283,8 +283,8 @@ func _open_chest() -> void:
 	if not SpaceEffects.chest_is_full(space_id) or not CpuBrain.will_open_chest(player):
 		return
 	var chest := SpaceEffects.roll_chest(player)
-	note("find", chest.text)
 	if chest.guardian != null:
+		note("find", chest.text)
 		_prize = chest
 		_meet(chest.guardian)
 	else:

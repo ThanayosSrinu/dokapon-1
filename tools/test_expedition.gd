@@ -288,6 +288,20 @@ func _test_spaces() -> void:
 
 
 func _test_chest_guardian() -> void:
+	# An open chest is told once.
+	var told := 0
+	for seed_value in range(1, 40):
+		var opened := Expedition.new(_bram, _grass, seed_value)
+		_land_on(opened, _space_of(opened, BoardNode.NodeType.TREASURE))
+		if opened.fight != null:
+			continue
+		var lines := opened.diary.filter(func(line: Dictionary) -> bool:
+				return line["text"].contains("chest holds"))
+		if not lines.is_empty():
+			told += 1
+			_expect(lines.size() == 1, "a chest is told once, seed %d" % seed_value)
+	_expect(told > 0, "these seeds open a chest with no guardian")
+
 	var trip := Expedition.new(_bram, _grass, 1)
 	var chest := _space_of(trip, BoardNode.NodeType.TREASURE)
 	trip.space_id = chest
