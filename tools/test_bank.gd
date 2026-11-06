@@ -436,24 +436,48 @@ func _test_portal_forecast() -> void:
 	_expect(portal.card.shown_forecast(2) == "Home Y1 M1 D22", "a large trip after 21")
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.SAFE],
 			"a safe trip is green")
-	_expect(portal._due_words.text.contains("Y1 M2 D28"), "the due day shows")
-	_expect(portal.bank_button.is_visible_in_tree(), "with a way to the Bank")
 	var middle := portal.get_viewport_rect().size / 2.0
 	var view := Rect2(middle - Vector2(WIDE) / 2.0, Vector2(WIDE))
 	_expect(view.encloses(portal.card.get_global_rect()), "the card still fits")
-	_expect(view.encloses(portal.bank_button.get_global_rect()), "the box fits")
-	_expect(not portal.bank_button.get_global_rect().intersects(portal.card.get_global_rect()), "and stays off the card")
+	portal.card.enter.pressed.emit()
+	await get_tree().process_frame
+	_expect(not portal.warning.visible and portal._leaving, "a trip home in time goes straight in")
+	town.day = 45
+	town.stage = portal._sizes[2]
+	portal = await _open(PORTAL)
+	var plan := town.forecast(town.stage, town.going)
+	_expect(plan["fit"] == TownData.Forecast.TIGHT, "this trip only fits if cut short")
+	portal.card.enter.pressed.emit()
+	await get_tree().process_frame
+	_expect(portal.warning.visible and not portal._leaving, "a risky trip stops to warn")
+	_expect(portal.warning.shown_words().contains(str(town.bill_amount())), "with what is owed")
+	_expect(portal.warning.shown_words().contains("Y1 M2 D28"), "and the due day")
+	_expect(portal.warning.shown_words().contains(Calendar.date(plan["whole"])), "and the day home")
+	_expect(view.encloses(portal.warning.get_global_rect()), "the warning fits")
+	_expect(_focused() == portal.warning.bank_button, "the Bank has the focus, not Go on")
+	await _tap("ui_up")
+	await _tap("ui_down")
+	_expect(_focused() == portal.warning.bank_button, "the keys stay in the warning")
+	await _tap("ui_cancel")
+	_expect(not portal.warning.visible and get_tree().current_scene == portal, "Esc goes back to the card")
+	_expect(_focused() == portal.card.enter, "with the focus on Enter")
+	await _tap("ui_accept")
+	await _tap("ui_left")
+	_expect(_focused() == portal.warning.go_button, "left reaches Go on")
+	await _tap("ui_accept")
+	_expect(not portal.warning.visible and portal._leaving, "Go on goes in anyway")
 	town.day = 54
+	town.stage = portal._sizes[0]
 	portal = await _open(PORTAL)
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.LATE],
 			"a trip that can't make it is red")
-	_expect(portal.date_chip.level == TownData.Alert.ALARM, "and the date is red")
-	await _tap("ui_left")
-	await _tap("ui_down")
-	_expect(_focused() == portal.bank_button, "keys reach the Bank button")
+	portal.card.enter.pressed.emit()
+	await get_tree().process_frame
+	_expect(portal.warning.visible, "and it warns")
+	_expect(town.warned.get(town.next_due(), 0) == TownData.Alert.ALARM, "which counts as warning the player")
 	await _tap("ui_accept")
 	await _until_settled()
-	_expect(get_tree().current_scene is BankScreen, "and it goes to the Bank")
+	_expect(get_tree().current_scene is BankScreen, "the warning goes to the Bank")
 
 
 func _test_pick_who_goes() -> void:

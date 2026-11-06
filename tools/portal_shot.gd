@@ -34,6 +34,12 @@ func _ready() -> void:
 	portal.card.enter.grab_focus()
 	await _settle(0.5)
 	await _save(folder + "/portal_large.png")
+	TownData.current().day = 45
+	portal.card.enter.pressed.emit()
+	await _settle(0.6)
+	await _save(folder + "/portal_warning.png")
+	portal.back.pressed.emit()
+	TownData.current().day = 1
 	portal.card.sizes[0].pressed.emit()
 	portal.card.enter.grab_focus()
 	await _settle(0.2)

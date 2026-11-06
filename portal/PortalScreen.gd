@@ -10,9 +10,6 @@ const EXPEDITION := "res://expedition/ExpeditionScreen.tscn"
 const STAGE := Vector2(1280, 720)
 const CARD_LEFT := 816.0
 const CARD_TOP := 34.0
-## The box about what falls due, bottom left, clear of the road.
-const DUE_SPOT := Vector2(24, 508)
-const DUE_WIDTH := 296.0
 ## What the forecast's colors mean, readable on paper.
 const FIT_COLORS := {TownData.Forecast.SAFE: Color(0.1, 0.4, 0.16), TownData.Forecast.TIGHT: Color(0.56, 0.36, 0.0),
 		TownData.Forecast.LATE: Kit.BLOOD}
@@ -50,17 +47,15 @@ var arrow: KitArrow
 var heading: Label
 ## The adventurer on the road, if there is one.
 var hero: CharacterFigure
-## Goes to the Bank.
-var bank_button: KitButton
-## The date, on the box about what falls due.
-var date_chip: DateChip
+## Stops the player when the trip may not be home before the next due day.
+var warning: TripWarning
 
 var _stage: Node2D
 # The sizes of trip on offer, in the same order as the card's buttons.
 var _sizes: Array[Stage] = []
 # Everyone on the roster, in the same order as the card's buttons.
 var _people: Array[Adventurer] = []
-var _due_words: Label
+var _dim: ColorRect
 var _leaving := false
 var _shaking := false
 
@@ -76,10 +71,10 @@ func _ready() -> void:
 	_build_hero(town)
 	_build_card(town)
 	_build_top_bar(town)
-	_build_due_box(town)
 	_link_focus()
 	arrow = KitArrow.new(null, KitArrow.Side.LEFT)
 	add_child(arrow)
+	_build_warning()
 	_refresh_enter(town)
 	if not Screens.busy and get_tree().current_scene == self:
 		Screens.reveal()
@@ -218,34 +213,25 @@ func _build_top_bar(town: TownData) -> void:
 	add_child(back)
 
 
-# What falls due next, and the way to the Bank.
-func _build_due_box(town: TownData) -> void:
-	var box := KitPanel.new("", true)
-	box.custom_minimum_size.x = DUE_WIDTH
-	box.position = DUE_SPOT
-	date_chip = DateChip.new()
-	date_chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	box.body.add_child(date_chip)
-	date_chip.show_day(town, town.day)
-	var debt := town.next_debt()
-	var left: int = debt["due"] - town.day
-	var when := "today" if left == 0 else "in %s" % TownData.days_words(left)
-	_due_words = Kit.text("The %s of %d gold is due on %s, %s." % [debt["what"], debt["amount"], Calendar.date(debt["due"]), when],
-			DUE_WIDTH - 32.0, &"PaperLabel")
-	box.body.add_child(_due_words)
-	bank_button = KitButton.new()
-	bank_button.kind = KitButton.Kind.SMALL
-	bank_button.text = "Go to the Bank"
-	bank_button.pressed.connect(_go_to_bank)
-	box.body.add_child(bank_button)
-	var layer := Control.new()
-	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stage.add_child(layer)
-	layer.add_child(box)
+func _build_warning() -> void:
+	_dim = ColorRect.new()
+	_dim.color = Kit.DIM
+	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_dim.hide()
+	add_child(_dim)
+	var holder := CenterContainer.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(holder)
+	warning = TripWarning.new()
+	warning.go_on.connect(_on_go_on)
+	warning.to_bank.connect(_go_to_bank)
+	warning.hide()
+	holder.add_child(warning)
 
 
 ## Up from the button reads the people, the food, then the sizes, and every way out of the
-## card reaches Back. Left and right walk along the rows. Below Back is the Bank.
+## card reaches Back. Left and right walk along the rows. Below Back is Enter.
 func _link_focus() -> void:
 	var enter := card.enter
 	var food := card.food
@@ -276,11 +262,7 @@ func _link_focus() -> void:
 	back.focus_neighbor_top = back.get_path_to(back)
 	back.focus_neighbor_left = back.get_path_to(back)
 	back.focus_neighbor_right = back.get_path_to(enter)
-	back.focus_neighbor_bottom = back.get_path_to(bank_button)
-	bank_button.focus_neighbor_top = bank_button.get_path_to(back)
-	bank_button.focus_neighbor_bottom = bank_button.get_path_to(bank_button)
-	bank_button.focus_neighbor_left = bank_button.get_path_to(bank_button)
-	bank_button.focus_neighbor_right = bank_button.get_path_to(enter)
+	back.focus_neighbor_bottom = back.get_path_to(enter)
 
 
 func _chosen_size_button() -> KitButton:
@@ -314,9 +296,39 @@ func _on_enter() -> void:
 	if town.send_problem() != "" or _leaving:
 		card.enter.deny()
 		return
+	var plan := town.forecast(town.stage, town.going)
+	if plan["fit"] == TownData.Forecast.SAFE:
+		_depart(town)
+	else:
+		_open_warning(town, plan)
+
+
+func _open_warning(town: TownData, plan: Dictionary) -> void:
+	Tips.close()
+	town.show_alert()
+	warning.show_trip(town, town.going, plan)
+	_dim.show()
+	warning.show()
+	warning.play_open()
+	# The careful choice has the focus, so that a second press of Enter can't skip this.
+	warning.bank_button.grab_focus()
+
+
+func _close_warning() -> void:
+	warning.hide()
+	_dim.hide()
+	card.enter.grab_focus()
+
+
+func _on_go_on() -> void:
+	warning.hide()
+	_dim.hide()
+	_depart(TownData.current())
+
+
+func _depart(town: TownData) -> void:
 	_leaving = true
 	town.remember_leaving()
-	bank_button.hide()
 	for button in card.people:
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -370,7 +382,9 @@ func _site_area() -> Rect2:
 
 
 func _leave() -> void:
-	if not _leaving:
+	if warning.visible:
+		_close_warning()
+	elif not _leaving:
 		Screens.go(TOWN)
 
 
