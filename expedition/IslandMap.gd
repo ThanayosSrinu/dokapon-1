@@ -83,17 +83,23 @@ func zone(id: String) -> Dictionary:
 
 
 ## Where someone on `id` may step next. `came_from` is the space they just left, or -1
-## at the start of a roll. It can't be walked straight back to, unless it is the only
-## way out. This is BoardManager.get_connected_nodes().
+## at the start of a roll. It can't be walked straight back to, so a walk ends at a dead
+## end. The old game's BoardManager.get_connected_nodes() turns round there instead.
 func exits(id: int, came_from := -1) -> Array[int]:
 	var options: Array[int] = _links[id]
-	if came_from == -1 or options.size() == 1 or not options.has(came_from):
+	if came_from == -1:
 		return options
 	return options.filter(func(other: int) -> bool: return other != came_from)
 
 
-## Every space someone on `id` can stop on after walking exactly `steps` spaces. This is
-## BoardManager.get_landing_nodes().
+## The exits of `id` that leave room to walk all of the `steps` left.
+func ways(id: int, came_from: int, steps: int) -> Array[int]:
+	return exits(id, came_from).filter(func(next: int) -> bool:
+		return not landings(next, id, steps - 1).is_empty())
+
+
+## Every space someone on `id` can stop on after walking exactly `steps` spaces. A road
+## that ends too soon gives none, so a dead end needs the exact number.
 func landings(id: int, came_from: int, steps: int) -> Array[int]:
 	if steps == 0:
 		return [id]
@@ -154,16 +160,21 @@ func steps_from(start: int) -> Dictionary:
 
 
 # Today's roll, then the best landing for each face, then what is left from there.
-# Rolling 0 stays put and tries again tomorrow, which is why the total is divided by
-# die_top and not by the number of faces.
+# A 0, or a number too big to walk, stays put and tries again tomorrow, which is why the
+# total is divided by the faces that move and not by all of them.
 func _days_from(id: int, days: Dictionary, die_top: int) -> float:
 	var total := float(die_top + 1)
+	var moving := 0
 	for face in range(1, die_top + 1):
+		var found := landings(id, -1, face)
+		if found.is_empty():
+			continue
 		var best := INF
-		for landing in landings(id, -1, face):
+		for landing in found:
 			best = minf(best, days[landing])
 		total += best
-	return total / die_top
+		moving += 1
+	return total / moving
 
 
 func _link(a: int, b: int) -> void:

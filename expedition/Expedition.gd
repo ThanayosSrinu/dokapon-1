@@ -14,7 +14,11 @@ extends RefCounted
 ## play_day() does all of that at once.
 ##
 ## The way home is the Portal, and only an exact landing counts. Walking across it does
-## nothing. A roll starts from 0, and a 0 spends the day standing still.
+## nothing. A roll starts from 0, and a 0 lands on the space they stand on, except on the
+## Portal on the first turn, so that nobody goes home by accident.
+##
+## A roll must be walked in full, and a walk can't turn back. A dead end takes the exact
+## number, and if no road is long enough the walk is void: they stay put and lose the turn.
 ##
 ## The lord can give an order at any moment with give_order(). It counts from that moment,
 ## and nothing in the dice changes because of it. Nobody comes home without the Return
@@ -103,6 +107,8 @@ var best_moment := {}
 ## on the way home, not counting the day they landed.
 var landing_days := 0
 
+# False if today's roll doesn't count as landing anywhere.
+var _lands := true
 # True once the Portal has been in reach of the die while heading home.
 var _portal_in_reach := false
 # Their level when today's fight began.
@@ -223,12 +229,18 @@ func roll() -> int:
 
 
 ## Walks `steps` spaces, choosing at each fork, and returns the ids stepped on in order.
-## They may turn back at the start of a roll, the same as a token on the board.
+## They may turn back at the start of a roll, but not after that. If no road is `steps`
+## long, the walk is void and the path is empty.
 func walk(steps: int) -> Array[int]:
 	var path: Array[int] = []
 	came_from = -1
+	_lands = steps > 0 or day > 1 or space_id != map.portal
+	if map.landings(space_id, -1, steps).is_empty():
+		_lands = false
+		note("stuck", "%s can't walk %d spaces, and loses the turn." % [player.player_name, steps])
+		return path
 	for steps_left in range(steps, 0, -1):
-		var options := map.exits(space_id, came_from)
+		var options := map.ways(space_id, came_from, steps_left)
 		var next := options[0]
 		if options.size() > 1:
 			next = brain.choose_path(options, space_id, steps_left)
@@ -241,10 +253,10 @@ func walk(steps: int) -> Array[int]:
 	return path
 
 
-## Does what the space under them does. Standing still after a 0 does nothing. Leaves
-## `fight` set if a monster must be fought first.
+## Does what the space under them does, even if a 0 left them on it. Leaves `fight` set
+## if a monster must be fought first.
 func land() -> void:
-	if came_from == -1:
+	if not _lands:
 		return
 	visits[space_id] = visits.get(space_id, 0) + 1
 	if _stop_at_portal():

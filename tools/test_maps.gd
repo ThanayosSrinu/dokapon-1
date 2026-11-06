@@ -263,11 +263,9 @@ func _test_same_as_board(stage: Stage, map: IslandMap) -> void:
 			var landed: Array[int] = []
 			for found in board.get_landing_nodes(node, steps):
 				landed.append(found.node_id)
-			var expected := map.landings(id, -1, steps).duplicate()
-			landed.sort()
-			expected.sort()
-			same = same and landed == expected
-	_expect(same, "%s walks the same on the board and in the rules" % stage.id)
+			same = same and map.landings(id, -1, steps).all(func(landing: int) -> bool:
+				return landed.has(landing))
+	_expect(same, "%s lands only where the board does" % stage.id)
 	board.free()
 
 

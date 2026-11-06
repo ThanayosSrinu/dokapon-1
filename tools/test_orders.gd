@@ -65,7 +65,6 @@ func _test_nobody_comes_home_unasked() -> void:
 	trip.brain.plan_day()
 	trip.walk(1)
 	trip.space_id = 0
-	trip.came_from = 1
 	trip.land()
 	_expect(trip.ending == Expedition.Ending.NONE, "with no order, landing on the Portal does nothing")
 	for seed_value in range(1, 21):
@@ -128,7 +127,6 @@ func _test_order_changes() -> void:
 	trip.give_order(Expedition.Order.ROAM)
 	_expect(trip.order == Expedition.Order.ROAM, "a Return can be called off")
 	trip.space_id = 0
-	trip.came_from = 1
 	trip.land()
 	_expect(trip.ending == Expedition.Ending.NONE, "and the Portal does nothing again")
 	trip.give_order(Expedition.Order.ZONE, "far")

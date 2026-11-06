@@ -31,6 +31,9 @@ func _ready() -> void:
 	_test_food()
 	_test_hunger()
 	_test_exact_landing()
+	_test_rolling_zero()
+	_test_dead_ends()
+	_test_roll_block()
 	_test_turning_for_home()
 	_test_forks()
 	_test_spaces()
@@ -56,11 +59,14 @@ func _test_map_matches_the_board() -> void:
 		_expect(map.type_of(id) == node.node_type, "space %d has the same type" % id)
 		_expect(_sorted(map.neighbors(id)) == _ids(board.get_neighbors(node)), "space %d has the same links" % id)
 		for came_from in board.get_neighbors(node):
-			_expect(_sorted(map.exits(id, came_from.node_id)) == _ids(board.get_connected_nodes(node, came_from)),
-					"space %d has the same exits" % id)
+			# The board turns round at a dead end. A trip doesn't.
+			if map.neighbors(id).size() > 1:
+				_expect(_sorted(map.exits(id, came_from.node_id)) == _ids(board.get_connected_nodes(node, came_from)),
+						"space %d has the same exits" % id)
 		for steps in [1, 3, 6, 10]:
-			_expect(_sorted(map.landings(id, -1, steps)) == _ids(board.get_landing_nodes(node, steps)),
-					"space %d has the same landings after %d steps" % [id, steps])
+			var found := _ids(board.get_landing_nodes(node, steps))
+			_expect(map.landings(id, -1, steps).all(func(landing: int) -> bool: return found.has(landing)),
+					"space %d lands only where the board does after %d steps" % [id, steps])
 	board.queue_free()
 
 
@@ -184,6 +190,73 @@ func _test_exact_landing() -> void:
 	_expect(trip.ending == Expedition.Ending.NONE, "with plenty of food they carry on past home")
 
 
+func _test_rolling_zero() -> void:
+	var trip := Expedition.new(_bram, _grass, 1)
+	var gold := _space_of(trip, BoardNode.NodeType.GOLD)
+	trip.day = 2
+	_land_on(trip, gold)
+	var paid := trip.player.gold
+	trip.walk(0)
+	trip.land()
+	_expect(trip.player.gold > paid and trip.visits[gold] == 2, "a 0 lands on the same space again")
+
+	# Told to go home on the first turn, a 0 on the Portal still doesn't count.
+	trip = _trip_on_line()
+	trip.order = Expedition.Order.HOME
+	trip.day = 1
+	trip.walk(0)
+	trip.land()
+	_expect(trip.ending == Expedition.Ending.NONE and trip.visits.is_empty(), "a 0 on the first turn doesn't land")
+	trip.day = 2
+	trip.walk(0)
+	trip.land()
+	_expect(trip.ending == Expedition.Ending.HOME, "a 0 on the Portal later on does")
+
+	trip = _trip_on_line()
+	trip.space_id = 3
+	trip.day = 1
+	trip.walk(0)
+	trip.land()
+	_expect(trip.player.gold > 0, "only the Portal is spared on the first turn")
+
+
+func _test_dead_ends() -> void:
+	var map := IslandMap.new(LINE)
+	_expect(map.exits(3, 2).is_empty(), "a walk can't turn back at a dead end")
+	_expect(map.landings(1, -1, 2) == ([3] as Array[int]), "a road too short gives no landing")
+	_expect(map.landings(1, -1, 3).is_empty(), "no road is three long from here")
+	_expect(map.landings(3, -1, 2) == ([1] as Array[int]), "they can leave a dead end")
+
+	var trip := _trip_on_line()
+	trip.space_id = 1
+	trip.brain.plan_day()
+	_expect(trip.walk(2) == ([2, 3] as Array[int]), "they take the road long enough for the roll")
+
+	trip = _trip_on_line()
+	trip.space_id = 1
+	trip.brain.plan_day()
+	var said := trip.diary.size()
+	_expect(trip.walk(4).is_empty(), "a roll no road can hold walks nowhere")
+	trip.land()
+	_expect(trip.space_id == 1 and trip.player.gold == 0 and trip.visits.is_empty(), "they stay put and nothing happens")
+	_expect(trip.diary[said]["kind"] == "stuck", "the lost turn is told")
+
+	_expect(map.days_to(0, 10)[3] < INF, "a big die on a small map still gets home")
+
+
+func _test_roll_block() -> void:
+	var block := RollBlock.new()
+	block._top = 6
+	var seen := {}
+	for spin in 200:
+		var before := block.number()
+		block._next_number()
+		seen[block.number()] = true
+		_expect(block.number() != before, "the number changes every time")
+	_expect(seen.keys().min() == 0 and seen.keys().max() == 6, "it runs through exactly what the die can roll")
+	block.free()
+
+
 func _test_turning_for_home() -> void:
 	var trip := _trip_on_line()
 	trip.space_id = 3
@@ -253,11 +326,6 @@ func _test_spaces() -> void:
 	var shrine := _space_of(trip, BoardNode.NodeType.SHRINE)
 	_land_on(trip, gold)
 	_expect(trip.player.gold > 0, "a Gold space pays")
-	var paid := trip.player.gold
-
-	trip.came_from = -1
-	trip.land()
-	_expect(trip.player.gold == paid and trip.visits[gold] == 1, "rolling 0 does nothing")
 
 	trip.player.hp = 1
 	_land_on(trip, shrine)
@@ -436,7 +504,6 @@ func _space_of(trip: Expedition, type: BoardNode.NodeType) -> int:
 func _land_on(trip: Expedition, id: int) -> void:
 	trip.space_id = id
 	trip.player.space_id = id
-	trip.came_from = trip.map.neighbors(id)[0]
 	trip.land()
 
 

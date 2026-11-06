@@ -547,16 +547,19 @@ func _test_speech() -> void:
 		await get_tree().process_frame
 	while screen.die.visible:
 		await get_tree().process_frame
+	# Paused, so that a fight can't come between the two lines. Speech runs on real time.
+	Engine.time_scale = 0.0
 	screen.trip.say("One")
 	screen.trip.say("Two")
-	await _wait()
+	await get_tree().create_timer(0.2, true, false, true).timeout
 	_expect(screen.bubble.shown_words() == "One", "the first line shows")
 	_expect(not screen.news.visible or not screen._news_words.text.contains("One"), "and not in the news as well")
-	await get_tree().create_timer(ExpeditionScreen.SPEECH_MS / 1000.0 + 0.2).timeout
-	while screen.bubble.shown_words() == "One" or screen.die.visible:
+	while screen.bubble.shown_words() == "One":
 		await get_tree().process_frame
-	await _wait()
+	await get_tree().process_frame
+	await get_tree().process_frame
 	_expect(screen.bubble.shown_words() == "Two", "then the next")
+	Engine.time_scale = 1.0
 	await _leave()
 
 

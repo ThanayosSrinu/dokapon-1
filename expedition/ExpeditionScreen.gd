@@ -51,8 +51,8 @@ const QUIET_SECONDS := 0.25
 const DISSOLVE_SECONDS := 0.7
 const HERO_LAYER := 10
 const HEAD := Vector2(0, -46)
-const DIE_SIZE := Vector2(144, 144)
-const DIE_TOP := 130.0
+## How far above their head the roll stands, clear of the steps left over the token.
+const DIE_GAP := 28.0
 const TOKEN_RING := Color(1.0, 0.85, 0.42)
 const FIGHT_LAYER := 1
 const UI_LAYER := 2
@@ -99,7 +99,7 @@ var hero: CharacterFigure
 var hud: TripHud
 ## What is worn and carried, and the box that explains things.
 var bag_panel: BagPanel
-var die: DiceRoller
+var die: RollBlock
 var battle_screen: BattleScreen
 var back: KitBackButton
 var arrow: KitArrow
@@ -211,8 +211,8 @@ func _play_day() -> void:
 	_refresh_orders()
 	await _show_news(read_from)
 	if can_move:
-		await _walk()
 		read_from = trip.diary.size()
+		await _walk()
 		var before := _purse()
 		trip.land()
 		_play_landing_sound(before)
@@ -226,7 +226,7 @@ func _play_day() -> void:
 
 func _walk() -> void:
 	var steps := trip.roll()
-	await die.throw(steps)
+	await die.throw(steps, trip.person.die_top)
 	var path: Array[BoardNode] = []
 	for id in trip.walk(steps):
 		path.append(board.get_board_node(id))
@@ -391,6 +391,7 @@ func _update_speech() -> void:
 		bubble.hide()
 		return
 	var head := get_viewport().get_canvas_transform() * (token.global_position + HEAD)
+	die.position = (head - Vector2(die.size.x * 0.5, die.size.y + DIE_GAP)).round()
 	if bubble.visible and Time.get_ticks_msec() >= _speech_ends:
 		bubble.hide()
 	if bubble.visible:
@@ -658,14 +659,9 @@ func _build_ui(town: TownData) -> void:
 
 
 func _build_die() -> void:
-	die = DiceRoller.new()
-	die.custom_minimum_size = DIE_SIZE
-	die.size = DIE_SIZE
+	die = RollBlock.new()
 	die.hide()
 	_layer.add_child(die)
-	die.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE)
-	die.offset_top += DIE_TOP
-	die.offset_bottom += DIE_TOP
 
 
 func _build_strip(town: TownData) -> void:
