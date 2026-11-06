@@ -62,6 +62,11 @@ func send_problem() -> String:
 	return "Hire someone first" if hired == null else ""
 
 
+## Takes in what `trip` brought home. Call this once, when the trip is over.
+func bring_home(trip: Expedition) -> void:
+	gold += trip.gold_home()
+
+
 ## Pays `person` and takes them on. Returns false, changing nothing, if that can't be done.
 func hire(person: Adventurer) -> bool:
 	if hire_problem(person) != "":

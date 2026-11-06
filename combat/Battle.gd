@@ -98,6 +98,8 @@ class Outcome:
 	var result := ""
 
 
+## Where someone knocked out wakes up, in words.
+var carried_to := "the castle"
 ## The side that started the battle, and the side it attacked. Never swapped.
 var challenger: Fighter
 var opponent: Fighter
@@ -395,7 +397,7 @@ func _knock_out(player: PlayerData, lines: PackedStringArray) -> void:
 		if lost > 0:
 			lines.append("%s drops %d gold." % [player.player_name, lost])
 	player.knock_out()
-	lines.append("%s is carried back to the castle." % player.player_name)
+	lines.append("%s is carried back to %s." % [player.player_name, carried_to])
 
 
 # --- CPU choices ------------------------------------------------------------

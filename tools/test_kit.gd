@@ -325,7 +325,8 @@ func _focused() -> Control:
 
 
 func _wait() -> void:
-	await get_tree().create_timer(WAIT).timeout
+	# Real time, so that a test can look around while the game's time stands still.
+	await get_tree().create_timer(WAIT, true, false, true).timeout
 
 
 func _until_settled() -> void:

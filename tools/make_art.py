@@ -197,7 +197,28 @@ def apply(m, v):
     return tuple(sum(m[r][c] * v[c] for c in range(3)) for r in range(3))
 
 
-def render_die(rotation):
+# Digits 3 wide and 5 high, for the faces of a movement die.
+DIGITS = {
+    "0": "111101101101111", "1": "010110010010111", "2": "111001111100111",
+    "3": "111001111001111", "4": "101101111001001", "5": "111100111001111",
+    "6": "111100111101111", "7": "111001010010010", "8": "111101111101111",
+    "9": "111101111001111",
+}
+DIGIT_PIXEL = 0.24
+
+
+def number_ink(number, u, v):
+    """True if the place (u, v) on a face falls on a stroke of `number`."""
+    text = str(number)
+    width = len(text) * 4 - 1
+    gx = math.floor((u + width * DIGIT_PIXEL / 2) / DIGIT_PIXEL)
+    gy = math.floor((v + 5 * DIGIT_PIXEL / 2) / DIGIT_PIXEL)
+    if not (0 <= gx < width and 0 <= gy < 5) or gx % 4 == 3:
+        return False
+    return DIGITS[text[gx // 4]][gy * 3 + gx % 4] == "1"
+
+
+def render_die(rotation, number=None):
     image = Image.new("RGBA", (DIE_CELL, DIE_CELL), (0, 0, 0, 0))
     size = 21.0
     center = DIE_CELL / 2 - 0.5
@@ -225,9 +246,13 @@ def render_die(rotation):
             color = shade(hexc("#f7ecd2"), level)
             if max(abs(u), abs(v)) > 0.9:
                 color = shade(color, 0.86)
-            for gu, gv in PIPS[value]:
-                if math.hypot(u - gu * 0.5, v - gv * 0.5) < 0.2:
-                    color = hexc("#c9302f") if value == 1 else hexc("#2c2030")
+            if number is not None:
+                if value == 1 and number_ink(number, u, v):
+                    color = hexc("#2c2030")
+            else:
+                for gu, gv in PIPS[value]:
+                    if math.hypot(u - gu * 0.5, v - gv * 0.5) < 0.2:
+                        color = hexc("#c9302f") if value == 1 else hexc("#2c2030")
             image.putpixel((px, py), color)
     edge = image.copy()
     source = image.load()
@@ -258,6 +283,10 @@ def make_die():
         sheet.alpha_composite(render_die(matmul(tilt, turn_to_front[value])),
                               ((value - 1) * DIE_CELL, DIE_CELL))
     sheet.save(OUT / "die.png")
+    numbers = Image.new("RGBA", (DIE_CELL * 11, DIE_CELL), (0, 0, 0, 0))
+    for number in range(11):
+        numbers.alpha_composite(render_die(tilt, number), (number * DIE_CELL, 0))
+    numbers.save(OUT / "die_numbers.png")
 
 
 # --- Small effects ----------------------------------------------------------

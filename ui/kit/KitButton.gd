@@ -45,6 +45,11 @@ const PADDING := {Kind.PRIMARY: 40.0, Kind.NORMAL: 24.0, Kind.SMALL: 18.0}
 		kind = value
 		update_minimum_size()
 		queue_redraw()
+## Shows this button as the one picked from a row, such as a speed.
+var lit := false:
+	set(value):
+		lit = value
+		queue_redraw()
 ## Puts the contents at the left edge instead of the middle.
 @export var left_aligned := false
 ## The sound of being pressed.
@@ -114,7 +119,7 @@ func _draw() -> void:
 ## Plays the "you can't do that" answer.
 func deny() -> void:
 	Sound.play("deny")
-	var tween := create_tween()
+	var tween := create_tween().set_ignore_time_scale(true)
 	var seconds := SHAKE_SECONDS / 4.0
 	tween.tween_property(self, "shown_shake", SHAKE_SIZE, seconds)
 	tween.tween_property(self, "shown_shake", -SHAKE_SIZE, seconds)
@@ -146,7 +151,7 @@ func _chosen_look() -> Look:
 func _face_art(look: Look) -> String:
 	if look == Look.OFF:
 		return "button_stone"
-	var family := "button_primary" if kind == Kind.PRIMARY else "button_wood"
+	var family := "button_primary" if kind == Kind.PRIMARY or lit else "button_wood"
 	match look:
 		Look.HOT, Look.FOCUS:
 			return family + "_hot"
@@ -213,7 +218,7 @@ func _rest_at(offset: float) -> void:
 	if not is_inside_tree():
 		shown_offset = offset
 		return
-	_move = create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_move = create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_ignore_time_scale(true)
 	_move.tween_property(self, "shown_offset", offset, MOVE_SECONDS)
 
 

@@ -2,7 +2,7 @@ class_name Expedition
 extends RefCounted
 ## The rules of one trip, with no UI. One adventurer rolls, walks, lands, fights, eats and
 ## tries to get home. tools/sim_expedition.gd runs hundreds of these with no window, and
-## E6 plays the same steps on screen.
+## ExpeditionScreen plays the same steps on screen.
 ##
 ## A day has steps, so a screen can show each one:
 ##     if trip.start_day():
@@ -25,6 +25,13 @@ enum Ending { NONE, HOME, BEATEN, STARVED }
 const HUNGER_SHARE := 0.1
 ## The events that make sense for someone alone on an island, and how often they come.
 const EVENT_WEIGHTS := {"festival": 3, "merchant": 3, "blessing": 3, "storm": 2, "ambush": 2, "portal": 2}
+## How much a won fight counts as a moment for the report, per gold it paid. The closer
+## the call, the more it counts, up to twice this.
+const FIGHT_MOMENT := 1.0
+## A level gained counts as this much gold in the report.
+const LEVEL_MOMENT := 150
+## A win with this share of HP gone is worth telling as a close call.
+const CLOSE_CALL := 0.7
 
 ## Who is on the trip, and their sheet for the road.
 var person: Adventurer
@@ -53,12 +60,17 @@ var fights := 0
 var fights_won := 0
 ## Days lived with no food.
 var hungry_days := 0
+## The trip's finest moment, for the report: {"day", "text", "worth"}. Empty if nothing
+## good happened. See _remember().
+var best_moment := {}
 ## Days lost trying to land: every day after the Portal first came in reach of the die
 ## on the way home, not counting the day they landed.
 var landing_days := 0
 
 # True once the Portal has been in reach of the die while heading home.
 var _portal_in_reach := false
+# Their level when today's fight began.
+var _level_before_fight := 1
 # What a chest holds while its guardian is fought.
 var _prize: SpaceEffects.Result
 # Space id -> the fewest steps from the Portal.
@@ -189,6 +201,8 @@ func auto_fight() -> void:
 
 ## Settles `fight`. `lines` are what Battle.conclude() returned.
 func finish_fight(lines: PackedStringArray) -> void:
+	var monster := fight.opponent.monster
+	var level_before := _level_before_fight
 	var won := fight.winner != null and fight.winner.player == player
 	var lost := fight.loser != null and fight.loser.player == player
 	fight = null
@@ -196,6 +210,7 @@ func finish_fight(lines: PackedStringArray) -> void:
 	note("fight", " ".join(lines))
 	if won:
 		fights_won += 1
+		_remember_win(monster, level_before)
 		if _prize != null:
 			SpaceEffects.empty_chest(space_id)
 			_prize.guardian = null
@@ -211,9 +226,10 @@ func end_day() -> void:
 		landing_days += 1
 
 
-## Adds a line to the diary.
+## Adds a line to the diary. The Portal took the castle's place, so older lines shared
+## with the board game say so here.
 func note(kind: String, text: String) -> void:
-	diary.append({"day": day, "kind": kind, "text": text})
+	diary.append({"day": day, "kind": kind, "text": text.replace("the castle", "the Portal")})
 
 
 ## The fewest steps from the Portal to space `id`.
@@ -267,13 +283,37 @@ func _open_chest() -> void:
 
 
 func _meet(monster: MonsterData) -> void:
-	note("fight", "%s meets a %s." % [player.player_name, monster.display_name])
+	note("meet", "%s meets a %s." % [player.player_name, monster.display_name])
 	fight = Battle.new(Fighter.from_player(player), Fighter.from_monster(monster))
+	fight.carried_to = "the Portal"
+	_level_before_fight = player.level
+
+
+# Keeps `text` as the trip's finest moment if it beats the one so far.
+func _remember(text: String, worth: float) -> void:
+	if worth > 0.0 and worth > best_moment.get("worth", 0.0):
+		best_moment = {"day": day, "text": text, "worth": worth}
+
+
+func _remember_win(monster: MonsterData, level_before: int) -> void:
+	if monster == null:
+		return
+	var hurt := 1.0 - float(player.hp) / player.get_stat("max_hp")
+	var worth := monster.gold_reward * FIGHT_MOMENT * (1.0 + hurt)
+	var levels := player.level - level_before
+	worth += levels * LEVEL_MOMENT
+	var text := "%s beat a %s" % [player.player_name, monster.display_name]
+	if hurt > CLOSE_CALL:
+		text += " with only %d HP left" % player.hp
+	if levels > 0:
+		text += " and reached level %d" % player.level
+	_remember(text + ".", worth)
 
 
 # Pays out what a space or an event did.
 func _take(result: SpaceEffects.Result) -> void:
 	note("find", result.text)
+	_remember(result.text.replace("the castle", "the Portal"), _worth_of(result))
 	player.add_gold(result.gold)
 	for changed_player: PlayerData in result.gold_changes:
 		changed_player.add_gold(result.gold_changes[changed_player])
@@ -286,6 +326,13 @@ func _take(result: SpaceEffects.Result) -> void:
 		_stop_at_portal()
 	if result.guardian != null:
 		_meet(result.guardian)
+
+
+func _worth_of(result: SpaceEffects.Result) -> float:
+	var worth := float(result.gold)
+	if result.item_id != "":
+		worth += Database.get_item(result.item_id).price
+	return worth
 
 
 # Pulls them to a space, which does nothing to them.

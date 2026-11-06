@@ -35,6 +35,7 @@ func _ready() -> void:
 	_test_chest_guardian()
 	_test_defeat()
 	_test_snare()
+	_test_report()
 	print("TESTS OK" if _failures == 0 else "%d TEST(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -351,6 +352,49 @@ func _trip_on_map(map: IslandMap) -> Expedition:
 	trip._depth = map.steps_from(map.portal)
 	GameState.castle_id = map.portal
 	return trip
+
+
+func _test_report() -> void:
+	var seen := {}
+	for seed_value in range(1, 121):
+		var trip := Expedition.new(_bram, _grass, seed_value)
+		trip.play_to_end()
+		var report := TripReport.new(trip)
+		var words := " ".join(report.story)
+		_expect(not words.contains("castle") and not report.best.contains("castle"), "the report never says castle")
+		for line in trip.diary:
+			_expect(not line["text"].contains("castle"), "the diary never says castle: " + line["text"])
+		_expect(report.title.contains(_bram.display_name), "the report names them")
+		_expect(report.story.size() >= 2, "the report tells a story")
+		_expect(report.days == trip.day, "it counts the days")
+		_expect(report.gold_home == trip.gold_home(), "it counts the gold")
+		if not trip.best_moment.is_empty():
+			_expect(report.best.begins_with("Day %d:" % trip.best_moment["day"]), "the best moment has its day")
+			_expect(trip.best_moment["day"] <= trip.day, "and it happened on the trip")
+		if trip.ending == Expedition.Ending.HOME:
+			_expect(report.gold_lost == 0, "a trip home loses nothing")
+		else:
+			_expect(report.gold_home == 0, "a lost trip brings nothing home")
+			_expect(report.gold_lost == trip.player.gold, "and says what was lost")
+		seen[trip.ending] = true
+	_expect(seen.has(Expedition.Ending.HOME) and seen.has(Expedition.Ending.BEATEN), "these seeds show both endings")
+	# Hunger, set up by hand, since it is rare.
+	var hungry := Expedition.new(_bram, _grass, 1)
+	hungry.food_left = 0
+	hungry.player.hp = 1
+	hungry.player.inventory.clear()
+	hungry.start_day()
+	_expect(hungry.ending == Expedition.Ending.STARVED, "hunger ends the trip")
+	_expect(TripReport.new(hungry).title.contains("food"), "the report blames the food")
+	# A close call is told as one, and beats a smaller find.
+	var brave := Expedition.new(_bram, _grass, 1)
+	brave.day = 3
+	brave._remember("Small find.", 5.0)
+	brave.player.hp = 1
+	brave._remember_win(Database.get_monster("orc_grunt"), brave.player.level)
+	_expect(brave.best_moment["text"].contains("only 1 HP"), "a close fight is the best moment")
+	brave._remember("Smaller find.", 1.0)
+	_expect(brave.best_moment["text"].contains("only 1 HP"), "and a smaller thing doesn't replace it")
 
 
 func _space_of(trip: Expedition, type: BoardNode.NodeType) -> int:

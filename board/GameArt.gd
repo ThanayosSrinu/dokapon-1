@@ -9,6 +9,8 @@ const WORLD: Texture2D = preload("res://assets/puny/world/punyworld-overworld-ti
 const SPACES: Texture2D = preload("res://assets/custom/spaces.png")
 const ICONS: Texture2D = preload("res://assets/custom/space_icons.png")
 const DIE: Texture2D = preload("res://assets/custom/die.png")
+## Resting faces with the numbers 0 to 10, for a movement die.
+const DIE_NUMBERS: Texture2D = preload("res://assets/custom/die_numbers.png")
 const FX: Texture2D = preload("res://assets/custom/fx.png")
 const CLOUD: Texture2D = preload("res://assets/custom/cloud.png")
 const BIRD: Texture2D = preload("res://assets/custom/bird.png")

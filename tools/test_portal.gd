@@ -5,7 +5,6 @@ extends "res://tools/test_kit.gd"
 ## Prints "TESTS OK" or one FAIL line per problem, and exits with 1 on failures.
 
 const PORTAL := "res://portal/PortalScreen.tscn"
-const ARRIVAL := "res://expedition/ArrivalScreen.tscn"
 ## How long the adventurer takes to appear, say their line and show the banner.
 const APPEARED := 1.6
 
@@ -160,7 +159,7 @@ func _test_mouse() -> void:
 
 ## Waits for the send-off to reach the island.
 func _until_on_island() -> void:
-	while not (get_tree().current_scene is ArrivalScreen):
+	while not (get_tree().current_scene is ExpeditionScreen):
 		await get_tree().process_frame
 	await _until_settled()
 
@@ -189,13 +188,13 @@ func _test_send_off() -> void:
 	_expect(portal.site.charge > 0.9, "the Portal is fully awake by the flash")
 	_expect(portal.hero.position == PortalScreen.HERO_GOAL, "the adventurer reached the Portal")
 	await _until_on_island()
-	_expect(get_tree().current_scene is ArrivalScreen, "the send-off reaches the island")
+	_expect(get_tree().current_scene is ExpeditionScreen, "the send-off reaches the island")
 	_expect(town.gold == gold and town.hired != null, "the trip changes nothing yet")
 
 
 ## Runs straight after _test_send_off, on the island it reached.
 func _test_arrival() -> void:
-	var island: ArrivalScreen = get_tree().current_scene
+	var island: ExpeditionScreen = get_tree().current_scene
 	var town := TownData.current()
 	await get_tree().create_timer(APPEARED).timeout
 	var start := island.board.get_starting_node().global_position
@@ -203,26 +202,23 @@ func _test_arrival() -> void:
 	_expect(island.hero.visible and island.hero.global_position == start, "the adventurer stands on the first space")
 	_expect(island.hero.material == null, "and has fully appeared")
 	_expect(island.bubble.shown_words() == town.hired.arrive_line, "they say their line")
-	_expect(island.banner.visible, "the banner says what happened")
-	_expect(island.back.text == "Back to Town", "the way back says where it goes")
 	_expect(island.back.position == Kit.BACK_POSITION, "Back is in its usual place")
-	_expect(island.back.kind == KitButton.Kind.PRIMARY, "and is the main action")
-	_expect(_focused() == island.back, "Back has focus")
-	_expect(island.arrow.target == island.back, "the arrow points at Back")
 	_expect(Sound.current_tune() == "board", "the island has its music")
 	_expect(island.camera.is_current(), "the island's camera is in use")
-	island.camera.global_position += Vector2(200, 0)
-	await _wait()
-	_expect(island.bubble.shown_words() == "", "looking around leaves the words behind")
-	await _tap("ui_up")
-	await _tap("ui_left")
-	_expect(_focused() == island.back, "the arrows stay on the one button")
-	await _tap("ui_cancel")
-	await _until_settled()
+	await _leave_with_keys()
 	var back_home: TownScreen = get_tree().current_scene
-	_expect(back_home is TownScreen, "Esc goes back to town")
+	_expect(back_home is TownScreen, "leaving goes back to town")
 	_expect(_focused() == back_home.building("portal"), "the Portal has focus for the next trip")
 	_expect(back_home.waiting != null, "the adventurer is home")
+
+
+## Gives up the trip with Esc, Down and Enter.
+func _leave_with_keys() -> void:
+	await _tap("ui_cancel")
+	await _wait()
+	await _tap("ui_down")
+	await _tap("ui_accept")
+	await _until_settled()
 
 
 func _test_path_with_keys() -> void:
@@ -244,8 +240,7 @@ func _test_path_with_keys() -> void:
 		_expect(get_tree().current_scene is PortalScreen, "keys: the town opens the Portal, trip %d" % trip)
 		await _tap("ui_accept")
 		await _until_on_island()
-		await _tap("ui_accept")
-		await _until_settled()
+		await _leave_with_keys()
 		_expect(get_tree().current_scene is TownScreen, "keys: the island leads home, trip %d" % trip)
 
 
@@ -266,8 +261,11 @@ func _test_path_with_controller() -> void:
 		await _until_settled()
 		await _pad(JOY_BUTTON_A)
 		await _until_on_island()
-		_expect(get_tree().current_scene is ArrivalScreen, "pad: the Portal leads to the island, trip %d" % trip)
+		_expect(get_tree().current_scene is ExpeditionScreen, "pad: the Portal leads to the island, trip %d" % trip)
 		await _pad(JOY_BUTTON_B)
+		await _wait()
+		await _pad(JOY_BUTTON_DPAD_DOWN)
+		await _pad(JOY_BUTTON_A)
 		await _until_settled()
 		_expect(get_tree().current_scene is TownScreen, "pad: the island leads home, trip %d" % trip)
 
@@ -294,8 +292,10 @@ func _test_path_with_mouse() -> void:
 		_expect(portal is PortalScreen, "mouse: the town opens the Portal, trip %d" % trip)
 		await _click(portal.card.enter)
 		await _until_on_island()
-		var island: ArrivalScreen = get_tree().current_scene
+		var island: ExpeditionScreen = get_tree().current_scene
 		await _click(island.back)
+		await _wait()
+		await _click(island.leave_button)
 		await _until_settled()
 		_expect(get_tree().current_scene is TownScreen, "mouse: the island leads home, trip %d" % trip)
 	TownData.start_new()

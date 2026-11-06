@@ -4,7 +4,7 @@ extends Control
 ## what they carry, and one button sends them off.
 
 const TOWN := "res://town/TownScreen.tscn"
-const ARRIVAL := "res://expedition/ArrivalScreen.tscn"
+const EXPEDITION := "res://expedition/ExpeditionScreen.tscn"
 ## The part of the window that a 1280 by 720 layout uses. A larger window centers it.
 const STAGE := Vector2(1280, 720)
 const CARD_LEFT := 816.0
@@ -178,7 +178,7 @@ func _on_enter() -> void:
 	await hero.dissolve(0.0, 1.0, DISSOLVE_SECONDS)
 	await get_tree().create_timer(BURST_SECONDS).timeout
 	Sound.play("portal_flash")
-	Screens.flash_to(ARRIVAL)
+	Screens.flash_to(EXPEDITION)
 
 
 ## The card slides away, so that nothing is in the way of the Portal.

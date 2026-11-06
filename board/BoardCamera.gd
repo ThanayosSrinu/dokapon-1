@@ -18,9 +18,16 @@ extends Camera2D
 @export var follow_speed := 6.0
 
 const ZOOM_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0, 3.0]
+## The longest frame that counts, so a hitch can't throw the view across the island.
+const MOST_FRAME_SECONDS := 0.1
+const ARROWS: Array[Key] = [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]
 
 ## The part of the world the camera may show. Set by GameController.
 var world_limit := Rect2()
+
+## False leaves the arrow keys to the buttons on screen. WASD, the stick and the mouse
+## still look around.
+var arrows_pan := true
 
 var _dragging := false
 var _focus_tween: Tween
@@ -29,21 +36,35 @@ var _zoom_tween: Tween
 var _zoom_index := 1
 # The node being followed, or null.
 var _follow_target: Node2D
+# When the last frame began, in real time.
+var _last_frame := 0
 
 
 func _process(delta: float) -> void:
-	var direction := Input.get_vector("camera_left", "camera_right", "camera_up", "camera_down")
+	# Looking around goes by real time, so it works however fast the game is running.
+	var now := Time.get_ticks_usec()
+	var real_delta := minf((now - _last_frame) / 1000000.0, MOST_FRAME_SECONDS)
+	_last_frame = now
+	var direction := _pan_direction()
 	if direction != Vector2.ZERO:
 		_stop_focus()
 		stop_following()
 		# Divide by zoom so panning feels equally fast at every zoom level.
-		global_position += direction * pan_speed * delta / zoom.x
+		global_position += direction * pan_speed * real_delta / zoom.x
 	elif _follow_target != null:
 		# Move a share of the remaining distance each frame. Using exp() makes
 		# the speed the same at any frame rate.
 		var weight := 1.0 - exp(-follow_speed * delta)
 		global_position = global_position.lerp(_follow_target.global_position, weight)
 	_stay_in_world()
+
+
+func _pan_direction() -> Vector2:
+	if not arrows_pan:
+		for key in ARROWS:
+			if Input.is_physical_key_pressed(key):
+				return Vector2.ZERO
+	return Input.get_vector("camera_left", "camera_right", "camera_up", "camera_down")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -72,7 +93,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func focus_on(world_position: Vector2, duration := 0.4) -> void:
 	_stop_focus()
 	stop_following()
-	_focus_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_focus_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT).set_ignore_time_scale(true)
 	_focus_tween.tween_property(self, "global_position", world_position, duration)
 
 
@@ -97,7 +118,7 @@ func _stop_focus() -> void:
 func set_zoom_index(index: int, duration := 0.6) -> void:
 	_zoom_index = clampi(index, 0, ZOOM_LEVELS.size() - 1)
 	_kill_zoom()
-	_zoom_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_zoom_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT).set_ignore_time_scale(true)
 	_zoom_tween.tween_property(self, "zoom", Vector2.ONE * ZOOM_LEVELS[_zoom_index], duration)
 
 
@@ -135,7 +156,7 @@ func _zoom_toward_mouse(direction: int) -> void:
 	var mouse_offset := get_viewport().get_mouse_position() - get_viewport_rect().size * 0.5
 	var world_under_mouse := global_position + mouse_offset / zoom.x
 	var new_zoom := ZOOM_LEVELS[index]
-	_zoom_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_zoom_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_ignore_time_scale(true)
 	_zoom_tween.tween_method(func(level: float) -> void:
 			zoom = Vector2(level, level)
 			global_position = world_under_mouse - mouse_offset / level,

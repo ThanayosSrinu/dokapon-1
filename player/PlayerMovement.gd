@@ -199,10 +199,22 @@ func move_steps(steps: int) -> void:
 		steps_left -= 1
 		step_finished.emit(current_node, steps_left)
 
-	is_moving = false
-	z_index = IDLE_Z_INDEX
-	_row = ROW_FACING_VIEWER
-	movement_finished.emit(current_node)
+	_stop_walking()
+
+
+## Walks along `path`, spaces already chosen, so no fork asks anything.
+## Emits `movement_finished` when done.
+func walk_path(path: Array[BoardNode]) -> void:
+	is_moving = true
+	z_index = MOVING_Z_INDEX
+	steps_left = path.size()
+	for next_node in path:
+		await _slide_to(next_node)
+		_previous_node = current_node
+		current_node = next_node
+		steps_left -= 1
+		step_finished.emit(current_node, steps_left)
+	_stop_walking()
 
 
 ## Picks the path to take at a fork. `node` must be one of the spaces sent
@@ -245,6 +257,13 @@ func set_rest_offset(offset: Vector2, depth := 0) -> void:
 
 
 # --- Internal helpers -------------------------------------------------------
+
+func _stop_walking() -> void:
+	is_moving = false
+	z_index = IDLE_Z_INDEX
+	_row = ROW_FACING_VIEWER
+	movement_finished.emit(current_node)
+
 
 func _ask_for_path(options: Array[BoardNode]) -> BoardNode:
 	_chosen_node = null

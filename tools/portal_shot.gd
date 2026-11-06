@@ -41,11 +41,11 @@ func _ready() -> void:
 		await get_tree().process_frame
 	await _settle(Screens.FLASH_IN_SECONDS * 0.7)
 	await _save(folder + "/send_flash.png")
-	while not (get_tree().current_scene is ArrivalScreen):
+	while not (get_tree().current_scene is ExpeditionScreen):
 		await get_tree().process_frame
 	await _settle(0.9)
 	await _save(folder + "/arrive_burst.png")
-	await _settle(1.6)
+	await _settle(1.0)
 	await _save(folder + "/arrive_done.png")
 	Screens.go("res://town/TownScreen.tscn")
 	await _settle(1.5)

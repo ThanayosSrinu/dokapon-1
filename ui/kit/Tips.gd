@@ -31,6 +31,7 @@ func _ready() -> void:
 	add_child(_card)
 	_timer = Timer.new()
 	_timer.one_shot = true
+	_timer.ignore_time_scale = true
 	_timer.wait_time = DELAY
 	_timer.timeout.connect(_open)
 	add_child(_timer)
@@ -145,6 +146,6 @@ func _open() -> void:
 		_fade.kill()
 	_card.modulate.a = 0.0
 	_card.position = spot + Vector2(0, RISE)
-	_fade = create_tween().set_parallel(true)
+	_fade = create_tween().set_ignore_time_scale(true).set_parallel(true)
 	_fade.tween_property(_card, "modulate:a", 1.0, FADE_SECONDS)
 	_fade.tween_property(_card, "position", spot, FADE_SECONDS)

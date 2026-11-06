@@ -1,12 +1,16 @@
 class_name DiceRoller
 extends Control
-## A six-sided die thrown across the screen. Call roll() and await it:
+## A die thrown across the screen. Call roll() and await it:
 ##     var result := await dice.roll()
-## The die flies in spinning, bounces, slows down and settles on the result.
+## The die flies in spinning, bounces, slows down and settles on the result. For a roll
+## decided elsewhere, throw() shows that number instead, on a face with 0 to 10 written
+## on it.
 
 const SIDES := 6
 ## Frames on GameArt.DIE: a row of tumbling, then a row of resting faces.
 const FRAME_SIZE := 72
+## The value while the die is in the air.
+const TUMBLING := -1
 const TUMBLE_FRAMES := 24
 ## Where the throw starts, relative to where the die lands.
 const THROW_FROM := Vector2(-560, 300)
@@ -17,8 +21,8 @@ const REST_DURATION := 0.9
 ## For testing: when above 0, every roll gives this number.
 @export_range(0, 6) var fixed_result := 0
 
-## The face shown right now. 0 means the die is still tumbling.
-var value := 0:
+## The face shown right now, or TUMBLING.
+var value := TUMBLING:
 	set(new_value):
 		value = new_value
 		queue_redraw()
@@ -32,6 +36,8 @@ var _tumble := 0.0:
 var _rest_position := Vector2.ZERO
 var _has_rest_position := false
 var _leave_tween: Tween
+# Which art `value` is on: faces with numbers, or faces with pips.
+var _numbered := false
 
 
 ## Rolls the die, plays the animation and returns the result.
@@ -40,7 +46,17 @@ func roll() -> int:
 	# Only the result uses the game's seeded generator, so the same seed gives
 	# the same rolls no matter how the animation plays out.
 	var result := fixed_result if fixed_result > 0 else GameState.rng.randi_range(1, SIDES)
+	await _throw(result)
+	return result
 
+
+## Plays the animation and settles on `result`, a number from 0 to 10.
+func throw(result: int) -> void:
+	_numbered = true
+	await _throw(result)
+
+
+func _throw(result: int) -> void:
 	if not _has_rest_position:
 		_rest_position = position
 		_has_rest_position = true
@@ -51,7 +67,7 @@ func roll() -> int:
 	scale = Vector2.ONE
 	rotation = 0.0
 	modulate.a = 1.0
-	value = 0
+	value = TUMBLING
 	show()
 	Sound.play("dice_roll")
 
@@ -79,14 +95,17 @@ func roll() -> int:
 	_leave_tween.tween_interval(REST_DURATION)
 	_leave_tween.tween_property(self, "modulate:a", 0.0, 0.25)
 	_leave_tween.tween_callback(hide)
-	return result
 
 
 func _draw() -> void:
+	var art := GameArt.DIE
 	var region: Rect2
-	if value > 0:
-		region = Rect2((value - 1) * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE)
-	else:
+	if value == TUMBLING:
 		var frame := int(_tumble) % TUMBLE_FRAMES
 		region = Rect2(frame * FRAME_SIZE, 0, FRAME_SIZE, FRAME_SIZE)
-	draw_texture_rect_region(GameArt.DIE, Rect2(Vector2.ZERO, size), region)
+	elif _numbered:
+		art = GameArt.DIE_NUMBERS
+		region = Rect2(value * FRAME_SIZE, 0, FRAME_SIZE, FRAME_SIZE)
+	else:
+		region = Rect2((value - 1) * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE)
+	draw_texture_rect_region(art, Rect2(Vector2.ZERO, size), region)

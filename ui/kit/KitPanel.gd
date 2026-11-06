@@ -26,6 +26,6 @@ func play_open() -> void:
 	var home := position
 	position = home + Vector2(0, RISE)
 	modulate.a = 0.0
-	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_ignore_time_scale(true)
 	tween.tween_property(self, "position", home, OPEN_SECONDS)
 	tween.tween_property(self, "modulate:a", 1.0, OPEN_SECONDS)
