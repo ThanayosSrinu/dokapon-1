@@ -9,7 +9,7 @@ const WIDTH := 640.0
 ## How many things that happened it tells, before what lost the town.
 const STORY_LINES := 5
 const BACKGROUND := Color(0.12, 0.04, 0.07)
-const HEADING := "The town is lost"
+const HEADING := "Game Over"
 const WORDS := "The King has taken your town. What is yours is gone."
 
 var new_town: KitButton
