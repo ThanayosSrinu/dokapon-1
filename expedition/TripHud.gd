@@ -1,9 +1,8 @@
 class_name TripHud
 extends KitPanel
-## The strip along the bottom while a trip plays. The top row is the date, health, food,
-## bag and gold. The bottom row is who is out there and their stats, which turn red while
-## hunger has them weak. Food turns gold once they ask to come home, because that is the
-## lord's cue.
+## The strip along the bottom while a trip plays. The top row is health, food and gold.
+## The bottom row is who is out there and their stats, which turn red while hunger has
+## them weak. Food turns gold once they ask to come home, because that is the lord's cue.
 ## Each part has a tip with the exact numbers (rule U3).
 
 const BAR_WIDTH := 160.0
@@ -20,18 +19,16 @@ const STATS := [
 	{"stat": "speed", "short": "SPD", "name": "Speed", "icon": "boot"},
 ]
 
-var date: DateChip
 var hp_bar: KitBar
 var hp_words: Label
 var food_bar: KitBar
 var food_words: Label
-var bag: KitChip
 var gold: KitChip
 var who: Label
 ## One per entry of STATS, in the same order.
 var stats: Array[KitStat] = []
 ## Says so while they are weak, for those who do not read colors.
-var weak_words: Label
+var starving_words: Label
 
 var _trip: Expedition
 # The food they set out with, which is a full bar.
@@ -48,15 +45,10 @@ func _init(trip: Expedition, stage: Stage) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", GAP)
 	rows.add_child(row)
-	date = DateChip.new(true)
-	date.focus_mode = Control.FOCUS_ALL
-	date.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(date)
 	hp_bar = _bar(row, Kit.HEALTH, "heart")
 	hp_words = _words(row, HP_WORDS_WIDTH)
 	food_bar = _bar(row, Kit.SUPPLY, "food")
 	food_words = _words(row, FOOD_WORDS_WIDTH)
-	bag = _chip(row, "bag")
 	gold = _chip(row, "coin")
 	_build_stats(rows)
 
@@ -70,22 +62,18 @@ func _ready() -> void:
 func refresh(slide := true) -> void:
 	var player := _trip.player
 	var max_hp: int = player.get_stat("max_hp")
-	var town := TownData.current()
-	date.show_day(town, town.day + _trip.day)
 	hp_bar.set_amount(player.hp, max_hp, slide)
 	hp_words.text = "%d/%d" % [player.hp, max_hp]
 	food_bar.set_amount(_trip.food_left, _food_full, slide)
-	food_words.text = "No food!" if _trip.food_left == 0 else _days(_trip.food_left)
+	food_words.text = "No food!" if _trip.food_left == 0 else Expedition.turns_words(_trip.food_left)
 	food_words.modulate = _food_color()
-	bag.set_amount(player.inventory.size(), slide)
 	gold.set_amount(player.gold, slide)
 	who.text = "%s  Lv %d" % [player.player_name, player.level]
-	weak_words.visible = player.weak
+	starving_words.visible = player.weak
 	for index in STATS.size():
 		_show_stat(stats[index], STATS[index], slide)
 	Tips.attach(hp_bar, "Health", "%d of %d HP." % [player.hp, max_hp])
 	Tips.attach(food_bar, "Food", _food_tip())
-	Tips.attach(bag, "Bag", "%d of %d places used." % [player.inventory.size(), PlayerData.INVENTORY_SIZE])
 	Tips.attach(gold, "Gold found", "%d gold. It only counts if they get home." % player.gold)
 
 
@@ -105,11 +93,11 @@ func _build_stats(rows: Control) -> void:
 		stat.focus_mode = Control.FOCUS_ALL
 		row.add_child(stat)
 		stats.append(stat)
-	weak_words = _words(row, 0.0)
-	weak_words.text = "Weak!"
-	weak_words.modulate = KitStat.LOW
-	weak_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weak_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	starving_words = _words(row, 0.0)
+	starving_words.text = "Starving!"
+	starving_words.modulate = KitStat.LOW
+	starving_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	starving_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
 func _show_stat(stat: KitStat, entry: Dictionary, slide: bool) -> void:
@@ -132,7 +120,7 @@ func _food_color() -> Color:
 func _food_tip() -> String:
 	var home := "About %s from the Portal." % _days(ceili(_trip.brain.days_home()))
 	if _trip.food_left > 0:
-		return "Food for %s. One roll of the die is one day. %s" % [_days(_trip.food_left), home]
+		return "Food for %s. One roll of the die is one turn. %s" % [Expedition.turns_words(_trip.food_left), home]
 	return "No food left. They lose health every day, and grow weak. %s" % home
 
 

@@ -18,6 +18,8 @@ const START_GOLD := 300
 const FIRST_STAGE := "grass_s"
 const ROSTER_ROOM := 3
 const KING_TAX := 300
+## Months with no bill at the start of a game. The first bill comes as the next one begins.
+const BILL_FREE_MONTHS := 1
 ## The sums on offer at the Bank, and what a loan costs. Interest is flat.
 const LOAN_SIZES: Array[int] = [100, 250, 500]
 const LOAN_INTEREST := 0.2
@@ -220,7 +222,7 @@ static func days_words(count: int) -> String:
 
 ## The last day to pay the next bill.
 func bill_due() -> int:
-	return Calendar.DAYS_IN_MONTH * (months_paid + 1)
+	return Calendar.DAYS_IN_MONTH * (months_paid + BILL_FREE_MONTHS + 1)
 
 
 ## True once the next bill is on the Bank's list, which is all through its month.
@@ -246,7 +248,9 @@ func bill_amount() -> int:
 ## Why the bill can't be paid, in a few words for a button, or "" if it can.
 func pay_problem() -> String:
 	if not bill_open():
-		return "Paid until Day %d" % (bill_due() - Calendar.DAYS_IN_MONTH)
+		if months_paid == 0:
+			return "No bill yet"
+		return "Paid until %s" % Calendar.date(bill_due() - Calendar.DAYS_IN_MONTH)
 	if bill_amount() > gold:
 		return "Need %d more gold" % (bill_amount() - gold)
 	return ""
@@ -287,7 +291,7 @@ func borrow(amount: int) -> bool:
 	gold += amount
 	loan_owed = loan_repays(amount)
 	loan_due = new_loan_due()
-	remember("Borrowed %d gold, to repay %d by Day %d." % [amount, loan_owed, loan_due])
+	remember("Borrowed %d gold, to repay %d by %s." % [amount, loan_owed, Calendar.date(loan_due)])
 	return true
 
 

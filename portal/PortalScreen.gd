@@ -163,14 +163,14 @@ func _show_forecasts(town: TownData) -> void:
 	for index in _sizes.size():
 		var stage := _sizes[index]
 		var spaces := IslandMap.open(stage.map_file).spaces().size()
-		var words := "%d spaces, and %d days of food." % [spaces, stage.food_days]
+		var words := "%d spaces, and %s of food." % [spaces, Expedition.turns_words(stage.food_days)]
 		if town.going == null:
 			card.show_forecast(index, "", Kit.SOFT_INK)
 		else:
 			var plan := town.forecast(stage, town.going)
-			card.show_forecast(index, "Home Day %d" % plan["home"], FIT_COLORS[plan["fit"]])
-			words += " Home about Day %d at the soonest, or Day %d if all the food is used. %s" % [
-					plan["home"], plan["whole"], FIT_WORDS[plan["fit"]]]
+			card.show_forecast(index, "Home %s" % Calendar.date(plan["whole"]), FIT_COLORS[plan["fit"]])
+			words += " Home about %s at the soonest, or %s if all the food is used. %s" % [
+					Calendar.date(plan["home"]), Calendar.date(plan["whole"]), FIT_WORDS[plan["fit"]]]
 		Tips.attach(card.sizes[index], "%s trip" % stage.size_name, words)
 
 
@@ -195,7 +195,7 @@ func _choose_size(stage: Stage) -> void:
 ## Says where the food comes from, because that is what the player can change.
 func _food_tip(town: TownData) -> String:
 	var stage := town.stage
-	var words := "One roll of the die is one day. A %s trip gives %d days of food." % [stage.size_name.to_lower(), stage.food_days]
+	var words := "One roll of the die is one turn. A %s trip gives %s of food." % [stage.size_name.to_lower(), Expedition.turns_words(stage.food_days)]
 	if town.going != null and town.going.bonus_food > 0:
 		words += " %s brings %d more." % [town.going.display_name, town.going.bonus_food]
 	return words
@@ -230,7 +230,7 @@ func _build_due_box(town: TownData) -> void:
 	var debt := town.next_debt()
 	var left: int = debt["due"] - town.day
 	var when := "today" if left == 0 else "in %s" % TownData.days_words(left)
-	_due_words = Kit.text("The %s of %d gold is due on Day %d, %s." % [debt["what"], debt["amount"], debt["due"], when],
+	_due_words = Kit.text("The %s of %d gold is due on %s, %s." % [debt["what"], debt["amount"], Calendar.date(debt["due"]), when],
 			DUE_WIDTH - 32.0, &"PaperLabel")
 	box.body.add_child(_due_words)
 	bank_button = KitButton.new()

@@ -109,7 +109,7 @@ func _test_food_shows_the_bonus() -> void:
 	var town := TownData.current()
 	var portal: PortalScreen = await _open(PORTAL)
 	var food := town.stage.food_for(town.going)
-	_expect(portal.card.shown_food() == "Food for %d days" % food, "the food is counted in days")
+	_expect(portal.card.shown_food() == "Food for %s" % Expedition.turns_words(food), "the food is counted in turns")
 	_expect(portal.card.food.trip_days == town.stage.food_days, "the picture shows the trip's days")
 	_expect(portal.card.food.extra_days == town.going.bonus_food, "and the days they bring")
 
@@ -135,7 +135,7 @@ func _test_sizes() -> void:
 	await _tap("ui_accept")
 	_expect(town.stage == sizes[1], "pressing one chooses it")
 	_expect(card.sizes[1].lit and not card.sizes[0].lit, "and it is lit")
-	_expect(card.shown_food() == "Food for %d days" % sizes[1].food_days, "the food follows the size")
+	_expect(card.shown_food() == "Food for %s" % Expedition.turns_words(sizes[1].food_days), "the food follows the size")
 	_expect(card.food.trip_days == sizes[1].food_days, "and so does its picture")
 	_expect(card._picture.texture == sizes[1].picture, "and so does the island")
 	await _tap("ui_right")
@@ -163,7 +163,7 @@ func _test_keys() -> void:
 	await _tap("ui_up")
 	_expect(_focused() == portal.card.food, "up from Enter reaches the food")
 	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
-	_expect(Tips.showing() and Tips.shown_text().contains("one day"), "the food's tip explains days")
+	_expect(Tips.showing() and Tips.shown_text().contains("one turn"), "the food's tip explains turns")
 	await _tap("ui_up")
 	_expect(_focused() == portal.card.sizes[0], "up again reaches the size in use")
 	await _tap("ui_left")

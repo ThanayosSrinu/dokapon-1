@@ -19,11 +19,11 @@ func _ready() -> void:
 	screen.rest_button.pressed.emit()
 	await _settle(0.5)
 	await _save("town_rest")
-	town.day = 21
+	town.day = 49
 	await _shot("res://town/TownScreen.tscn", "town_yellow")
-	town.day = 26
+	town.day = 54
 	await _shot("res://town/TownScreen.tscn", "town_red")
-	town.day = 18
+	town.day = 46
 	await _shot("res://bank/BankScreen.tscn", "bank_bill")
 	town.gold = 100
 	await _shot("res://bank/BankScreen.tscn", "bank_short")
@@ -35,9 +35,9 @@ func _ready() -> void:
 	await _settle(0.8)
 	await _save("bank_paid")
 	town = _town()
-	town.day = 12
+	town.day = 40
 	await _shot("res://portal/PortalScreen.tscn", "portal_people")
-	town.day = 26
+	town.day = 54
 	await _shot("res://portal/PortalScreen.tscn", "portal_late")
 	town.member(town.roster[0].person).ready_on = 31
 	town.member(town.roster[1].person).ready_on = 29
@@ -58,7 +58,7 @@ func _ready() -> void:
 	await _shot("res://tavern/TavernScreen.tscn", "tavern_recruit")
 	ExpeditionScreen.next_seed = 3
 	town = _town()
-	town.day = 21
+	town.day = 49
 	Screens.go("res://expedition/ExpeditionScreen.tscn")
 	await _settle(3.2)
 	await _save("trip_strip")
@@ -70,9 +70,9 @@ func _ready() -> void:
 	island.free()
 	town = _town()
 	town.gold = 412
-	town.day = 20
+	town.day = 48
 	town.remember_leaving()
-	town.day = 29
+	town.day = 57
 	await _shot("res://town/GameOverScreen.tscn", "game_over")
 	get_tree().quit()
 

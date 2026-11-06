@@ -125,7 +125,7 @@ func show_stage(stage: Stage) -> void:
 ## Shows who is going. With nobody, it says where to find someone instead.
 func show_person(stage: Stage, person: Adventurer) -> void:
 	var days := stage.food_days if person == null else stage.food_for(person)
-	_food_words.text = "Food for %d days" % days
+	_food_words.text = "Food for %s" % Expedition.turns_words(days)
 	var extra := 0 if person == null else person.bonus_food
 	food.show_days(stage.food_days, extra)
 	_portrait.visible = person != null

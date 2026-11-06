@@ -51,33 +51,36 @@ func _town_with(ids: Array[String], gold := 1000) -> TownData:
 ## The test the plan asks for: every rollover from day to year.
 func _test_calendar() -> void:
 	_expect(Calendar.DAYS_IN_MONTH == 28 and Calendar.DAYS_IN_YEAR == 336, "a month is 28 days and a year 336")
-	_expect(Calendar.short(1) == "Y1 M1 W1", "day 1 is the first of everything")
-	_expect(Calendar.long(1) == "Y1 M1 W1 D1", "and the first day of the week")
-	_expect(Calendar.long(7) == "Y1 M1 W1 D7", "day 7 ends the week")
-	_expect(Calendar.long(8) == "Y1 M1 W2 D1", "day 8 starts the next")
-	_expect(Calendar.long(28) == "Y1 M1 W4 D7", "day 28 ends the month")
-	_expect(Calendar.long(29) == "Y1 M2 W1 D1", "day 29 starts the next")
+	_expect(Calendar.date(1) == "Y1 M1 D1", "day 1 is the first of everything")
+	_expect(Calendar.date(5) == "Y1 M1 D5", "the days count up through the month")
+	_expect(Calendar.date(8) == "Y1 M1 D8", "with no weeks in the date")
+	_expect(Calendar.date(28) == "Y1 M1 D28", "day 28 ends the month")
+	_expect(Calendar.date(29) == "Y1 M2 D1", "day 29 starts the next")
 	_expect(Calendar.season(84) == "spring" and Calendar.season(85) == "summer", "three months make a season")
 	_expect(Calendar.season(169) == "autumn" and Calendar.season(253) == "winter", "the seasons run in order")
-	_expect(Calendar.long(336) == "Y1 M12 W4 D7", "day 336 ends the year")
-	_expect(Calendar.long(337) == "Y2 M1 W1 D1", "day 337 starts the next")
+	_expect(Calendar.date(336) == "Y1 M12 D28", "day 336 ends the year")
+	_expect(Calendar.date(337) == "Y2 M1 D1", "day 337 starts the next")
 	_expect(Calendar.season(337) == "spring", "and spring comes back")
-	var last_week := 1
+	var last_date := 0
 	for day in range(1, Calendar.DAYS_IN_YEAR * 3):
-		_expect(Calendar.day_of_week(day) in range(1, 8), "day of the week stays in range on day %d" % day)
 		_expect(Calendar.month(day) in range(1, 13), "month stays in range on day %d" % day)
-		var week := Calendar.week(day)
-		_expect(week in range(1, 5), "week stays in range on day %d" % day)
-		_expect(week == last_week or week == last_week % 4 + 1, "weeks follow in order on day %d" % day)
-		last_week = week
+		var date := Calendar.day_of_month(day)
+		_expect(date in range(1, 29), "day of the month stays in range on day %d" % day)
+		_expect(date == last_date % 28 + 1, "days follow in order on day %d" % day)
+		last_date = date
 
 
 func _test_bills() -> void:
 	var town := _town_with(["bram"], 1000)
 	var bram := Database.get_adventurer("bram")
 	var tax := TownData.KING_TAX
-	_expect(town.bill_due() == 28, "the first bill is due on day 28")
-	_expect(town.bill_open(), "and is listed all month")
+	_expect(town.bill_due() == 56, "the first bill is due at the end of month 2")
+	_expect(not town.bill_open(), "and no bill comes in the first month")
+	_expect(town.pay_problem() == "No bill yet", "so there is nothing to pay")
+	town.day = 28
+	_expect(not town.bill_open(), "right up to its last day")
+	town.day = 29
+	_expect(town.bill_open(), "and it comes on the first day of month 2")
 	_expect(town.bill_amount() == tax + bram.wage, "the bill is the tax and each wage")
 	_expect(town.bill_lines().size() == 2, "each has its own line")
 	town.gold = 10000
@@ -90,32 +93,32 @@ func _test_bills() -> void:
 	_expect(not town.pay_bill() and town.gold == tax, "and trying changes nothing")
 	town.gold = tax + bram.wage
 	_expect(town.pay_bill() and town.gold == 0, "a bill can be paid with the last coin")
-	_expect(town.months_paid == 1 and town.bill_due() == 56, "the next bill is a month later")
+	_expect(town.months_paid == 1 and town.bill_due() == 84, "the next bill is a month later")
 	_expect(not town.bill_open(), "and isn't listed yet")
 	town.gold = 1000
 	_expect(not town.pay_bill() and town.gold == 1000, "nothing can be paid twice")
-	town.day = 28
+	town.day = 56
 	_expect(not town.bill_open(), "the paid month lasts to its end")
-	town.day = 29
+	town.day = 57
 	_expect(town.bill_open(), "the next bill opens on the next day")
 	_expect(town.overdue().is_empty(), "a paid bill is never overdue")
-	town.day = 56
+	town.day = 84
 	_expect(town.overdue().is_empty(), "the due day itself is still in time")
-	town.day = 57
+	town.day = 85
 	_expect(town.overdue()["what"] == "bill", "the day after, it is overdue")
 	_expect(town.overdue()["amount"] == town.bill_amount(), "and says how much")
 
 
 func _test_loans() -> void:
 	var town := _town_with(["bram"], 0)
-	town.day = 28
+	town.day = 56
 	_expect(TownData.loan_repays(500) == 600, "500 costs 600")
 	_expect(TownData.loan_repays(100) == 120, "interest is flat")
 	_expect(not town.borrow(77), "only the sums on offer")
-	_expect(town.new_loan_due() == 56, "a loan today is due on day 56")
+	_expect(town.new_loan_due() == 84, "a loan today is due on day 84")
 	_expect(town.borrow(500), "a loan can be taken")
 	_expect(town.gold == 500, "it pays out")
-	_expect(town.loan_owed == 600 and town.loan_due == 56, "and records what is owed")
+	_expect(town.loan_owed == 600 and town.loan_due == 84, "and records what is owed")
 	_expect(town.borrow_problem() != "", "one loan at a time")
 	_expect(not town.borrow(100) and town.gold == 500, "a second changes nothing")
 	_expect(town.repay_problem() != "", "it can't be repaid short")
@@ -125,14 +128,14 @@ func _test_loans() -> void:
 	_expect(town.loan_owed == 0 and town.borrow_problem() == "", "and another can be taken")
 	_expect(not town.repay(), "nothing is left to repay")
 	town = _town_with(["bram"], 0)
-	town.day = 5
+	town.day = 33
 	town.borrow(100)
-	_expect(town.next_debt()["what"] == "bill", "the bill on day 28 comes before the loan on day 33")
+	_expect(town.next_debt()["what"] == "bill", "the bill on day 56 comes before the loan on day 61")
 	town.months_paid = 1
 	_expect(town.next_debt()["what"] == "loan", "with it paid, the loan is next")
-	town.day = 33
+	town.day = 61
 	_expect(town.overdue().is_empty(), "a loan can be repaid on its due day")
-	town.day = 34
+	town.day = 62
 	_expect(town.overdue()["what"] == "loan", "the day after, it is overdue")
 
 
@@ -188,24 +191,24 @@ func _test_next_step() -> void:
 	town.member(town.going).ready_on = 10
 	town.rest(0)
 	_expect(town.next_step() == "rest", "with everyone hurt, resting is next")
-	town.day = 21
+	town.day = 49
 	_expect(town.next_step() == "bank", "a warning sends the player to the Bank")
 
 
 func _test_warning_steps() -> void:
 	var town := _town_with(["bram"])
-	town.day = 20
+	town.day = 48
 	_expect(town.alert() == TownData.Alert.NONE, "8 days left is quiet")
-	town.day = 21
+	town.day = 49
 	_expect(town.alert() == TownData.Alert.WARN, "7 days left is yellow")
-	town.day = 24
+	town.day = 52
 	_expect(town.alert() == TownData.Alert.WARN, "4 days left is still yellow")
-	town.day = 25
+	town.day = 53
 	_expect(town.alert() == TownData.Alert.ALARM, "3 days left is red")
 	town.pay_bill()
 	_expect(town.alert() == TownData.Alert.NONE, "paying clears it")
 	town.borrow(100)
-	town.day = 49
+	town.day = 77
 	_expect(town.alert() == TownData.Alert.WARN, "a loan warns too")
 	_expect(town.alert(town.day + 1) == TownData.Alert.ALARM, "a day can be asked about ahead of time")
 
@@ -219,10 +222,10 @@ func _test_forecast() -> void:
 	_expect(plan["home"] > town.day, "nobody is home before they leave")
 	_expect(plan["home"] <= plan["whole"], "a quick trip is no longer than a whole one")
 	_expect(plan["whole"] == town.day + small.food_days, "a whole trip lasts as long as the food")
-	_expect(plan["due"] == 28 and plan["fit"] == TownData.Forecast.SAFE, "day 1 has time for a small trip")
-	town.day = 12
+	_expect(plan["due"] == 56 and plan["fit"] == TownData.Forecast.SAFE, "day 1 has time for a small trip")
+	town.day = 40
 	_expect(town.forecast(large, person)["fit"] == TownData.Forecast.TIGHT, "a large trip then only fits if cut short")
-	town.day = 27
+	town.day = 55
 	_expect(town.forecast(small, person)["fit"] == TownData.Forecast.LATE, "day 27 is too late for anything")
 
 
@@ -230,7 +233,7 @@ func _test_forecast() -> void:
 ## the screens show it: the town on arrival, and the strip each day of a trip. Whatever
 ## was shown only counts if it came before the due day had passed.
 func _test_no_game_over_without_warning() -> void:
-	for start in range(1, 28):
+	for start in range(29, 56):
 		for away in range(1, 45):
 			for rests: int in [0, 1, 3, 7]:
 				_play_out(start, rests, away)
@@ -260,17 +263,17 @@ func _play_out(start: int, rests: int, away: int) -> void:
 func _test_date_chip() -> void:
 	var town := _town_with(["bram"])
 	var screen: TownScreen = await _open(TOWN)
-	_expect(screen.date_chip.shown_words() == "Y1 M1 W1", "the town shows the date")
+	_expect(screen.date_chip.shown_words() == "Y1 M1 D1", "the town shows the date")
 	_expect(screen.date_chip.level == TownData.Alert.NONE, "with nothing to fear yet")
 	_expect(screen.signs["bank"].shown_mark() == "", "and the Bank's sign is plain")
 	_expect(not screen.date_chip.get_global_rect().intersects(screen.gold_chip.get_global_rect()), "date and gold stay apart")
-	town.day = 21
+	town.day = 49
 	screen = await _open(TOWN)
 	_expect(screen.date_chip.level == TownData.Alert.WARN, "at 7 days left the date is yellow")
-	_expect(screen.signs["bank"].shown_mark().contains("28"), "the Bank's sign is marked")
+	_expect(screen.signs["bank"].shown_mark().contains("Y1 M2 D28"), "the Bank's sign is marked")
 	_expect(screen.arrow.target == screen.building("bank"), "and the arrow goes there")
 	_expect(_focused() == screen.building("bank"), "and so does the focus")
-	town.day = 26
+	town.day = 54
 	screen = await _open(TOWN)
 	_expect(screen.date_chip.level == TownData.Alert.ALARM, "at 3 days left it is red")
 	var box: Rect2 = screen.signs["bank"].get_global_rect()
@@ -285,6 +288,9 @@ func _test_date_chip() -> void:
 
 func _test_bank_screen() -> void:
 	var town := _town_with(["bram", "wren"], 1000)
+	var early: BankScreen = await _open(BANK)
+	_expect(early.pay.disabled and early.pay.text == "No bill yet", "the first month has no bill to pay")
+	town.day = 29
 	var bill := town.bill_amount()
 	var screen: TownScreen = await _open(TOWN)
 	screen.building("bank").grab_focus()
@@ -297,7 +303,7 @@ func _test_bank_screen() -> void:
 	_expect(_focused() == bank.pay and bank.arrow.target == bank.pay, "and has focus and the arrow")
 	_expect(bank._lines.get_child_count() == 4, "the tax, each wage and the total are listed")
 	_expect(bank.back.position == Kit.BACK_POSITION, "Back is in its usual place")
-	_expect(bank.bubble.shown_words().contains("28"), "the banker says when")
+	_expect(bank.bubble.shown_words().contains("Y1 M2 D28"), "the banker says when")
 	var middle := bank.get_viewport_rect().size / 2.0
 	var view := Rect2(middle - Vector2(WIDE) / 2.0, Vector2(WIDE))
 	_expect(view.encloses(bank.pay.get_global_rect()), "Pay is on screen")
@@ -324,7 +330,7 @@ func _test_bank_with_mouse_and_pad() -> void:
 	await _wait()
 	_expect(bank.chosen_loan == TownData.LOAN_SIZES[0], "a click chooses a sum")
 	_expect(bank.sizes[0].lit and not bank.sizes[2].lit, "and it is lit")
-	_expect(bank._loan_words.text.contains("Borrow 100, repay 120 by Day 29"), "the sum, cost and day show first")
+	_expect(bank._loan_words.text.contains("Borrow 100, repay 120 by Y1 M2 D1"), "the sum, cost and day show first")
 	await _pad(JOY_BUTTON_B)
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "B leaves the Bank")
@@ -332,6 +338,7 @@ func _test_bank_with_mouse_and_pad() -> void:
 
 func _test_short_of_gold() -> void:
 	var town := _town_with(["bram"], 100)
+	town.day = 29
 	var short := town.bill_amount() - 100
 	var bank: BankScreen = await _open(BANK)
 	_expect(bank.pay.disabled and bank.pay.text.contains(str(short)), "Pay says what is missing")
@@ -357,7 +364,7 @@ func _test_loan_screen() -> void:
 	town.gold = 2
 	var bank: BankScreen = await _open(BANK)
 	_expect(not bank.sizes[0].is_visible_in_tree(), "with a loan, no sums are offered")
-	_expect(bank._loan_words.text.contains("300") and bank._loan_words.text.contains("Day 29"), "the debt shows with its day")
+	_expect(bank._loan_words.text.contains("300") and bank._loan_words.text.contains("Y1 M2 D1"), "the debt shows with its day")
 	_expect(bank.loan_button.disabled, "it can't be repaid short")
 	_expect(_focused() == bank.back, "the way out has focus")
 	town.gold = 400
@@ -393,12 +400,12 @@ func _test_rest() -> void:
 	await _wait()
 	_expect(town.day == 5, "three more pass")
 	_expect(town.going == person, "and they have healed")
-	_expect(screen.date_chip.shown_words() == "Y1 M1 W1", "the date stays in the first week until it ends")
+	_expect(screen.date_chip.shown_words() == "Y1 M1 D5", "the date shows the day of the month")
 	_expect(screen.waiting != null, "they wait at the Portal again")
 	await _tap("ui_right")
 	await _tap("ui_accept")
 	await _wait()
-	_expect(screen.date_chip.shown_words() == "Y1 M1 W2", "the date moves on")
+	_expect(screen.date_chip.shown_words() == Calendar.date(town.day) and town.day > 5, "the date moves on")
 	await _tap("ui_cancel")
 	await _wait()
 	_expect(not screen.rest_panel.visible and get_tree().current_scene == screen, "Esc closes the panel, and stays")
@@ -407,7 +414,7 @@ func _test_rest() -> void:
 
 func _test_rest_past_the_due_day() -> void:
 	var town := _town_with(["bram"])
-	town.day = 27
+	town.day = 55
 	var screen: TownScreen = await _open(TOWN)
 	screen.rest_button.grab_focus()
 	await _tap("ui_accept")
@@ -424,17 +431,19 @@ func _test_rest_past_the_due_day() -> void:
 func _test_portal_forecast() -> void:
 	var town := _town_with(["bram"])
 	var portal: PortalScreen = await _open(PORTAL)
-	_expect(portal.card.shown_forecast(0).begins_with("Home Day"), "each size says when it could be back")
+	_expect(portal.card.shown_forecast(0) == "Home Y1 M1 D8", "a small trip is back after 7 days")
+	_expect(portal.card.shown_forecast(1) == "Home Y1 M1 D15", "a medium trip after 14")
+	_expect(portal.card.shown_forecast(2) == "Home Y1 M1 D22", "a large trip after 21")
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.SAFE],
 			"a safe trip is green")
-	_expect(portal._due_words.text.contains("28"), "the due day shows")
+	_expect(portal._due_words.text.contains("Y1 M2 D28"), "the due day shows")
 	_expect(portal.bank_button.is_visible_in_tree(), "with a way to the Bank")
 	var middle := portal.get_viewport_rect().size / 2.0
 	var view := Rect2(middle - Vector2(WIDE) / 2.0, Vector2(WIDE))
 	_expect(view.encloses(portal.card.get_global_rect()), "the card still fits")
 	_expect(view.encloses(portal.bank_button.get_global_rect()), "the box fits")
 	_expect(not portal.bank_button.get_global_rect().intersects(portal.card.get_global_rect()), "and stays off the card")
-	town.day = 26
+	town.day = 54
 	portal = await _open(PORTAL)
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.LATE],
 			"a trip that can't make it is red")
@@ -493,22 +502,18 @@ func _open_trip(seed_value: int, recall_day: int) -> ExpeditionScreen:
 
 func _test_warnings_on_a_trip() -> void:
 	var town := _town_with(["bram"])
-	town.day = 19
+	town.day = 47
 	town.stage = Database.get_stage("grass_l")
 	var screen := await _open_trip(3, 0)
-	var chip_alarm := false
 	while not screen.trip.is_over() and screen.trip.day < 7:
 		await get_tree().process_frame
-		chip_alarm = chip_alarm or screen.hud.date.level == TownData.Alert.ALARM
 	_expect(_said(screen.trip, "due in 7 days"), "they speak up at 7 days left")
 	_expect(_said(screen.trip, "due in 3 days") or screen.trip.is_over(), "and again at 3 days left")
 	_expect(screen.orders_arrow != null or screen.trip.is_over(), "the arrow points at Orders")
-	_expect(chip_alarm or screen.trip.is_over(), "the strip's date turns red")
-	_expect(screen.hud.date.shown_words().contains(" D"), "the strip adds the day")
 	screen.free()
 	Engine.time_scale = 1.0
 	await _wait()
-	town.day = 26
+	town.day = 54
 	town.stage = Database.get_stage("grass_s")
 	var late := await _open_trip(3, 0)
 	while late.trip.day < 2 and not late.trip.is_over():
@@ -529,7 +534,7 @@ func _said(trip: Expedition, words: String) -> bool:
 ## Rule D11: a trip is never stopped, and the game over comes after its report.
 func _test_game_over_after_the_report() -> void:
 	var town := _town_with(["bram"], 5000)
-	town.day = 27
+	town.day = 55
 	var screen := await _open_trip(5, 0)
 	screen._warp_home.call_deferred()
 	# The Warp Stone ends it at once, so three days of trip are added by hand.
@@ -537,7 +542,7 @@ func _test_game_over_after_the_report() -> void:
 		await get_tree().process_frame
 	await _until_settled()
 	_expect(get_tree().current_scene == screen, "the report comes first")
-	town.day = 30
+	town.day = 58
 	await _tap("ui_accept")
 	await _until_settled()
 	_expect(get_tree().current_scene is GameOverScreen, "then the town is lost, whatever gold there is")
@@ -545,14 +550,14 @@ func _test_game_over_after_the_report() -> void:
 
 func _test_game_over_screen() -> void:
 	var town := _town_with(["bram"], 412)
-	town.day = 20
+	town.day = 48
 	town.remember_leaving()
-	town.day = 31
+	town.day = 59
 	var bill := town.bill_amount()
 	var over: GameOverScreen = await _open(GAME_OVER)
 	_expect(over.story.size() == 2, "it tells what happened")
-	_expect(over.story[0].begins_with("Day 20:") and over.story[0].contains("412"), "starting with the day they left")
-	_expect(over.story[-1].begins_with("Day 28:") and over.story[-1].contains(str(bill)), "and ending with the bill")
+	_expect(over.story[0].begins_with("Y1 M2 D20:") and over.story[0].contains("412"), "starting with the day they left")
+	_expect(over.story[-1].begins_with("Y1 M2 D28:") and over.story[-1].contains(str(bill)), "and ending with the bill")
 	_expect(_focused() == over.new_town, "one button has focus")
 	_expect(over.new_town.kind == KitButton.Kind.PRIMARY, "and it is the main action")
 	var middle := over.get_viewport_rect().size / 2.0
@@ -565,7 +570,7 @@ func _test_game_over_screen() -> void:
 	_expect(screen is TownScreen, "the button starts a new town at once")
 	_expect(_focused() == screen.building("tavern"), "at the Tavern")
 	town = _town_with(["bram"])
-	town.day = 29
+	town.day = 57
 	over = await _open(GAME_OVER)
 	await _tap("ui_cancel")
 	await _until_settled()

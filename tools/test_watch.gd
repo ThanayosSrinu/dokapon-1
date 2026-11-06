@@ -52,6 +52,7 @@ func _test_bag_panel() -> void:
 	var panel := screen.bag_panel
 	_expect(not panel.get_global_rect().intersects(screen.hud.get_global_rect()), "the bag clears the strip")
 	_expect(panel.get_global_rect().end.y <= 720.0, "the bag fits on screen")
+	_expect(screen.hud.food_words.text.ends_with("turns"), "the strip counts food in turns")
 
 	player.inventory.clear()
 	var cure := _an_item(func(item: ItemData) -> bool: return item.heal_hp > 0)

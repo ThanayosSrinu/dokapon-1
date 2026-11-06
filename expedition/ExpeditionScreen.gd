@@ -562,10 +562,9 @@ func _warp_home() -> void:
 	Sound.play("trap")
 	camera.shake()
 	await _real_pause(WARP_LOSS_DELAY)
-	if hud.gold.amount > 0 or hud.bag.amount > 0:
+	if hud.gold.amount > 0 or not trip.player.inventory.is_empty():
 		Sound.play("coin_loss")
 	hud.gold.set_amount(0)
-	hud.bag.set_amount(0)
 	await _real_pause(WARP_LINE_SECONDS)
 	bubble.hide()
 	await _close_trip()
@@ -822,7 +821,7 @@ func _link_focus() -> void:
 	orders_button.focus_neighbor_bottom = orders_button.get_path_to(hud.hp_bar)
 	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
 	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
-	var strip: Array[Control] = [hud.date, hud.hp_bar, hud.food_bar, hud.bag, hud.gold]
+	var strip: Array[Control] = [hud.hp_bar, hud.food_bar, hud.gold]
 	var lower: Array[Control] = []
 	lower.assign(hud.stats)
 	for index in strip.size():
@@ -835,7 +834,7 @@ func _link_focus() -> void:
 	bag_panel.slots[0].focus_neighbor_left = bag_panel.slots[0].get_path_to(hud.gold)
 	for index in lower.size():
 		var part := lower[index]
-		part.focus_neighbor_top = part.get_path_to(strip[index])
+		part.focus_neighbor_top = part.get_path_to(strip[mini(index, strip.size() - 1)])
 		part.focus_neighbor_bottom = part.get_path_to(part)
 		part.focus_neighbor_left = part.get_path_to(lower[maxi(index - 1, 0)])
 		part.focus_neighbor_right = part.get_path_to(lower[mini(index + 1, lower.size() - 1)])

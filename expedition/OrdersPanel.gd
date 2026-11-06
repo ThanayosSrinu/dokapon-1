@@ -69,7 +69,7 @@ func _ready() -> void:
 ## Shows the order in force and how the trip stands.
 func refresh() -> void:
 	var home := _days(ceili(_trip.brain.days_home()))
-	facts.text = NO_FOOD % home if _trip.food_left == 0 else FACTS % [_days(_trip.food_left), home]
+	facts.text = NO_FOOD % home if _trip.food_left == 0 else FACTS % [Expedition.turns_words(_trip.food_left), home]
 	home_button.lit = _trip.order == Expedition.Order.HOME
 	roam_button.lit = _trip.order == Expedition.Order.ROAM
 	for id: String in zone_buttons:

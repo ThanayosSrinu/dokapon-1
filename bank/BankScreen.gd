@@ -14,7 +14,7 @@ const LOAN_WIDTH := 584.0
 const ROOM_AREA := Rect2(0, 0, 808, 720)
 const BAR_MARGIN := 24.0
 const BAR_GAP := 8
-const SAY_OPEN := "Everything falls due on Day %d, my lord."
+const SAY_OPEN := "Everything falls due on %s, my lord."
 const SAY_SHORT := "You are %d gold short, my lord. A loan could help."
 const SAY_PAID := "Paid in full. Thank you, my lord."
 const SAY_LOAN := "The gold is yours. Remember the day, my lord."
@@ -197,13 +197,13 @@ func _show_bill(town: TownData) -> void:
 	var problem := town.pay_problem()
 	if not town.bill_open():
 		_bill_title.text = "Nothing to pay"
-		_bill_when.text = "The next bill comes on Day %d" % (town.bill_due() - Calendar.DAYS_IN_MONTH + 1)
+		_bill_when.text = "The next bill comes on %s" % Calendar.date(town.bill_due() - Calendar.DAYS_IN_MONTH + 1)
 		pay.text = problem
-		pay.block("This month's bill is paid.")
+		pay.block("The first bill comes next month." if town.months_paid == 0 else "This month's bill is paid.")
 		return
 	var left := town.bill_due() - town.day
 	_bill_title.text = "This month's bill"
-	_bill_when.text = "Due on Day %d" % town.bill_due()
+	_bill_when.text = "Pay by %s" % Calendar.date(town.bill_due())
 	if left == 0:
 		_bill_when.text += ", which is today"
 	elif left <= TownData.WARN_DAYS:
@@ -233,13 +233,13 @@ func _show_loan(town: TownData) -> void:
 		sizes[index].visible = not owing
 	_size_row.visible = not owing
 	if owing:
-		_loan_words.text = "You owe %d gold by Day %d. Repay it all, or the town is lost." % [town.loan_owed, town.loan_due]
+		_loan_words.text = "You owe %d gold by %s. Repay it all, or the town is lost." % [town.loan_owed, Calendar.date(town.loan_due)]
 		var problem := town.repay_problem()
 		loan_button.text = problem if problem != "" else "Repay %d gold" % town.loan_owed
 		loan_button.block("You have %d gold, and the loan is %d." % [town.gold, town.loan_owed] if problem != "" else "")
 		return
 	var repays := TownData.loan_repays(chosen_loan)
-	_loan_words.text = "Borrow %d, repay %d by Day %d. It must all be repaid by then, or the town is lost." % [chosen_loan, repays, town.new_loan_due()]
+	_loan_words.text = "Borrow %d, repay %d by %s. It must all be repaid by then, or the town is lost." % [chosen_loan, repays, Calendar.date(town.new_loan_due())]
 	loan_button.text = "Borrow %d gold" % chosen_loan
 	loan_button.block("")
 
@@ -266,7 +266,7 @@ func _greet(town: TownData) -> void:
 	if not town.bill_open():
 		return
 	var short := town.bill_amount() - town.gold
-	_say(SAY_SHORT % short if short > 0 else SAY_OPEN % town.bill_due())
+	_say(SAY_SHORT % short if short > 0 else SAY_OPEN % Calendar.date(town.bill_due()))
 
 
 func _say(words: String) -> void:

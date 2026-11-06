@@ -160,6 +160,11 @@ func gold_home() -> int:
 	return player.gold if ending == Ending.HOME else 0
 
 
+## How long food lasts, in words, such as "1 turn" or "3 turns".
+static func turns_words(count: int) -> String:
+	return "1 turn" if count == 1 else "%d turns" % count
+
+
 ## Ends the trip where it stands, because the lord gave it up. This is a failed trip: the
 ## Warp Stone saves the adventurer and nothing else. Only the Portal brings anything home.
 ## A trip that has already ended stays as it ended.

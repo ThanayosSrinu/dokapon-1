@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Runs every test scene with no window and prints one line each, then the FAIL lines.
+# --fixed-fps 60 lets game time run as fast as the computer can, instead of real time.
 #
 #   bash tools/run_tests.sh            every test
 #   bash tools/run_tests.sh town bank  only those
@@ -19,7 +20,7 @@ fi
 bad=0
 for name in "${names[@]}"; do
     log="_work/tests/$name.log"
-    timeout 280 "$GODOT" --headless --path . "res://tools/test_$name.tscn" > "$log" 2>&1
+    timeout 280 "$GODOT" --headless --fixed-fps 60 --path . "res://tools/test_$name.tscn" > "$log" 2>&1
     code=$?
     if [ $code -eq 0 ] && grep -q "TESTS OK" "$log"; then
         echo "ok    $name"

@@ -22,7 +22,7 @@ var _leaving := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for line in TownData.current().final_story(STORY_LINES):
-		story.append("Day %d: %s" % [line["day"], line["text"]])
+		story.append("%s: %s" % [Calendar.date(line["day"]), line["text"]])
 	TownData.start_new()
 	var cover := ColorRect.new()
 	cover.color = BACKGROUND

@@ -15,7 +15,7 @@ const WAITING_SPOT := Vector2(124, -36)
 const BAR_GAP := 8
 const REST_TOP := 80.0
 ## What the Bank's sign says while something falls due soon.
-const BANK_MARK := "Pay by Day %d"
+const BANK_MARK := "Pay by %s"
 
 var back: KitBackButton
 var art: TownArt
@@ -63,7 +63,7 @@ func _refresh(town: TownData, roll := true) -> void:
 	gold_chip.set_amount(town.gold, roll)
 	date_chip.show_day(town, town.day)
 	var level := date_chip.level
-	var words := BANK_MARK % town.next_due() if level != TownData.Alert.NONE else ""
+	var words := BANK_MARK % Calendar.date(town.next_due()) if level != TownData.Alert.NONE else ""
 	signs["bank"].mark(words, level)
 	var step := town.next_step()
 	arrow.target = rest_button if step == "rest" else buildings[step]
