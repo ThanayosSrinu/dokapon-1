@@ -732,17 +732,17 @@ def menu_cloud(seed, width):
 
 
 def menu_portal():
-    """Eight frames of a stone ring with a swirl inside, 56 by 72 art pixels each."""
-    w, h, frames = 56, 72, 8
+    """Eight frames of a stone ring with a swirl inside, 56 by 80 art pixels each."""
+    w, h, frames = 56, 80, 8
     sheet = Image.new("RGBA", (w * frames, h), (0, 0, 0, 0))
-    cx, cy, rx, ry = 27.5, 35.5, 19.0, 28.0
+    cx, cy, rx, ry = 27.5, 39.5, 19.0, 28.0
     stone, stone_dark, stone_light = hexc("#b9b4c0"), hexc("#7c7688"), hexc("#e4dfe6")
     swirl = [hexc(c) for c in ("#2d1b7e", "#3f2cc2", "#3c6fe8", "#4cc6f0", "#a6f4f0", "#ffffff")]
     px = sheet.load()
     draw = ImageDraw.Draw(sheet)
     for frame in range(frames):
         phase = frame / frames * math.tau
-        for y in range(66):
+        for y in range(70):
             for x in range(w):
                 dx, dy = (x - cx) / rx, (y - cy) / ry
                 r, a = math.hypot(dx, dy), math.atan2(dy, dx)
@@ -762,9 +762,9 @@ def menu_portal():
                         color = hexc("#a6f4f0") if math.sin(block * 0.8 - phase) > 0 else hexc("#4cc6f0")
                     px[sx, y] = color
         left = frame * w
-        draw.rectangle((left + 13, 62, left + 42, 66), fill=stone)
-        draw.rectangle((left + 10, 67, left + 45, 70), fill=stone_dark)
-        draw.line((left + 13, 62, left + 42, 62), fill=stone_light)
+        draw.rectangle((left + 13, 70, left + 42, 74), fill=stone)
+        draw.rectangle((left + 10, 75, left + 45, 78), fill=stone_dark)
+        draw.line((left + 13, 70, left + 42, 70), fill=stone_light)
     return outline_outside(sheet)
 
 
