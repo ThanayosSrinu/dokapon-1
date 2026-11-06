@@ -13,8 +13,10 @@ func _ready() -> void:
 	await _settle(1.8)
 	var menu: MainMenu = get_tree().current_scene
 	await _save(folder + "/menu.png")
-	await _settle(9.0)
+	await _settle(5.0)
 	await _save(folder + "/menu_walker.png")
+	await _settle(8.0)
+	await _save(folder + "/menu_steps.png")
 	menu.options_button.grab_focus()
 	await _settle(0.3)
 	await _save(folder + "/menu_focus.png")

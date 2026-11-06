@@ -25,6 +25,11 @@ const ROAD_START := 0.5
 ## Where the Portal stands, and where walkers appear, in art pixels along the road.
 const PORTAL_X := 390.0
 const WALK_START_X := 700.0
+## How far above the road the top step is, on screen.
+const DAIS_RISE := 28.0
+## How far walkers climb past the bottom of the steps, fading into the Portal.
+const CLIMB := 44.0
+const CLIMB_FADE_FROM := 24.0
 const PORTAL_FRAMES := 8
 const PORTAL_FPS := 10.0
 const PORTAL_FOOT := 142.0
@@ -34,6 +39,7 @@ const WALK_FRAMES: Array[int] = [2, 0, 3, 1]
 const WALK_FRAME_TIME := 0.11
 ## The row of a character sheet that faces left.
 const ROW_LEFT := 6
+const ROW_AWAY := 4
 const HEROES: Array[String] = ["Warrior-Blue", "Archer-Green", "Mage-Red", "Soldier-Yellow",
 		"Warrior-Red", "Archer-Purple", "Mage-Cyan"]
 const HERO_FOLDER := "res://assets/puny/characters/%s.png"
@@ -45,7 +51,8 @@ const CLOUD_ROW_Y: Array[float] = [-212.0, -172.0, -134.0, -190.0, -150.0]
 const CLOUD_SPEEDS: Array[float] = [7.0, 11.0, 5.0, 14.0, 9.0]
 const CLOUD_EDGE := 1000.0
 
-const FLAG_SPOT := Vector2(291, -74)
+## Puts the bottom of the flag's pole exactly on the tip of the blue spire.
+const FLAG_SPOT := Vector2(286, -92)
 const FLAG_FRAMES := 4
 const FLAG_FRAME_TIME := 0.16
 const SMOKE_SPOTS: Array[Vector2] = [Vector2(112, 8), Vector2(-16, 24), Vector2(484, 28)]
@@ -72,6 +79,7 @@ var _bird_wait := 3.0
 var _clock := 0.0
 var _walk_x := WALK_START_X
 var _walk_wait := 0.5
+var _climb := 0.0
 var _hero := 0
 var _smoke: Array[Dictionary] = []
 var _smoke_wait := 0.0
@@ -152,6 +160,7 @@ func _add_flag(town: Sprite2D) -> void:
 	_flag = Sprite2D.new()
 	_flag.texture = GameArt.FLAG
 	_flag.hframes = FLAG_FRAMES
+	_flag.centered = false
 	_flag.scale = Vector2(Kit.STEP, Kit.STEP)
 	_flag.position = FLAG_SPOT
 	town.add_child(_flag)
@@ -163,7 +172,7 @@ func _add_portal() -> void:
 	_portal.hframes = PORTAL_FRAMES
 	_portal.centered = true
 	_portal.offset = Vector2(0, -PORTAL_FOOT / 2.0)
-	_portal.position = road_point(PORTAL_X)
+	_portal.position = road_point(PORTAL_X) + Vector2(0, -DAIS_RISE)
 	_near.add_child(_portal)
 
 
@@ -234,11 +243,21 @@ func _move_walker(delta: float) -> void:
 		_walk_wait -= delta
 		_walker.hide()
 		return
-	_walk_x -= WALK_SPEED * delta / Kit.STEP
+	var column := WALK_FRAMES[int(_clock / WALK_FRAME_TIME) % WALK_FRAMES.size()]
 	_walker.show()
-	_walker.position = Kit.snap_point(road_point(_walk_x))
-	_walker.frame_coords = Vector2i(WALK_FRAMES[int(_clock / WALK_FRAME_TIME) % WALK_FRAMES.size()], ROW_LEFT)
-	if _walk_x <= PORTAL_X:
+	if _walk_x > PORTAL_X:
+		_walk_x = maxf(_walk_x - WALK_SPEED * delta / Kit.STEP, PORTAL_X)
+		_walker.position = Kit.snap_point(road_point(_walk_x))
+		_walker.frame_coords = Vector2i(column, ROW_LEFT)
+		return
+	# At the steps they turn, and climb into the Portal.
+	_climb += WALK_SPEED * delta
+	_walker.position = Kit.snap_point(road_point(PORTAL_X) + Vector2(0, -_climb))
+	_walker.frame_coords = Vector2i(column, ROW_AWAY)
+	_walker.modulate.a = clampf((CLIMB - _climb) / (CLIMB - CLIMB_FADE_FROM), 0.0, 1.0)
+	if _climb >= CLIMB:
+		_climb = 0.0
+		_walker.modulate.a = 1.0
 		_walk_wait = WALK_PAUSE
 		_portal.modulate = Color(1.8, 1.8, 2.2)
 		create_tween().tween_property(_portal, "modulate", Color.WHITE, 0.5)

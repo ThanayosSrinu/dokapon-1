@@ -567,16 +567,108 @@ def menu_town_hill():
                                             (hx - 42, 8, 12, 7, False), (hx + 44, 8, 12, 7, True)):
         roof = (red, red_dark) if is_red else (orange, orange_dark)
         house(draw, cx, int(line(cx)) + sink, width, height, *roof)
-    for x, sink, radius in ((MENU_X + 300, 12, 7), (MENU_X + 322, 20, 9), (MENU_X + 345, 14, 6),
+    for x, sink, radius in ((MENU_X + 225, 12, 7), (MENU_X + 247, 20, 9), (MENU_X + 270, 14, 6),
                             (MENU_X + 180, 16, 8), (MENU_X + 205, 24, 6)):
         tree(image, x, int(line(x)) + sink, radius, hexc("#8ccf6f"), hexc("#5cab62"), hexc("#3f8c5c"))
     return image
+
+
+PORTAL_X = 390
+ROAD_END_X = 440
+DAIS_RISE = 14
 
 
 def menu_road_y(x):
     """Where the road on the near hill runs, in art pixels. MenuScenery.gd walks a
     character along this same curve."""
     return MENU_Y + 322 + 16 * math.sin((x - MENU_X) * 0.0105 - 0.5)
+
+
+def ellipse_tier(image, cx, cy, rx, ry, depth, top, side):
+    """A round stone step: its side, then its paved top, then an ink edge."""
+    px = image.load()
+    for y in range(cy - ry - 1, cy + ry + depth + 2):
+        for x in range(cx - rx - 1, cx + rx + 2):
+            on_top = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1.0
+            below = ((x - cx) / rx) ** 2 + ((y - cy - depth) / ry) ** 2 <= 1.0
+            wall = abs(x - cx) <= rx and cy <= y <= cy + depth
+            if on_top:
+                row = (y - cy + ry) // 5
+                seam = (y - cy + ry) % 5 == 0 or (x + row * 6) % 13 == 0
+                tile = ((x + row * 6) // 13 * 7 + row * 3) % 3
+                px[x, y] = shade(top, 0.8) if seam else shade(top, (1.0, 0.95, 1.05)[tile])
+            elif below or wall:
+                px[x, y] = shade(side, 0.82) if (x // 9) % 2 else side
+    source = image.copy().load()
+    for y in range(cy - ry - 1, cy + ry + depth + 2):
+        for x in range(cx - rx - 1, cx + rx + 2):
+            inside = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1.0 or \
+                ((x - cx) / rx) ** 2 + ((y - cy - depth) / ry) ** 2 <= 1.0 or \
+                abs(x - cx) <= rx and cy <= y <= cy + depth
+            if inside and (((x - cx - 1) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1.0 and
+                           ((x - cx + 1) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1.0 and y < cy):
+                px[x, y] = shade(source[x, y], 0.7)
+
+
+def standing_stone(image, x, base):
+    """A carved stone with a glowing crystal, one on each side of the Portal."""
+    draw = ImageDraw.Draw(image)
+    draw.polygon([(x - 4, base), (x - 3, base - 25), (x, base - 29), (x + 3, base - 25), (x + 4, base)],
+                 fill=hexc("#b9b4c0"))
+    draw.polygon([(x, base - 29), (x + 3, base - 25), (x + 4, base), (x, base)], fill=hexc("#8d8798"))
+    draw.rectangle((x - 1, base - 22, x + 1, base - 17), fill=hexc("#7fe9f2"))
+    draw.point((x, base - 20), fill=hexc("#ffffff"))
+    for y in (base - 12, base - 7):
+        draw.line((x - 2, y, x + 2, y), fill=hexc("#6d6778"))
+    px = image.load()
+    source = image.copy().load()
+    for yy in range(base - 31, base + 1):
+        for xx in range(x - 6, x + 7):
+            if source[xx, yy][:3] not in ((185, 180, 192), (141, 135, 152), (127, 233, 242),
+                                          (255, 255, 255), (109, 103, 120)):
+                for ox, oy in ((1, 0), (-1, 0), (0, -1)):
+                    if source[xx + ox, yy + oy][:3] in ((185, 180, 192), (141, 135, 152)):
+                        px[xx, yy] = INK
+                        break
+
+
+def portal_site(image):
+    """The paved clearing where the road ends: two round steps, and stairs up the
+    middle to the Portal, which MenuScenery.gd stands on the top step."""
+    cy = int(menu_road_y(PORTAL_X))
+    pave, wall = hexc("#d8cfbc"), hexc("#8f8778")
+    px = image.load()
+    # A soft shadow on the grass.
+    for y in range(cy - 10, cy + 30):
+        for x in range(PORTAL_X - 92, PORTAL_X + 93):
+            d = ((x - PORTAL_X) / 90) ** 2 + ((y - cy - 8) / 22) ** 2
+            if d <= 1.0 and (x + y) % 2 == 0:
+                px[x, y] = shade(px[x, y], 0.82)
+    ellipse_tier(image, PORTAL_X, cy + 1, 84, 19, 3, pave, wall)
+    # The road joins the paving instead of stopping at it.
+    for x in range(PORTAL_X + 70, ROAD_END_X + 16):
+        middle = int(menu_road_y(x))
+        for y in range(middle - 3, middle + 8):
+            px[x, y] = hexc("#ecd19a") if y < middle + 3 else hexc("#dcbc80")
+    ellipse_tier(image, PORTAL_X, cy - DAIS_RISE + 2, 56, 12, 6, hexc("#e6dfce"), wall)
+    # The stairs, wider toward the bottom.
+    draw = ImageDraw.Draw(image)
+    top = cy - DAIS_RISE + 10
+    for step in range(4):
+        half = 13 + step
+        y = top + step * 3
+        draw.rectangle((PORTAL_X - half, y, PORTAL_X + half, y + 1), fill=hexc("#efe8d8"))
+        draw.rectangle((PORTAL_X - half, y + 2, PORTAL_X + half, y + 2), fill=hexc("#a39a89"))
+        px[PORTAL_X - half - 1, y + 1] = INK
+        px[PORTAL_X + half + 1, y + 1] = INK
+    # Light from the Portal spills over the top step.
+    for y in range(cy - DAIS_RISE - 7, cy - DAIS_RISE + 12):
+        for x in range(PORTAL_X - 34, PORTAL_X + 35):
+            d = ((x - PORTAL_X) / 34) ** 2 + ((y - cy + DAIS_RISE - 3) / 9) ** 2
+            if d <= 1.0 and BAYER[y % 4][x % 4] < (1.0 - d) * 14:
+                px[x, y] = lerp_color(px[x, y], hexc("#8ff2f5"), 0.5)
+    standing_stone(image, PORTAL_X - 46, cy - DAIS_RISE + 3)
+    standing_stone(image, PORTAL_X + 46, cy - DAIS_RISE + 3)
 
 
 def menu_near_hill():
@@ -588,7 +680,7 @@ def menu_near_hill():
     ramp = [hexc(c) for c in ("#9be05f", "#7ccf55", "#5fbb4e", "#4aa449", "#3c8d46", "#317a44")]
     fill_below(image, line, ramp, 170, hexc("#d4f58a"))
     px = image.load()
-    for x in range(MENU_W):
+    for x in range(ROAD_END_X, MENU_W):
         middle = int(menu_road_y(x))
         for y in range(middle - 4, middle + 9):
             edge = y <= middle - 3 or y >= middle + 7
@@ -611,6 +703,7 @@ def menu_near_hill():
             color = hexc("#a8ea6b") if i % 2 else hexc("#317a44")
             draw.line((x, y, x, y + 2), fill=color)
             draw.point((x + 1, y + 1), fill=color)
+    portal_site(image)
     return image
 
 
@@ -618,8 +711,8 @@ def menu_front():
     """Bushes that frame the bottom of the picture, in front of everything."""
     image = Image.new("RGBA", (MENU_W, MENU_H), (0, 0, 0, 0))
     light, middle, dark = hexc("#4fae55"), hexc("#2f8a4d"), hexc("#206a48")
-    for x, radius in ((750, 62), (690, 40), (640, 26), (380, 20), (330, 28), (120, 32), (70, 44),
-                      (200, 22), (520, 18), (810, 50)):
+    for x, radius in ((750, 62), (690, 40), (640, 26), (250, 24), (120, 32), (70, 44), (190, 20),
+                      (560, 16), (810, 50)):
         tree(image, x, MENU_Y + 372 + radius // 3, radius, light, middle, dark, False)
     return image
 
@@ -669,9 +762,9 @@ def menu_portal():
                         color = hexc("#a6f4f0") if math.sin(block * 0.8 - phase) > 0 else hexc("#4cc6f0")
                     px[sx, y] = color
         left = frame * w
-        draw.rectangle((left + 6, 63, left + 49, 66), fill=stone)
-        draw.rectangle((left + 3, 67, left + 52, 70), fill=stone_dark)
-        draw.line((left + 6, 63, left + 49, 63), fill=stone_light)
+        draw.rectangle((left + 13, 62, left + 42, 66), fill=stone)
+        draw.rectangle((left + 10, 67, left + 45, 70), fill=stone_dark)
+        draw.line((left + 13, 62, left + 42, 62), fill=stone_light)
     return outline_outside(sheet)
 
 
