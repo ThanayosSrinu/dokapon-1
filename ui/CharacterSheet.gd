@@ -115,7 +115,7 @@ func _redraw() -> void:
 		var text := "%s: %s" % [SLOT_NAMES[slot], _item_name(item_id)]
 		_add_row(_worn, text, "Remove" if item_id != "" else "", player.unequip.bind(slot), item_id)
 
-	_add_row(_bag, "Bag (%d / %d)" % [player.inventory.size(), PlayerData.INVENTORY_SIZE], "", Callable())
+	_add_row(_bag, "Bag (%d / %d)" % [player.inventory.size(), player.bag_size], "", Callable())
 	for item_id in player.inventory:
 		var consumable := Database.get_item(item_id).kind == ItemData.Kind.CONSUMABLE
 		var action := player.use_item.bind(item_id) if consumable else player.equip.bind(item_id)

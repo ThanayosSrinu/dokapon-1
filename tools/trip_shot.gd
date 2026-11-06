@@ -39,10 +39,10 @@ func _ready() -> void:
 	var hurt: int = screen.trip.player.hp
 	screen.trip.player.hp = 5
 	screen.bag_panel.refresh()
-	screen.bag_panel.rows[0]._point()
+	screen.bag_panel.tiles[0].mouse_entered.emit()
 	await _settle(0.2)
 	await _save(folder + "/trip_bag.png")
-	screen.bag_panel.rows[0]._stop_pointing()
+	screen.bag_panel._let_go()
 	screen.trip.player.hp = hurt
 	screen.speed_buttons[2].pressed.emit()
 	screen.speed_buttons[2].grab_focus()

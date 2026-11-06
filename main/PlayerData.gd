@@ -48,8 +48,10 @@ var gold := 0
 var hp := 0
 var mp := 0
 
-## Item ids in the bag, at most INVENTORY_SIZE.
+## Item ids in the bag, at most bag_size.
 var inventory: Array[String] = []
+## How many items the bag holds.
+var bag_size := INVENTORY_SIZE
 ## ItemData.Kind -> the id of the item worn in that slot. A slot may be missing.
 var equipment := {}
 ## The ids of the spells this player knows.
@@ -207,7 +209,7 @@ func add_gold(amount: int) -> void:
 
 ## Returns false if the bag is full.
 func add_item(item_id: String) -> bool:
-	if inventory.size() >= INVENTORY_SIZE:
+	if inventory.size() >= bag_size:
 		return false
 	inventory.append(item_id)
 	changed.emit()
@@ -332,7 +334,7 @@ func equip(item_id: String) -> bool:
 
 ## Moves the item in `slot` into the bag. Returns false if there is no room.
 func unequip(slot: ItemData.Kind) -> bool:
-	if not equipment.has(slot) or inventory.size() >= INVENTORY_SIZE:
+	if not equipment.has(slot) or inventory.size() >= bag_size:
 		return false
 	inventory.append(equipment[slot])
 	equipment.erase(slot)

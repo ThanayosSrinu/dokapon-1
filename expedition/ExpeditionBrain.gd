@@ -209,7 +209,7 @@ func _type_value(id: int) -> float:
 			return SpaceEffects.GOLD_BASE + SpaceEffects.GOLD_PER_LEVEL * player.level
 		BoardNode.NodeType.ITEM:
 			var worth := SpaceEffects.ITEM_VALUE_BASE + SpaceEffects.ITEM_VALUE_PER_LEVEL * player.level
-			return 0.0 if player.inventory.size() >= PlayerData.INVENTORY_SIZE else worth * 0.5
+			return 0.0 if player.inventory.size() >= player.bag_size else worth * 0.5
 		BoardNode.NodeType.EVENT:
 			return EVENT_VALUE
 		BoardNode.NodeType.TRAP:

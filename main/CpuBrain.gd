@@ -871,7 +871,7 @@ static func _carries(player: PlayerData, property: String) -> bool:
 
 
 static func _bag_is_full(player: PlayerData) -> bool:
-	return player.inventory.size() >= PlayerData.INVENTORY_SIZE
+	return player.inventory.size() >= player.bag_size
 
 
 # The bag's item that wastes least of `property` on a gap of `gap`, or "".

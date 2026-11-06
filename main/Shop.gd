@@ -43,7 +43,7 @@ static func sell_price(item_id: String) -> int:
 static func why_not_buy(player: PlayerData, item_id: String) -> String:
 	if player.gold < Database.get_item(item_id).price:
 		return "Not enough gold."
-	if player.inventory.size() >= PlayerData.INVENTORY_SIZE:
+	if player.inventory.size() >= player.bag_size:
 		return "Your bag is full. Sell something first."
 	return ""
 

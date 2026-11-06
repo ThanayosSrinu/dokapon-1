@@ -277,7 +277,7 @@ func _show_tab(selling: bool) -> void:
 
 ## Rebuilds the list, keeping the selection if that item is still in it.
 func _redraw() -> void:
-	_purse.text = "Gold %d\nBag %d / %d" % [_player.gold, _player.inventory.size(), PlayerData.INVENTORY_SIZE]
+	_purse.text = "Gold %d\nBag %d / %d" % [_player.gold, _player.inventory.size(), _player.bag_size]
 	# Freed right away: queue_free() would leave old rows in the layout this frame.
 	for child in _rows.get_children():
 		_rows.remove_child(child)

@@ -49,7 +49,7 @@ static func spoils(winner: PlayerData, loser: PlayerData) -> Array[Dictionary]:
 	if gold > 0:
 		options.append({"kind": Spoil.GOLD, "text": "%d gold" % gold, "value": gold})
 	var item_id := best_item(loser)
-	if item_id != "" and winner.inventory.size() < PlayerData.INVENTORY_SIZE:
+	if item_id != "" and winner.inventory.size() < winner.bag_size:
 		var item := Database.get_item(item_id)
 		options.append({"kind": Spoil.ITEM, "text": item.display_name, "value": item.price, "item": item_id})
 	if ShadowCrown.is_worn_by(winner):

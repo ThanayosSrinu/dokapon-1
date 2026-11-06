@@ -61,38 +61,99 @@ func _test_bag_panel() -> void:
 	player.add_item(cure)
 	player.add_item(blade)
 	panel.refresh()
-	_expect(panel.rows[0].auto.visible, "something to use has an Auto switch")
-	_expect(panel.rows[1].side_words.text == "Wear", "better gear says so")
-	_expect(not panel.rows[2].auto.visible and panel.rows[2].button.disabled, "an empty place does nothing")
+	_expect(panel.tiles.size() == player.bag_size, "every place in the bag has a tile")
+	_expect(panel.tiles[0].size.x == panel.slots[0].size.x, "tiles match the worn slots")
+	_expect(panel.tiles[2].disabled and panel.tiles[2].icon == null, "an empty place does nothing")
+	panel.tiles[1].pressed.emit()
+	_expect(panel.action.visible and panel.action.text == "Wear", "better gear can be worn")
+	_expect(panel.detail_title.text == Database.get_item(blade).display_name, "the box names the item")
 
+	panel.tiles[0].pressed.emit()
+	_expect(panel.tiles[0].lit and not panel.tiles[1].lit, "only the pressed tile is lit")
+	_expect(panel.auto.visible and panel.action.text == "Use", "something to use has Use and Auto")
 	player.hp = 1
-	panel.rows[0].auto.button_pressed = false
-	_expect(player.auto_off.has(cure), "Auto can be turned off")
+	panel.refresh()
+	panel.auto.pressed.emit()
+	_expect(player.auto_off.has(cure) and not panel.auto.lit, "Auto can be turned off")
 	CpuBrain.tidy(player, false)
 	_expect(player.inventory.has(cure), "the bot leaves an item with Auto off")
 	var fighter := Fighter.from_player(player)
 	_expect(not fighter.get_items().has(cure), "and leaves it in a fight")
-	panel.rows[0].button.pressed.emit()
+	panel.action.pressed.emit()
 	_expect(not player.inventory.has(cure) and player.hp > 1, "the lord can still use it")
 	player.auto_off.clear()
 
 	panel.refresh()
-	panel.rows[0].button.pressed.emit()
-	_expect(player.equipment.get(ItemData.Kind.WEAPON) == blade, "pressing gear wears it")
+	panel.tiles[0].pressed.emit()
+	panel.action.pressed.emit()
+	_expect(player.equipment.get(ItemData.Kind.WEAPON) == blade, "pressing Wear wears it")
 	_expect(panel.slots[0].icon != null, "worn gear shows in its slot")
+
+	# The swap the other way: what comes back is worse, and must still be wearable.
+	var old_blade: String = player.inventory[0]
+	_expect(not CpuBrain.is_upgrade(player, old_blade), "the old gear is no upgrade")
+	panel.tiles[0].pressed.emit()
+	_expect(panel.action.visible and panel.action.text == "Wear", "gear back in the bag can be worn again")
+	panel.action.pressed.emit()
+	_expect(player.equipment.get(ItemData.Kind.WEAPON) == old_blade, "and swapped back")
+	panel.tiles[0].pressed.emit()
+	panel.action.pressed.emit()
+	get_viewport().gui_release_focus()
+	await get_tree().process_frame
+	await get_tree().process_frame
 
 	panel.point_at_space(screen.trip.map.portal)
 	_expect(panel.detail_title.text == "Portal", "the box explains a space")
+	player.inventory.clear()
 	player.add_item(cure)
 	panel.refresh()
-	panel.rows[0]._point()
-	_expect(panel.detail_title.text == Database.get_item(player.inventory[0]).display_name, "the box explains an item")
-	panel.rows[0]._stop_pointing()
-	_expect(panel.detail_title.text == "Portal", "and goes back to the space")
+	panel.tiles[0].mouse_entered.emit()
+	_expect(panel.detail_title.text == Database.get_item(cure).display_name, "the box explains an item")
+	_expect(panel.action.visible, "and pointing shows its buttons")
+	panel.tiles[0].mouse_exited.emit()
+	_expect(panel.action.visible, "which stay to be reached")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(panel.detail_title.text == "Portal", "until the mouse leaves the column")
 	panel.locked = true
-	panel.rows[0].chosen.emit(player.inventory[0])
-	_expect(panel.rows[0].button.disabled, "nothing changes during a fight")
+	panel.tiles[0].pressed.emit()
+	panel.action.pressed.emit()
+	_expect(player.inventory.has(cure), "nothing changes during a fight")
+	panel.tiles[0].mouse_entered.emit()
+	_expect(not panel.action.visible, "and the box offers nothing")
+	panel._let_go()
 	panel.locked = false
+
+	# No item's words may push the box off the screen.
+	for id in Database.sorted_ids(Database.items):
+		player.inventory.clear()
+		player.add_item(id)
+		panel.refresh()
+		panel.tiles[0].mouse_entered.emit()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_expect(panel.get_global_rect().end.y <= 720.0, "%s fits on screen" % id)
+		panel._let_go()
+
+	# Every size of bag stays inside its frame and on screen.
+	for places: int in [1, 4, 6, 7, 8, 12, 16, 17, 20, 40]:
+		player.bag_size = places
+		player.inventory.clear()
+		while player.add_item(cure):
+			pass
+		_expect(player.inventory.size() == places, "a bag of %d fills up" % places)
+		panel.refresh()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_expect(panel.tiles.size() == places, "a bag of %d has its tiles" % places)
+		_expect(panel.bag_words.text == "Bag %d/%d" % [places, places], "and counts them")
+		_expect(panel.get_global_rect().end.y <= 720.0, "a bag of %d fits on screen" % places)
+		_expect(panel.size.x == BagPanel.WIDTH, "a bag of %d keeps the column's width" % places)
+		var frame: Control = panel.bag_words.get_parent()
+		_expect(frame.get_global_rect().encloses(panel._bag_view.get_global_rect()), "a bag of %d stays in its frame" % places)
+	player.bag_size = PlayerData.INVENTORY_SIZE
+	player.inventory.clear()
+	panel.refresh()
 	screen._set_speed(1.0)
 
 
