@@ -1,17 +1,19 @@
 class_name TripHud
 extends KitPanel
-## The strip along the bottom while a trip plays. The top row is health, food and gold.
-## The bottom row is who is out there and their stats, which turn red while hunger has
-## them weak. Food turns gold once they ask to come home, because that is the lord's cue.
+## The strip along the bottom while a trip plays, in lined-up columns: who is out there
+## over their gold, health over food, then their stats in two pairs, which turn red while
+## hunger has them weak. Food turns gold once they ask to come home, because that is the
+## lord's cue.
 ## Each part has a tip with the exact numbers (rule U3).
 
 const BAR_WIDTH := 160.0
-const HP_WORDS_WIDTH := 76.0
-const FOOD_WORDS_WIDTH := 96.0
-const WHO_WIDTH := 148.0
+const WORDS_WIDTH := 96.0
+const WHO_WIDTH := 132.0
+const COLUMNS := 4
 const GAP := 18
 const ROW_GAP := 6
-## The stats on the bottom row, with what each is called on screen.
+const BAR_GAP := 10
+## The stats, with what each is called on screen.
 const STATS := [
 	{"stat": "attack", "short": "AT", "name": "Attack", "icon": "sword"},
 	{"stat": "defense", "short": "DEF", "name": "Defense", "icon": "shield"},
@@ -27,8 +29,6 @@ var gold: KitChip
 var who: Label
 ## One per entry of STATS, in the same order.
 var stats: Array[KitStat] = []
-## Says so while they are weak, for those who do not read colors.
-var starving_words: Label
 
 var _trip: Expedition
 # The food they set out with, which is a full bar.
@@ -39,18 +39,21 @@ func _init(trip: Expedition, stage: Stage) -> void:
 	super()
 	_trip = trip
 	_food_full = maxi(stage.food_for(trip.person), 1)
-	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", ROW_GAP)
-	body.add_child(rows)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", GAP)
-	rows.add_child(row)
-	hp_bar = _bar(row, Kit.HEALTH, "heart")
-	hp_words = _words(row, HP_WORDS_WIDTH)
-	food_bar = _bar(row, Kit.SUPPLY, "food")
-	food_words = _words(row, FOOD_WORDS_WIDTH)
-	gold = _chip(row, "coin")
-	_build_stats(rows)
+	var grid := GridContainer.new()
+	grid.columns = COLUMNS
+	grid.add_theme_constant_override("h_separation", GAP)
+	grid.add_theme_constant_override("v_separation", ROW_GAP)
+	body.add_child(grid)
+	who = _words(grid, WHO_WIDTH)
+	hp_bar = _bar(grid, Kit.HEALTH, "heart")
+	hp_words = _words(hp_bar.get_parent(), WORDS_WIDTH)
+	_add_stat(grid, 0)
+	_add_stat(grid, 1)
+	gold = _chip(grid, "coin")
+	food_bar = _bar(grid, Kit.SUPPLY, "food")
+	food_words = _words(food_bar.get_parent(), WORDS_WIDTH)
+	_add_stat(grid, 2)
+	_add_stat(grid, 3)
 
 
 func _ready() -> void:
@@ -65,11 +68,10 @@ func refresh(slide := true) -> void:
 	hp_bar.set_amount(player.hp, max_hp, slide)
 	hp_words.text = "%d/%d" % [player.hp, max_hp]
 	food_bar.set_amount(_trip.food_left, _food_full, slide)
-	food_words.text = "No food!" if _trip.food_left == 0 else Expedition.turns_words(_trip.food_left)
+	food_words.text = _food_words()
 	food_words.modulate = _food_color()
 	gold.set_amount(player.gold, slide)
 	who.text = "%s  Lv %d" % [player.player_name, player.level]
-	starving_words.visible = player.weak
 	for index in STATS.size():
 		_show_stat(stats[index], STATS[index], slide)
 	Tips.attach(hp_bar, "Health", "%d of %d HP." % [player.hp, max_hp])
@@ -83,21 +85,12 @@ func show_beaten() -> void:
 	hp_words.text = "0/%d" % _trip.player.get_stat("max_hp")
 
 
-func _build_stats(rows: Control) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", GAP)
-	rows.add_child(row)
-	who = _words(row, WHO_WIDTH)
-	for entry: Dictionary in STATS:
-		var stat := KitStat.new(entry["icon"], entry["short"])
-		stat.focus_mode = Control.FOCUS_ALL
-		row.add_child(stat)
-		stats.append(stat)
-	starving_words = _words(row, 0.0)
-	starving_words.text = "Starving!"
-	starving_words.modulate = KitStat.LOW
-	starving_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	starving_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+func _add_stat(grid: Control, index: int) -> void:
+	var entry: Dictionary = STATS[index]
+	var stat := KitStat.new(entry["icon"], entry["short"])
+	stat.focus_mode = Control.FOCUS_ALL
+	grid.add_child(stat)
+	stats.append(stat)
 
 
 func _show_stat(stat: KitStat, entry: Dictionary, slide: bool) -> void:
@@ -109,6 +102,12 @@ func _show_stat(stat: KitStat, entry: Dictionary, slide: bool) -> void:
 	if now < fed:
 		tip = "%s is %d, down from %d. Hunger has them weak." % [entry["name"], now, fed]
 	Tips.attach(stat, entry["name"], tip)
+
+
+func _food_words() -> String:
+	if _trip.player.weak:
+		return "Starving!"
+	return "No food!" if _trip.food_left == 0 else Expedition.turns_words(_trip.food_left)
 
 
 func _food_color() -> Color:
@@ -128,7 +127,11 @@ func _days(count: int) -> String:
 	return "1 day" if count == 1 else "%d days" % count
 
 
-func _bar(row: Control, color: Color, icon_name: String) -> KitBar:
+# The bar sits in a row of its own, which has room for its words.
+func _bar(grid: Control, color: Color, icon_name: String) -> KitBar:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", BAR_GAP)
+	grid.add_child(row)
 	var bar := KitBar.new(color, Kit.icon(icon_name))
 	bar.width = BAR_WIDTH
 	bar.focus_mode = Control.FOCUS_ALL
@@ -148,5 +151,6 @@ func _chip(row: Control, icon_name: String) -> KitChip:
 	var chip := KitChip.new(icon_name)
 	chip.focus_mode = Control.FOCUS_ALL
 	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	row.add_child(chip)
 	return chip

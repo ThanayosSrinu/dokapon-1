@@ -806,6 +806,27 @@ func _link_report_focus() -> void:
 		chip.focus_neighbor_right = chip.get_path_to(chips[mini(index + 1, chips.size() - 1)])
 
 
+# Up, down, left and right follow the strip's columns, and its right edge leads to the bag.
+func _link_strip() -> void:
+	var stats := hud.stats
+	var slot: Control = bag_panel.slots[0]
+	_link(hud.hp_bar, orders_button, hud.food_bar, hud.hp_bar, stats[0])
+	_link(hud.gold, hud.hp_bar, hud.gold, hud.gold, hud.food_bar)
+	_link(hud.food_bar, hud.hp_bar, hud.food_bar, hud.gold, stats[2])
+	_link(stats[0], orders_button, stats[2], hud.hp_bar, stats[1])
+	_link(stats[1], orders_button, stats[3], stats[0], slot)
+	_link(stats[2], stats[0], stats[2], hud.food_bar, stats[3])
+	_link(stats[3], stats[1], stats[3], stats[2], slot)
+	slot.focus_neighbor_left = slot.get_path_to(stats[1])
+
+
+func _link(part: Control, up: Control, down: Control, left: Control, right: Control) -> void:
+	part.focus_neighbor_top = part.get_path_to(up)
+	part.focus_neighbor_bottom = part.get_path_to(down)
+	part.focus_neighbor_left = part.get_path_to(left)
+	part.focus_neighbor_right = part.get_path_to(right)
+
+
 ## Left and right walk the top row, down reads the strip, and the panel keeps focus
 ## to itself while it is open.
 func _link_focus() -> void:
@@ -821,23 +842,7 @@ func _link_focus() -> void:
 	orders_button.focus_neighbor_bottom = orders_button.get_path_to(hud.hp_bar)
 	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
 	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
-	var strip: Array[Control] = [hud.hp_bar, hud.food_bar, hud.gold]
-	var lower: Array[Control] = []
-	lower.assign(hud.stats)
-	for index in strip.size():
-		var part := strip[index]
-		part.focus_neighbor_top = part.get_path_to(orders_button)
-		part.focus_neighbor_bottom = part.get_path_to(lower[mini(index, lower.size() - 1)])
-		part.focus_neighbor_left = part.get_path_to(strip[maxi(index - 1, 0)])
-		part.focus_neighbor_right = part.get_path_to(strip[mini(index + 1, strip.size() - 1)])
-	hud.gold.focus_neighbor_right = hud.gold.get_path_to(bag_panel.slots[0])
-	bag_panel.slots[0].focus_neighbor_left = bag_panel.slots[0].get_path_to(hud.gold)
-	for index in lower.size():
-		var part := lower[index]
-		part.focus_neighbor_top = part.get_path_to(strip[mini(index, strip.size() - 1)])
-		part.focus_neighbor_bottom = part.get_path_to(part)
-		part.focus_neighbor_left = part.get_path_to(lower[maxi(index - 1, 0)])
-		part.focus_neighbor_right = part.get_path_to(lower[mini(index + 1, lower.size() - 1)])
+	_link_strip()
 	for part: Control in [stay_button, leave_button]:
 		for way: StringName in [&"focus_neighbor_left", &"focus_neighbor_right"]:
 			part.set(way, part.get_path_to(part))

@@ -26,6 +26,7 @@ func _init(icon_name: String, short_name: String) -> void:
 	_number = Kit.text("0")
 	_number.custom_minimum_size.x = NUMBER_WIDTH
 	_number.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_number.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_number.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	add_child(_number)
 	focus_entered.connect(queue_redraw)
