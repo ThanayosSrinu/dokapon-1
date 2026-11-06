@@ -85,6 +85,7 @@ func get_items() -> Array[String]:
 	var ids: Array[String] = []
 	if player != null:
 		for item_id in player.inventory:
-			if not ids.has(item_id) and Database.get_item(item_id).kind == ItemData.Kind.CONSUMABLE:
+			if not ids.has(item_id) and not player.auto_off.has(item_id) \
+					and Database.get_item(item_id).kind == ItemData.Kind.CONSUMABLE:
 				ids.append(item_id)
 	return ids

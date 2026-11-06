@@ -19,8 +19,11 @@ const SPEED_FROM_RIGHT := 24.0
 const SPEED_TOP := 24.0
 const SPEED_GAP := 8
 const STRIP_FROM_BOTTOM := 12.0
-## Keeps the fight's window clear of the strip.
+const STRIP_FROM_LEFT := 28.0
+## Keeps the fight's window clear of the strip and the bag.
 const FIGHT_ROOM_BELOW := 44.0
+const FIGHT_ROOM_RIGHT := 40.0
+const BAG_TOP := 128.0
 const NEWS_TOP := 24.0
 const NEWS_WIDTH := 600.0
 const ORDERS_TOP := 80.0
@@ -77,6 +80,10 @@ const OUT_WORDS := "%s can't work for %s."
 
 ## The speed to start at, so a player who likes ×3 keeps it from trip to trip.
 static var chosen_speed := 1.0
+## Ids of the items the bot must leave alone, kept from trip to trip.
+static var items_off_auto: Array[String] = []
+## True when the player chooses what is worn. Tests turn it off, to match the rules.
+static var gear_by_hand := true
 ## Above 0, the seed of the next trip. For tests.
 static var next_seed := 0
 ## Above 0, the day the next trip is called home. For tests.
@@ -90,6 +97,8 @@ var token: PlayerMovement
 ## The adventurer while they appear and fade away, which a token can't do.
 var hero: CharacterFigure
 var hud: TripHud
+## What is worn and carried, and the box that explains things.
+var bag_panel: BagPanel
 var die: DiceRoller
 var battle_screen: BattleScreen
 var back: KitBackButton
@@ -137,6 +146,8 @@ func _ready() -> void:
 	var town := TownData.current()
 	trip = Expedition.new(town.going, town.stage, next_seed)
 	trip.recall_day = next_recall_day
+	trip.by_hand = gear_by_hand
+	trip.player.auto_off = items_off_auto
 	trip.said.connect(func(line: String) -> void: _speech.append(line))
 	_build_world(town)
 	_build_ui(town)
@@ -153,6 +164,17 @@ func _exit_tree() -> void:
 
 func _process(_delta: float) -> void:
 	_update_speech()
+	_update_bag_panel()
+
+
+# Keeps the bag shut during fights, and points its box at the space under the mouse.
+func _update_bag_panel() -> void:
+	bag_panel.locked = battle_screen.visible or trip.is_over()
+	var space := board.get_node_at(get_global_mouse_position())
+	if get_viewport().gui_get_hovered_control() != null or space == null:
+		bag_panel.point_at_space(trip.space_id)
+	else:
+		bag_panel.point_at_space(space.node_id)
 
 
 # --- Playing the trip -------------------------------------------------------
@@ -280,6 +302,7 @@ func _close_trip() -> void:
 
 func _clear_for_ending() -> void:
 	_close_orders(false)
+	bag_panel.hide()
 	orders_button.hide()
 	_drop_orders_arrow()
 	zone_overlay.target_zone = ""
@@ -401,6 +424,7 @@ func _toggle_orders() -> void:
 # The view pulls back with the zones on it. The trip keeps running.
 func _open_orders() -> void:
 	orders.refresh()
+	bag_panel.hide()
 	orders.show()
 	orders.play_open()
 	zone_overlay.open = true
@@ -415,6 +439,7 @@ func _close_orders(take_focus := true) -> void:
 	if not orders.visible:
 		return
 	orders.hide()
+	bag_panel.show()
 	zone_overlay.open = false
 	camera.set_zoom_index(_zoom_before, ORDERS_VIEW_SECONDS)
 	camera.follow(token)
@@ -607,6 +632,7 @@ func _build_ui(town: TownData) -> void:
 	add_child(fight_layer)
 	battle_screen = BattleScreen.new()
 	battle_screen.room_below = FIGHT_ROOM_BELOW
+	battle_screen.room_right = FIGHT_ROOM_RIGHT
 	fight_layer.add_child(battle_screen)
 	var ui := CanvasLayer.new()
 	ui.layer = UI_LAYER
@@ -619,6 +645,7 @@ func _build_ui(town: TownData) -> void:
 	bubble = TavernBubble.new()
 	_layer.add_child(bubble)
 	_build_strip(town)
+	_build_bag_panel()
 	_build_news()
 	_build_speed_row()
 	_build_orders()
@@ -648,11 +675,17 @@ func _build_die() -> void:
 func _build_strip(town: TownData) -> void:
 	hud = TripHud.new(trip, town.stage)
 	_layer.add_child(hud)
-	hud.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hud.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	hud.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE)
+	hud.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE)
 	hud.offset_top -= STRIP_FROM_BOTTOM
 	hud.offset_bottom -= STRIP_FROM_BOTTOM
+	hud.offset_left += STRIP_FROM_LEFT
+	hud.offset_right += STRIP_FROM_LEFT
+
+
+func _build_bag_panel() -> void:
+	bag_panel = BagPanel.new(trip)
+	_at_top_right(bag_panel, BAG_TOP)
 
 
 func _build_news() -> void:
@@ -798,6 +831,8 @@ func _link_focus() -> void:
 		part.focus_neighbor_bottom = part.get_path_to(lower[mini(index, lower.size() - 1)])
 		part.focus_neighbor_left = part.get_path_to(strip[maxi(index - 1, 0)])
 		part.focus_neighbor_right = part.get_path_to(strip[mini(index + 1, strip.size() - 1)])
+	hud.gold.focus_neighbor_right = hud.gold.get_path_to(bag_panel.slots[0])
+	bag_panel.slots[0].focus_neighbor_left = bag_panel.slots[0].get_path_to(hud.gold)
 	for index in lower.size():
 		var part := lower[index]
 		part.focus_neighbor_top = part.get_path_to(strip[index])

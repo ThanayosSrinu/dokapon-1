@@ -80,7 +80,7 @@ class Result:
 
 
 static func gold_space(player: PlayerData) -> Result:
-	var amount := _spread(GOLD_BASE + GOLD_PER_LEVEL * player.level)
+	var amount := player.found_gold(_spread(GOLD_BASE + GOLD_PER_LEVEL * player.level))
 	var result := Result.new("Found %d gold." % amount)
 	result.gold = amount
 	return result
@@ -95,7 +95,7 @@ static func item_space(player: PlayerData) -> Result:
 
 ## Refills MP, and sometimes teaches a spell the player does not know yet.
 static func magic_space(player: PlayerData) -> Result:
-	player.refill_mp()
+	player.rest_mp()
 	var result := Result.new("Old magic fills you. MP restored.")
 	var spells := learnable_spells(player)
 	if not spells.is_empty() and GameState.rng.randf() < MAGIC_SPELL_CHANCE:
@@ -106,8 +106,10 @@ static func magic_space(player: PlayerData) -> Result:
 
 
 static func shrine_space(player: PlayerData) -> Result:
-	player.heal_fully()
-	return Result.new("A quiet prayer. HP and MP fully restored.")
+	if player.rest_share >= 1.0:
+		player.heal_fully()
+		return Result.new("A quiet prayer. HP and MP fully restored.")
+	return Result.new("A quiet prayer. Got back %d HP." % player.rest())
 
 
 ## Springs a trap on the player, unless they are quick enough to step around it.
@@ -168,7 +170,7 @@ static func roll_chest(player: PlayerData) -> Result:
 				CHEST_ITEM_VALUE_BASE + CHEST_ITEM_VALUE_PER_LEVEL * player.level)
 		result.text = "The chest holds a %s!" % Database.get_item(result.item_id).display_name
 	else:
-		result.gold = _spread(CHEST_GOLD_BASE + CHEST_GOLD_PER_LEVEL * player.level)
+		result.gold = player.found_gold(_spread(CHEST_GOLD_BASE + CHEST_GOLD_PER_LEVEL * player.level))
 		result.text = "The chest holds %d gold!" % result.gold
 	if GameState.rng.randf() < CHEST_GUARDIAN_CHANCE:
 		var level := mini(player.level + GUARDIAN_LEVELS_AHEAD, PlayerData.MAX_LEVEL)

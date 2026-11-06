@@ -31,6 +31,11 @@ enum Ending { NONE, HOME, BEATEN, STARVED, WARPED }
 ## then look around in it until told otherwise.
 enum Order { ROAM, HOME, ZONE }
 
+## How much of the gold on an island is really theirs to bring home.
+const GOLD_SHARE := 0.5
+## How much of their HP and MP a Shrine, a Magic space or a blessing gives back.
+const REST_SHARE := 0.4
+const SAY_BETTER := "My lord, this %s looks better than what I wear."
 ## With no food left, this share of max HP is lost each day. This can kill, so a trip
 ## always ends, however badly the dice go.
 const HUNGER_SHARE := 0.1
@@ -62,6 +67,8 @@ var brain: ExpeditionBrain
 var day := 0
 ## Days of food still in the pack.
 var food_left := 0
+## True when the lord chooses what is worn, so the bot only points out what is better.
+var by_hand := false
 var ending := Ending.NONE
 var space_id := -1
 ## The space stepped off last, or -1. It only matters during a walk.
@@ -186,7 +193,7 @@ func start_day() -> bool:
 	GameState.day = day
 	if day == recall_day:
 		give_order(Order.HOME)
-	for item_name in CpuBrain.tidy(player):
+	for item_name in CpuBrain.tidy(player, not by_hand):
 		note("item", "%s uses a %s." % [player.player_name, item_name])
 	_eat()
 	if is_over():
@@ -413,6 +420,22 @@ func _worth_of(result: SpaceEffects.Result) -> float:
 	return worth
 
 
+## The lord has them use `item_id`. Returns false if it would do nothing.
+func use_by_hand(item_id: String) -> bool:
+	if not player.use_item(item_id):
+		return false
+	note("item", "%s uses a %s." % [player.player_name, Database.get_item(item_id).display_name])
+	return true
+
+
+## The lord has them wear `item_id`, and what it replaces goes in the bag.
+func wear_by_hand(item_id: String) -> bool:
+	if not player.equip(item_id):
+		return false
+	note("item", "%s puts on the %s." % [player.player_name, Database.get_item(item_id).display_name])
+	return true
+
+
 # Pulls them to a space, which does nothing to them.
 func _move_to(id: int) -> void:
 	space_id = id
@@ -424,10 +447,13 @@ func _move_to(id: int) -> void:
 
 # Puts an item in the bag, or drops the cheapest thing to fit it if that's worth doing.
 func _give(item_id: String) -> void:
-	if player.add_item(item_id):
-		return
-	if SpaceEffects.cpu_make_room(player, item_id) != "":
+	if not player.add_item(item_id):
+		if SpaceEffects.cpu_make_room(player, item_id) == "":
+			return
 		player.add_item(item_id)
+	var item := Database.get_item(item_id)
+	if by_hand and item.kind != ItemData.Kind.CONSUMABLE and CpuBrain.is_upgrade(player, item_id):
+		say(SAY_BETTER % item.display_name)
 
 
 static func _make_player(who: Adventurer) -> PlayerData:
@@ -437,5 +463,7 @@ static func _make_player(who: Adventurer) -> PlayerData:
 	while made.level < who.level:
 		made.add_experience(made.exp_to_next_level())
 	made.gold = 0
+	made.gold_share = GOLD_SHARE
+	made.rest_share = REST_SHARE
 	made.heal_fully()
 	return made

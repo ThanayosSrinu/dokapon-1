@@ -54,7 +54,7 @@ static func can_happen(event: String, player: PlayerData) -> bool:
 static func run(event: String, player: PlayerData, spaces: Array[int]) -> SpaceEffects.Result:
 	match event:
 		"festival":
-			return _festival()
+			return _festival(player)
 		"tax":
 			return _tax()
 		"merchant":
@@ -80,11 +80,12 @@ static func _result(title: String, text: String) -> SpaceEffects.Result:
 	return result
 
 
-static func _festival() -> SpaceEffects.Result:
+static func _festival(lander: PlayerData) -> SpaceEffects.Result:
 	var amount := FESTIVAL_BASE + FESTIVAL_PER_WEEK * GameState.get_week()
-	var result := _result("Harvest Feast", "The whole realm celebrates! Everyone gets %d gold." % amount)
+	var words := "The whole realm celebrates! Everyone gets %d gold." % lander.found_gold(amount)
+	var result := _result("Harvest Feast", words)
 	for player in GameState.players:
-		result.gold_changes[player] = amount
+		result.gold_changes[player] = player.found_gold(amount)
 	return result
 
 
@@ -106,7 +107,10 @@ static func _merchant(player: PlayerData) -> SpaceEffects.Result:
 
 
 static func _blessing(player: PlayerData) -> SpaceEffects.Result:
-	player.heal_fully()
+	if player.rest_share >= 1.0:
+		player.heal_fully()
+	else:
+		player.rest()
 	player.add_roll_bonus(BLESSING_STEPS)
 	return _result("Road Blessing", "HP and MP restored, and your next roll gets +%d." % BLESSING_STEPS)
 

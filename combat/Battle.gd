@@ -355,7 +355,7 @@ func _reward(player: PlayerData, lines: PackedStringArray) -> void:
 	var gold_gain := 0
 	if loser.monster != null:
 		exp_gain = loser.monster.exp_reward
-		gold_gain = loser.monster.gold_reward
+		gold_gain = player.found_gold(loser.monster.gold_reward)
 	else:
 		var usual := exp_gain
 		exp_gain = Rivalry.duel_exp(player, loser.player, winner == challenger, usual)

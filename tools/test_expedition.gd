@@ -261,7 +261,8 @@ func _test_spaces() -> void:
 
 	trip.player.hp = 1
 	_land_on(trip, shrine)
-	_expect(trip.player.hp == trip.player.get_stat("max_hp"), "a Shrine heals")
+	var rested := ceili(trip.player.get_stat("max_hp") * Expedition.REST_SHARE)
+	_expect(trip.player.hp == 1 + rested, "a Shrine gives back only part of their HP")
 
 	_land_on(trip, _space_of(trip, BoardNode.NodeType.BATTLE))
 	_expect(trip.fight != null, "a Battle space starts a fight")

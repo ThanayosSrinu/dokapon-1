@@ -746,10 +746,16 @@ static func _mana_price(player: PlayerData, id: String) -> float:
 
 # --- Gear and the bag -------------------------------------------------------
 
-## Before rolling: wears what is in the bag, then uses healing items if it is hurt.
-## Returns the names of the items it used.
-static func tidy(player: PlayerData) -> PackedStringArray:
-	_wear_best(player)
+## True if wearing `item_id` would be better than what is worn.
+static func is_upgrade(player: PlayerData, item_id: String) -> bool:
+	return _upgrade_value(player, item_id) > 0.0
+
+
+## Before rolling: wears what is in the bag, unless `wear` is false, then uses healing
+## items if it is hurt. Returns the names of the items it used.
+static func tidy(player: PlayerData, wear := true) -> PackedStringArray:
+	if wear:
+		_wear_best(player)
 	var used := PackedStringArray()
 	if player.difficulty == Level.EASY:
 		return used
@@ -874,7 +880,7 @@ static func _fitting_item(player: PlayerData, property: String, gap: int) -> Str
 	var best_power := 0
 	for id in player.inventory:
 		var power: int = Database.get_item(id).get(property)
-		if power <= 0:
+		if power <= 0 or player.auto_off.has(id):
 			continue
 		var better := power > best_power if best_power <= gap else power < best_power and power >= gap
 		if best == "" or better:

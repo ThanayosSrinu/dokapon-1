@@ -55,8 +55,10 @@ var _sprites := {}
 var _panels := {}
 
 
-## Space left clear along the bottom, for a strip that stays on top. Set it before adding this.
+## Space left clear along the bottom and the right, for what stays on top. Set them before
+## adding this.
 var room_below := 0.0
+var room_right := 0.0
 
 
 func _ready() -> void:
@@ -67,6 +69,7 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	center.offset_bottom = -room_below
+	center.offset_right = -room_right
 	add_child(center)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 8)

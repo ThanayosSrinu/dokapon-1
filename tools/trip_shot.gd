@@ -35,6 +35,15 @@ func _ready() -> void:
 	screen.hud.food_bar.grab_focus()
 	await _settle(0.5)
 	await _save(folder + "/trip_tip.png")
+	screen.hud.food_bar.release_focus()
+	var hurt: int = screen.trip.player.hp
+	screen.trip.player.hp = 5
+	screen.bag_panel.refresh()
+	screen.bag_panel.rows[0]._point()
+	await _settle(0.2)
+	await _save(folder + "/trip_bag.png")
+	screen.bag_panel.rows[0]._stop_pointing()
+	screen.trip.player.hp = hurt
 	screen.speed_buttons[2].pressed.emit()
 	screen.speed_buttons[2].grab_focus()
 	while not screen.battle_screen.visible:

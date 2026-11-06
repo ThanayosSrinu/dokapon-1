@@ -16,6 +16,8 @@ const RECALL_DAY := 6
 func _ready() -> void:
 	SaveGame.folder_name = "saves_test"
 	get_tree().current_scene = null
+	await _test_bag_panel()
+	ExpeditionScreen.gear_by_hand = false
 	var bram := Database.get_adventurer("bram")
 	var grass := Database.get_stage(TownData.FIRST_STAGE)
 	await _test_same_as_the_rules(bram, grass, Expedition.Ending.HOME, RECALL_DAY)
@@ -36,8 +38,69 @@ func _ready() -> void:
 	ExpeditionScreen.next_seed = 0
 	ExpeditionScreen.next_recall_day = 0
 	ExpeditionScreen.chosen_speed = 1.0
+	ExpeditionScreen.gear_by_hand = true
 	print("TESTS OK" if _failures == 0 else "%d TEST(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+# Uses, wears and switches off Auto from the panel, on a trip held still.
+func _test_bag_panel() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(4)
+	screen._set_speed(0.0)
+	var player := screen.trip.player
+	var panel := screen.bag_panel
+	_expect(not panel.get_global_rect().intersects(screen.hud.get_global_rect()), "the bag clears the strip")
+	_expect(panel.get_global_rect().end.y <= 720.0, "the bag fits on screen")
+
+	player.inventory.clear()
+	var cure := _an_item(func(item: ItemData) -> bool: return item.heal_hp > 0)
+	var blade := _an_item(func(item: ItemData) -> bool:
+		return item.kind == ItemData.Kind.WEAPON and CpuBrain.is_upgrade(player, item.id))
+	player.add_item(cure)
+	player.add_item(blade)
+	panel.refresh()
+	_expect(panel.rows[0].auto.visible, "something to use has an Auto switch")
+	_expect(panel.rows[1].side_words.text == "Wear", "better gear says so")
+	_expect(not panel.rows[2].auto.visible and panel.rows[2].button.disabled, "an empty place does nothing")
+
+	player.hp = 1
+	panel.rows[0].auto.button_pressed = false
+	_expect(player.auto_off.has(cure), "Auto can be turned off")
+	CpuBrain.tidy(player, false)
+	_expect(player.inventory.has(cure), "the bot leaves an item with Auto off")
+	var fighter := Fighter.from_player(player)
+	_expect(not fighter.get_items().has(cure), "and leaves it in a fight")
+	panel.rows[0].button.pressed.emit()
+	_expect(not player.inventory.has(cure) and player.hp > 1, "the lord can still use it")
+	player.auto_off.clear()
+
+	panel.refresh()
+	panel.rows[0].button.pressed.emit()
+	_expect(player.equipment.get(ItemData.Kind.WEAPON) == blade, "pressing gear wears it")
+	_expect(panel.slots[0].icon != null, "worn gear shows in its slot")
+
+	panel.point_at_space(screen.trip.map.portal)
+	_expect(panel.detail_title.text == "Portal", "the box explains a space")
+	player.add_item(cure)
+	panel.refresh()
+	panel.rows[0]._point()
+	_expect(panel.detail_title.text == Database.get_item(player.inventory[0]).display_name, "the box explains an item")
+	panel.rows[0]._stop_pointing()
+	_expect(panel.detail_title.text == "Portal", "and goes back to the space")
+	panel.locked = true
+	panel.rows[0].chosen.emit(player.inventory[0])
+	_expect(panel.rows[0].button.disabled, "nothing changes during a fight")
+	panel.locked = false
+	screen._set_speed(1.0)
+
+
+func _an_item(wanted: Callable) -> String:
+	for id in Database.sorted_ids(Database.items):
+		if wanted.call(Database.get_item(id)):
+			return id
+	_expect(false, "no such item")
+	return ""
 
 
 func _hire(person: Adventurer) -> void:

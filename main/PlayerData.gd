@@ -64,6 +64,13 @@ var roll_bonus := 0
 var grudges: Array[String] = []
 ## True while hunger has them. Only an expedition sets this, so it isn't saved.
 var weak := false
+## How much of the gold they come across they really get. A trip lowers it, and the old
+## board game keeps all of it.
+var gold_share := 1.0
+## How much of their HP and MP a Shrine, a Magic space or a blessing restores.
+var rest_share := 1.0
+## Ids of the items the bot must leave alone, however hurt it is.
+var auto_off: Array[String] = []
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:
@@ -242,6 +249,25 @@ func use_item(item_id: String) -> bool:
 func knock_out() -> void:
 	turns_to_skip = KO_TURNS_LOST
 	heal_fully()
+
+
+## The gold they really get from `amount`.
+func found_gold(amount: int) -> int:
+	return maxi(roundi(amount * gold_share), 1)
+
+
+## Restores rest_share of HP and MP. Returns the HP it gave back.
+func rest() -> int:
+	var before := hp
+	hp = mini(hp + ceili(get_stat("max_hp") * rest_share), get_stat("max_hp"))
+	rest_mp()
+	return hp - before
+
+
+## Restores rest_share of MP.
+func rest_mp() -> void:
+	mp = mini(mp + ceili(get_stat("max_mp") * rest_share), get_stat("max_mp"))
+	changed.emit()
 
 
 func heal_fully() -> void:

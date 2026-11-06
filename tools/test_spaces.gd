@@ -90,6 +90,11 @@ func _test_shrine() -> void:
 	cleric.mp = 0
 	SpaceEffects.shrine_space(cleric)
 	_expect(cleric.hp == cleric.get_stat("max_hp") and cleric.mp == cleric.get_stat("max_mp"), "shrine heals in full")
+	_expect(cleric.found_gold(100) == 100, "the old game pays gold in full")
+	cleric.gold_share = 0.4
+	_expect(cleric.found_gold(100) == 40, "a lower share pays less gold")
+	_expect(cleric.found_gold(1) == 1, "something found is never nothing")
+	cleric.gold_share = 1.0
 
 
 func _test_traps() -> void:
