@@ -102,13 +102,13 @@ func _uncover() -> void:
 
 
 func _fade(alpha: float, seconds: float) -> void:
-	var tween := create_tween()
+	var tween := create_tween().set_ignore_time_scale(true)
 	tween.tween_property(_wipe, "color:a", alpha, seconds)
 	await tween.finished
 
 
 func _run(from: float, to: float) -> void:
-	var tween := create_tween()
+	var tween := create_tween().set_ignore_time_scale(true)
 	tween.tween_method(_set_progress, from, to, WIPE_SECONDS)
 	await tween.finished
 

@@ -212,13 +212,16 @@ func _test_arrival() -> void:
 	_expect(back_home.waiting != null, "the adventurer is home")
 
 
-## Gives up the trip with Esc, Down and Enter.
+## Uses the Warp Stone with Esc, Down and Enter, then leaves the report.
 func _leave_with_keys() -> void:
+	var island: ExpeditionScreen = get_tree().current_scene
 	await _tap("ui_cancel")
 	await _wait()
 	await _tap("ui_down")
 	await _tap("ui_accept")
-	await _until_settled()
+	await _until_report(island)
+	await _tap("ui_accept")
+	await _until_town()
 
 
 func _test_path_with_keys() -> void:
@@ -262,11 +265,14 @@ func _test_path_with_controller() -> void:
 		await _pad(JOY_BUTTON_A)
 		await _until_on_island()
 		_expect(get_tree().current_scene is ExpeditionScreen, "pad: the Portal leads to the island, trip %d" % trip)
+		var island: ExpeditionScreen = get_tree().current_scene
 		await _pad(JOY_BUTTON_B)
 		await _wait()
 		await _pad(JOY_BUTTON_DPAD_DOWN)
 		await _pad(JOY_BUTTON_A)
-		await _until_settled()
+		await _until_report(island)
+		await _pad(JOY_BUTTON_A)
+		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "pad: the island leads home, trip %d" % trip)
 
 
@@ -296,9 +302,18 @@ func _test_path_with_mouse() -> void:
 		await _click(island.back)
 		await _wait()
 		await _click(island.leave_button)
-		await _until_settled()
+		await _until_report(island)
+		await _click(island.back)
+		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "mouse: the island leads home, trip %d" % trip)
 	TownData.start_new()
+
+
+## Waits for the Warp Stone to finish and the report to open.
+func _until_report(island: ExpeditionScreen) -> void:
+	while island.report == null:
+		await get_tree().process_frame
+	await _until_settled()
 
 
 ## Waits for the walk to the Tavern's door and the wipe to town.

@@ -126,7 +126,7 @@ func set_zoom_index(index: int, duration := 0.6) -> void:
 func shake(strength := 6.0, duration := 0.25) -> void:
 	if not Settings.screen_shake:
 		return
-	var tween := create_tween()
+	var tween := create_tween().set_ignore_time_scale(true)
 	tween.tween_method(func(left: float) -> void:
 			offset = (Vector2(randf_range(-1, 1), randf_range(-1, 1)) * strength * left).round(),
 			1.0, 0.0, duration)

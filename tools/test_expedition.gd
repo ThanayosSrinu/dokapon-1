@@ -386,6 +386,18 @@ func _test_report() -> void:
 	hungry.start_day()
 	_expect(hungry.ending == Expedition.Ending.STARVED, "hunger ends the trip")
 	_expect(TripReport.new(hungry).title.contains("food"), "the report blames the food")
+	# The Warp Stone brings them home and nothing else.
+	var warped := Expedition.new(_bram, _grass, 1)
+	warped.day = 4
+	warped.player.gold = 75
+	warped.warp_home()
+	var warp_report := TripReport.new(warped)
+	_expect(warped.is_over() and warped.gold_home() == 0, "the Warp Stone leaves the gold behind")
+	_expect(warp_report.failed, "abandoning is a failed trip")
+	_expect(warp_report.loss.contains("75 gold"), "and the report says what was lost")
+	warped.ending = Expedition.Ending.HOME
+	warped.warp_home()
+	_expect(warped.ending == Expedition.Ending.HOME, "the stone can't undo a trip that ended")
 	# A close call is told as one, and beats a smaller find.
 	var brave := Expedition.new(_bram, _grass, 1)
 	brave.day = 3

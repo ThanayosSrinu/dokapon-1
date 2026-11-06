@@ -6,6 +6,8 @@ const RISE := 16.0
 const OPEN_SECONDS := 0.18
 
 var body: VBoxContainer
+## The heading, or null if there is none.
+var title: Label
 
 
 func _init(heading := "", paper := false) -> void:
@@ -15,7 +17,7 @@ func _init(heading := "", paper := false) -> void:
 	body.add_theme_constant_override("separation", 12)
 	add_child(body)
 	if heading != "":
-		var title := Kit.text(heading, 0.0, &"PaperHeading" if paper else &"Heading")
+		title = Kit.text(heading, 0.0, &"PaperHeading" if paper else &"Heading")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body.add_child(title)
 

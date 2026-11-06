@@ -18,7 +18,7 @@ extends RefCounted
 ##
 ## Every random result uses GameState.rng, so a seed replays the same trip.
 
-enum Ending { NONE, HOME, BEATEN, STARVED }
+enum Ending { NONE, HOME, BEATEN, STARVED, WARPED }
 
 ## With no food left, this share of max HP is lost each day. This can kill, so a trip
 ## always ends, however badly the dice go.
@@ -97,6 +97,16 @@ func is_over() -> bool:
 ## The gold that reaches the town. A defeat loses the lot (D2 in EXPEDITION_PLAN.md).
 func gold_home() -> int:
 	return player.gold if ending == Ending.HOME else 0
+
+
+## Ends the trip where it stands, because the lord gave it up. This is a failed trip: the
+## Warp Stone saves the adventurer and nothing else. Only the Portal brings anything home.
+## A trip that has already ended stays as it ended.
+func warp_home() -> void:
+	if is_over():
+		return
+	ending = Ending.WARPED
+	note("warp", "%s used the Warp Stone." % player.player_name)
 
 
 ## Plays every step of one day.

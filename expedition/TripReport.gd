@@ -22,6 +22,10 @@ var levels_gained := 0
 var gold_home := 0
 ## The gold found and then lost.
 var gold_lost := 0
+## True for any trip that didn't reach the Portal.
+var failed := false
+## What a failed trip cost, in a line, or "" if it cost nothing.
+var loss := ""
 
 
 func _init(trip: Expedition) -> void:
@@ -33,6 +37,10 @@ func _init(trip: Expedition) -> void:
 	levels_gained = trip.player.level - trip.person.level
 	gold_home = trip.gold_home()
 	gold_lost = trip.player.gold - gold_home
+	failed = trip.ending != Expedition.Ending.HOME
+	if failed:
+		var what := TripReport.lost_words(gold_lost, trip.player.inventory.size())
+		loss = "Lost: " + what if what != "" else ""
 	title = _title_for(trip, who)
 	story.append(_how_it_went(who))
 	var turn := _turning_home(trip, who)
@@ -43,6 +51,16 @@ func _init(trip: Expedition) -> void:
 		best = "Day %d: %s" % [trip.best_moment["day"], trip.best_moment["text"]]
 
 
+## `gold` and `items` in words, or "" if both are 0.
+static func lost_words(gold: int, items: int) -> String:
+	var parts := PackedStringArray()
+	if gold > 0:
+		parts.append("%d gold" % gold)
+	if items > 0:
+		parts.append("1 item" if items == 1 else "%d items" % items)
+	return " and ".join(parts)
+
+
 func _title_for(trip: Expedition, who: String) -> String:
 	match trip.ending:
 		Expedition.Ending.HOME:
@@ -51,6 +69,8 @@ func _title_for(trip: Expedition, who: String) -> String:
 			return "%s was beaten" % who
 		Expedition.Ending.STARVED:
 			return "%s ran out of food" % who
+		Expedition.Ending.WARPED:
+			return "Trip abandoned"
 	return who
 
 
@@ -85,6 +105,10 @@ func _how_it_ended(trip: Expedition, who: String) -> String:
 			if gold_lost > 0:
 				return "Hunger stopped them on day %d, and the %d gold they found was lost." % [days, gold_lost]
 			return "Hunger stopped them on day %d." % days
+		Expedition.Ending.WARPED:
+			if days == 0:
+				return "You gave up on them before the first day began."
+			return "You gave up on day %d, and the Warp Stone dragged them back with nothing." % days
 	return "%s is still out there." % who
 
 

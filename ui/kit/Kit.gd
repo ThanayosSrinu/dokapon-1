@@ -20,6 +20,9 @@ const MUTED := Color(0.78, 0.76, 0.8)
 const DIM := Color(0.06, 0.05, 0.12, 0.62)
 const HEALTH := Color(0.36, 0.82, 0.38)
 const DANGER := Color(0.91, 0.27, 0.25)
+## Danger, dark enough to read on paper.
+const BLOOD := Color(0.58, 0.12, 0.13)
+const DANGER_STAIN := Color(1.0, 0.42, 0.38)
 const SUPPLY := Color(0.95, 0.68, 0.24)
 const MAGIC := Color(0.3, 0.64, 0.95)
 
@@ -58,6 +61,16 @@ static func box(art: String, margin: float) -> StyleBoxTexture:
 		style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 		_boxes[art] = style
 	return _boxes[art]
+
+
+## The same framed art, stained red, for the action a player should think twice about.
+static func danger_box(art: String, margin: float) -> StyleBoxTexture:
+	var key := "danger_" + art
+	if not _boxes.has(key):
+		var style: StyleBoxTexture = box(art, margin).duplicate()
+		style.modulate_color = DANGER_STAIN
+		_boxes[key] = style
+	return _boxes[key]
 
 
 ## `value` moved onto the art's pixel grid.

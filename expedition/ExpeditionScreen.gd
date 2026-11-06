@@ -42,8 +42,16 @@ const FIGHT_LAYER := 1
 const UI_LAYER := 2
 const DIM := Color(0.06, 0.05, 0.12, 0.62)
 const LEAVE_WIDTH := 460.0
-const LEAVE_WORDS := "%s comes home now, with nothing to show for it."
-const LEAVE_TEXT := "Leave the trip"
+const DEFEAT_DIM := Color(0.3, 0.02, 0.05, 0.6)
+const WARP_NAME := "Emergency Warp"
+const LEAVE_HEADING := "Abandon the trip?"
+const LEAVE_TEXT := "Abandon the trip"
+const LEAVE_WORDS := "The Warp Stone saves %s's life and nothing else. The trip fails, and only walking back to the Portal brings anything home."
+const LEAVE_COST := "You will lose %s."
+const WARP_LINE := "I failed you... I'm sorry."
+const WARP_CAMERA_SECONDS := 0.4
+const WARP_LOSS_DELAY := 0.5
+const WARP_LINE_SECONDS := 1.4
 
 ## The speed to start at, so a player who likes ×3 keeps it from trip to trip.
 static var chosen_speed := 1.0
@@ -71,10 +79,12 @@ var report: TripReport
 var report_card: TripReportCard
 ## The town's gold, shown once the trip is over.
 var town_gold: KitChip
-## Asks before a trip is given up.
+## Asks before the Warp Stone is used.
 var leave_panel: KitPanel
 var stay_button: KitButton
 var leave_button: KitButton
+## What giving up would cost, right now.
+var leave_cost: Label
 
 var _motes: PortalMotes
 var _layer: Control
@@ -197,28 +207,43 @@ func _catch_up_token() -> void:
 
 
 func _finish() -> void:
+	_set_time(1.0)
+	await _close_trip()
+
+
+# Fades them off the board and reports. It runs on real time, because the Warp Stone
+# keeps the game stopped: that holds the day where it was, however far it had got.
+func _close_trip() -> void:
 	if trip.ending == Expedition.Ending.BEATEN:
 		hud.show_beaten()
-	_speed_row.hide()
-	back.hide()
-	_set_news("")
-	_set_time(1.0)
-	hero.global_position = token.global_position
-	hero.show()
-	token.hide()
-	Sound.play("magic")
-	await hero.dissolve(0.0, 1.0, DISSOLVE_SECONDS)
+	_clear_for_ending()
+	_put_hero_on_board()
+	Sound.play("magic" if trip.ending == Expedition.Ending.HOME else "whoosh")
+	await hero.dissolve(0.0, 1.0, DISSOLVE_SECONDS, true)
 	var town := TownData.current()
 	var gold_before := town.gold
 	town.bring_home(trip)
 	report = TripReport.new(trip)
-	Sound.play("fanfare" if trip.ending == Expedition.Ending.HOME else "defeat")
+	Sound.play("defeat" if report.failed else "fanfare")
 	_show_report(town, gold_before)
+
+
+func _clear_for_ending() -> void:
+	_speed_row.hide()
+	back.hide()
+	_set_news("")
+
+
+func _put_hero_on_board() -> void:
+	hero.global_position = token.global_position
+	hero.show()
+	token.hide()
 
 
 func _show_report(town: TownData, gold_before: int) -> void:
 	hud.hide()
 	news.hide()
+	_dim.color = DEFEAT_DIM if report.failed else DIM
 	_dim.show()
 	report_card = TripReportCard.new(trip.person, report)
 	_centered(report_card)
@@ -235,12 +260,16 @@ func _show_report(town: TownData, gold_before: int) -> void:
 	town_gold.set_amount(town.gold)
 	Tips.attach(town_gold, "Town gold", "%d gold in the town." % town.gold)
 	back.text = "Back to Town"
-	back.kind = KitButton.Kind.PRIMARY
+	back.icon = Kit.icon("back")
+	back.danger = false
+	back.kind = KitButton.Kind.NORMAL if report.failed else KitButton.Kind.PRIMARY
 	back.show()
 	back.grab_focus()
 	_link_report_focus()
-	arrow = KitArrow.new(back, KitArrow.Side.RIGHT)
-	_layer.get_parent().add_child(arrow)
+	# A failed trip gets no fuss: nothing here cheers the player on.
+	if not report.failed:
+		arrow = KitArrow.new(back, KitArrow.Side.RIGHT)
+		_layer.get_parent().add_child(arrow)
 
 
 func _pause(seconds: float) -> void:
@@ -297,6 +326,9 @@ func _on_back() -> void:
 
 func _open_leave_panel() -> void:
 	_set_time(0.0)
+	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size())
+	leave_cost.text = LEAVE_COST % what if what != "" else ""
+	leave_cost.visible = what != ""
 	_dim.show()
 	leave_panel.show()
 	leave_panel.play_open()
@@ -310,9 +342,50 @@ func _close_leave_panel() -> void:
 	speed_buttons[SPEEDS.find(_speed) if SPEEDS.has(_speed) else 1].grab_focus()
 
 
-func _leave_trip() -> void:
-	_set_time(1.0)
-	Screens.go(TOWN)
+# Time stays stopped from the question to the report, so that whatever was under way,
+# a walk or a fight, never finishes.
+func _warp_home() -> void:
+	# They may have just reached the Portal, or fallen. Then it is too late to give up.
+	if trip.is_over():
+		_close_leave_panel()
+		return
+	leave_panel.hide()
+	trip.warp_home()
+	battle_screen.hide()
+	die.hide()
+	bubble.hide()
+	Sound.music("")
+	_clear_for_ending()
+	_put_hero_on_board()
+	_fade_to_defeat()
+	camera.focus_on(hero.global_position, WARP_CAMERA_SECONDS)
+	await _real_pause(WARP_CAMERA_SECONDS)
+	var head := get_viewport().get_canvas_transform() * (hero.global_position + HEAD)
+	# Above the red, so the last words can be read.
+	_layer.move_child(bubble, -1)
+	bubble.say(WARP_LINE, head, get_viewport_rect())
+	Sound.play("trap")
+	camera.shake()
+	await _real_pause(WARP_LOSS_DELAY)
+	if hud.gold.amount > 0 or hud.bag.amount > 0:
+		Sound.play("coin_loss")
+	hud.gold.set_amount(0)
+	hud.bag.set_amount(0)
+	await _real_pause(WARP_LINE_SECONDS)
+	bubble.hide()
+	await _close_trip()
+
+
+# Bleeds the colour out of the island.
+func _fade_to_defeat() -> void:
+	_dim.color = Color(DEFEAT_DIM, 0.0)
+	_dim.show()
+	var tween := create_tween().set_ignore_time_scale(true)
+	tween.tween_property(_dim, "color", DEFEAT_DIM, WARP_CAMERA_SECONDS)
+
+
+func _real_pause(seconds: float) -> void:
+	await get_tree().create_timer(seconds, true, false, true).timeout
 
 
 # --- Building ---------------------------------------------------------------
@@ -374,7 +447,9 @@ func _build_ui(town: TownData) -> void:
 	_build_cover()
 	_build_leave_panel()
 	back = KitBackButton.new()
-	back.text = "Leave"
+	back.text = WARP_NAME
+	back.icon = Kit.icon("cross")
+	back.danger = true
 	back.pressed.connect(_on_back)
 	_layer.add_child(back)
 	_link_focus()
@@ -447,19 +522,25 @@ func _build_cover() -> void:
 
 
 func _build_leave_panel() -> void:
-	leave_panel = KitPanel.new(LEAVE_TEXT + "?", true)
+	leave_panel = KitPanel.new(LEAVE_HEADING, true)
+	leave_panel.title.add_theme_color_override("font_color", Kit.BLOOD)
 	leave_panel.custom_minimum_size.x = LEAVE_WIDTH
 	var words := Kit.text(LEAVE_WORDS % trip.person.display_name, LEAVE_WIDTH, &"PaperLabel")
 	words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	leave_panel.body.add_child(words)
+	leave_cost = Kit.text("", LEAVE_WIDTH, &"PaperLabel")
+	leave_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	leave_cost.add_theme_color_override("font_color", Kit.BLOOD)
+	leave_panel.body.add_child(leave_cost)
 	stay_button = KitButton.new()
-	stay_button.text = "Keep watching"
+	stay_button.text = "Keep going"
 	stay_button.pressed.connect(_close_leave_panel)
 	leave_panel.body.add_child(stay_button)
 	leave_button = KitButton.new()
 	leave_button.text = LEAVE_TEXT
 	leave_button.kind = KitButton.Kind.SMALL
-	leave_button.pressed.connect(_leave_trip)
+	leave_button.danger = true
+	leave_button.pressed.connect(_warp_home)
 	leave_panel.body.add_child(leave_button)
 	_centered(leave_panel)
 	leave_panel.hide()

@@ -52,6 +52,6 @@ func say(words: String, head: Vector2, room: Rect2) -> void:
 		_tween.kill()
 	global_position = spot + Vector2(0, RISE)
 	modulate.a = 0.0
-	_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_ignore_time_scale(true)
 	_tween.tween_property(self, "global_position", spot, POP_SECONDS)
 	_tween.tween_property(self, "modulate:a", 1.0, POP_SECONDS)

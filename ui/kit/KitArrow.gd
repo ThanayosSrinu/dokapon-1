@@ -18,8 +18,6 @@ const AWAY := {Side.ABOVE: Vector2.UP, Side.BELOW: Vector2.DOWN, Side.LEFT: Vect
 var target: Control
 var side := Side.ABOVE
 
-var _clock := 0.0
-
 
 func _init(point_at: Control = null, from_side := Side.ABOVE) -> void:
 	target = point_at
@@ -28,15 +26,16 @@ func _init(point_at: Control = null, from_side := Side.ABOVE) -> void:
 	rotation = TURNS[side]
 
 
-func _process(delta: float) -> void:
-	_clock += delta
+func _process(_delta: float) -> void:
 	visible = is_instance_valid(target) and target.is_visible_in_tree()
 	if not visible:
 		return
 	var box := target.get_global_rect()
 	var away: Vector2 = AWAY[side]
+	# Real time, so it still bounces when the game is stopped.
+	var clock := Time.get_ticks_msec() / 1000.0
 	var edge := box.get_center() + box.size * away / 2.0
-	global_position = Kit.snap_point(edge + away * (GAP + absf(sin(_clock * BOUNCE_SPEED)) * BOUNCE))
+	global_position = Kit.snap_point(edge + away * (GAP + absf(sin(clock * BOUNCE_SPEED)) * BOUNCE))
 
 
 func _draw() -> void:

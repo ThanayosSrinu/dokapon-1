@@ -73,12 +73,12 @@ func walk_along(path: Array[Vector2], speed: float) -> void:
 
 
 ## Breaks into, or forms from, sparks of light. 0 is whole and 1 is gone.
-func dissolve(from: float, to: float, seconds: float) -> void:
+func dissolve(from: float, to: float, seconds: float, real_time := false) -> void:
 	var magic := ShaderMaterial.new()
 	magic.shader = DISSOLVE
 	magic.set_shader_parameter("progress", from)
 	material = magic
-	var tween := create_tween()
+	var tween := create_tween().set_ignore_time_scale(real_time)
 	tween.tween_property(magic, "shader_parameter/progress", to, seconds)
 	await tween.finished
 	if to == 0.0:

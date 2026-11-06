@@ -6,6 +6,9 @@ const WIDTH := 560.0
 const PORTRAIT_SIZE := Vector2(112, 112)
 const TEXT_WIDTH := 416.0
 const STAT_GAP := 12
+## Paper and portrait lose their warmth when a trip fails.
+const FAILED_PAPER := Color(0.8, 0.72, 0.72)
+const FAILED_PORTRAIT := Color(0.55, 0.5, 0.55)
 
 ## The numbers along the bottom, which a keyboard can reach for their tips.
 var stats: Array[KitChip] = []
@@ -23,9 +26,26 @@ func _init(person: Adventurer, report: TripReport) -> void:
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	top.add_child(portrait)
 	top.add_child(Kit.text(" ".join(report.story), TEXT_WIDTH, &"PaperLabel"))
-	if report.best != "":
+	if report.failed:
+		self_modulate = FAILED_PAPER
+		title.add_theme_color_override("font_color", Kit.BLOOD)
+		portrait.modulate = FAILED_PORTRAIT
+		if report.loss != "":
+			body.add_child(_loss(report.loss))
+	elif report.best != "":
 		body.add_child(_best_moment(report.best))
 	body.add_child(_stats(report))
+
+
+func _loss(words: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(Kit.picture("cross"))
+	var label := Kit.text(words, WIDTH - Kit.ICON_SIZE - 48.0, &"PaperLabel")
+	label.add_theme_color_override("font_color", Kit.BLOOD)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	return row
 
 
 func _best_moment(words: String) -> Control:

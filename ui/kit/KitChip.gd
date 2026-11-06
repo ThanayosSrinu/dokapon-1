@@ -40,7 +40,7 @@ func set_amount(value: int, roll := true) -> void:
 	if not roll or not is_inside_tree():
 		_label.text = str(value)
 		return
-	_tween = create_tween().set_parallel(true)
+	_tween = create_tween().set_parallel(true).set_ignore_time_scale(true)
 	_tween.tween_method(_show_number, float(start), float(value), ROLL_SECONDS)
 	_label.modulate = FLASH
 	_tween.tween_property(_label, "modulate", Color.WHITE, ROLL_SECONDS)

@@ -47,10 +47,30 @@ func _ready() -> void:
 	await _save(folder + "/arrive_burst.png")
 	await _settle(1.0)
 	await _save(folder + "/arrive_done.png")
+	var island: ExpeditionScreen = get_tree().current_scene
+	await _settle(4.0)
+	await _save(folder + "/warp_button.png")
+	island.back.pressed.emit()
+	await _real_settle(0.5)
+	await _save(folder + "/warp_ask.png")
+	island.leave_button.pressed.emit()
+	await _real_settle(0.9)
+	await _save(folder + "/warp_line.png")
+	await _real_settle(1.0)
+	await _save(folder + "/warp_fade.png")
+	while island.report == null:
+		await get_tree().process_frame
+	await _real_settle(0.5)
+	await _save(folder + "/warp_report.png")
 	Screens.go("res://town/TownScreen.tscn")
 	await _settle(1.5)
 	await _save(folder + "/town_after.png")
 	get_tree().quit()
+
+
+# For while the game is stopped.
+func _real_settle(seconds: float) -> void:
+	await get_tree().create_timer(seconds, true, false, true).timeout
 
 
 func _settle(seconds: float) -> void:

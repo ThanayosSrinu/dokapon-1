@@ -176,11 +176,13 @@ func _test_mouse_speed() -> void:
 
 
 func _leave() -> void:
+	var screen: ExpeditionScreen = get_tree().current_scene
 	await _tap("ui_cancel")
 	await _wait()
 	await _tap("ui_down")
 	await _tap("ui_accept")
-	await _until_settled()
+	await _until_report(screen)
+	await _back_to_town()
 
 
 func _test_leaving() -> void:
@@ -188,7 +190,7 @@ func _test_leaving() -> void:
 	var town := TownData.current()
 	var gold := town.gold
 	var screen := await _open_trip(7)
-	_expect(screen.back.position == Kit.BACK_POSITION, "Leave is where Back always is")
+	_expect(screen.back.position == Kit.BACK_POSITION, "the Emergency Warp is where Back always is")
 	await _tap("ui_cancel")
 	await _wait()
 	_expect(screen.leave_panel.visible, "Esc asks before leaving")
@@ -213,11 +215,41 @@ func _test_leaving() -> void:
 	_expect(Engine.time_scale == 0.0, "closing the panel keeps x0")
 	await _click(screen.back)
 	await _wait()
+	var day := screen.trip.day
 	await _click(screen.leave_button)
+	await _wait()
+	_expect(not screen.back.visible, "the stone can't be used twice")
+	await _until_report(screen)
+	_expect(screen.trip.ending == Expedition.Ending.WARPED, "the stone ends the trip")
+	_expect(screen.trip.day == day, "the stopped day never goes on")
+	_expect(screen.report.failed, "and it is a failed trip")
+	_expect(screen.report.title.contains("abandoned"), "the report says what happened")
+	_expect(screen.report_card.title.has_theme_color_override("font_color"), "in red")
+	_expect(screen.back.text == "Back to Town", "and leads home")
+	_expect(screen.back.kind != KitButton.Kind.PRIMARY, "with no golden button")
+	_expect(screen.arrow == null, "and no arrow")
+	await _click(screen.back)
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "leaving reaches town")
 	_expect(Engine.time_scale == 1.0, "time is normal again in town")
 	_expect(town.gold == gold, "a trip given up brings nothing")
+	await _test_warp_during_a_fight()
+
+
+func _test_warp_during_a_fight() -> void:
+	var screen := await _open_trip(_seed_for(Database.get_adventurer("bram"),
+			Database.get_stage(TownData.FIRST_STAGE), Expedition.Ending.BEATEN), TEST_SPEED)
+	while screen.trip.fight == null or not screen.battle_screen.visible:
+		await get_tree().process_frame
+	await _tap("ui_cancel")
+	await _wait()
+	await _click(screen.leave_button)
+	await _until_report(screen)
+	_expect(not screen.battle_screen.visible, "the stone takes them out of a fight")
+	_expect(screen.trip.ending == Expedition.Ending.WARPED, "and the trip ends there")
+	_expect(Sound.current_tune() == "", "and the music stops")
+	_expect(screen.hud.gold.amount == 0, "and the gold is gone")
+	await _back_to_town()
 
 
 func _test_report_screen() -> void:

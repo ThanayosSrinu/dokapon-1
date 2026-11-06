@@ -45,6 +45,11 @@ const PADDING := {Kind.PRIMARY: 40.0, Kind.NORMAL: 24.0, Kind.SMALL: 18.0}
 		kind = value
 		update_minimum_size()
 		queue_redraw()
+## Stains the button red, for an action that costs the player something.
+var danger := false:
+	set(value):
+		danger = value
+		queue_redraw()
 ## Shows this button as the one picked from a row, such as a speed.
 var lit := false:
 	set(value):
@@ -110,7 +115,8 @@ func _draw() -> void:
 	if look != Look.DOWN:
 		draw_style_box(Kit.box("button_shadow", EDGE), Rect2(left, DEPTH, size.x, height))
 	var face := Rect2(left, shown_offset, size.x, height)
-	draw_style_box(Kit.box(_face_art(look), EDGE), face)
+	var art := _face_art(look)
+	draw_style_box(Kit.danger_box(art, EDGE) if danger and look != Look.OFF else Kit.box(art, EDGE), face)
 	_draw_contents(face, look)
 	if look != Look.OFF and (look == Look.FOCUS or forced_look == Look.LIVE and has_focus()):
 		draw_style_box(Kit.box("focus", 12.0), face.grow(FOCUS_GROWTH))
