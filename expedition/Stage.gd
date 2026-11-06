@@ -12,7 +12,7 @@ extends Resource
 @export_file("*.json") var map_file := ""
 ## Its small view, from assets/custom/portal/. tools/art_portal.py draws these.
 @export var picture: Texture2D
-## Days of food a trip here gives. E5 sets this from real numbers.
+## Days of food a trip here gives. tools/sim_expedition.tscn shows what a number does.
 @export var food_days := 14
 
 

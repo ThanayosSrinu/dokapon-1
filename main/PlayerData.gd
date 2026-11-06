@@ -16,6 +16,9 @@ const MAX_LEVEL := 30
 const EXP_PER_LEVEL := 30
 ## Turns a knocked out player spends recovering.
 const KO_TURNS_LOST := 1
+## Weak: these stats drop to this share, on an expedition with no food left.
+const WEAK_SHARE := 0.75
+const WEAK_STATS: Array[String] = ["attack", "defense", "magic"]
 ## The slots a player can wear something in.
 const EQUIPMENT_SLOTS: Array[ItemData.Kind] = [
 	ItemData.Kind.WEAPON, ItemData.Kind.ARMOR, ItemData.Kind.ACCESSORY,
@@ -59,6 +62,8 @@ var quest_progress := 0
 var roll_bonus := 0
 ## The names of the rivals who knocked this player out. See Rivalry.
 var grudges: Array[String] = []
+## True while hunger has them. Only an expedition sets this, so it isn't saved.
+var weak := false
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:
@@ -150,6 +155,8 @@ func get_stat(stat: String) -> int:
 	var value: int = data.base_stats[stat] + data.growth[stat] * (level - 1)
 	for item_id: String in equipment.values():
 		value += Database.get_item(item_id).bonuses.get(stat, 0)
+	if weak and WEAK_STATS.has(stat):
+		value = int(value * WEAK_SHARE)
 	return maxi(value, 1)
 
 

@@ -64,15 +64,19 @@ func start_new_game(new_players: Array[PlayerData], seed_value := 0, weeks := DE
 	players = _shuffled(new_players)
 	day = 1
 	game_weeks = weeks
-	towns = {}
-	town_owners.clear()
-	town_levels.clear()
-	quest = {}
-	emptied_chests.clear()
-	shadow_crown = {}
-	crown_left_week = 0
-	castle_id = -1
+	_clear_board()
 	print("New game: seed %d, turn order %s" % [game_seed, ", ".join(get_player_names())])
+
+
+## Resets everything for one adventurer alone on the board. See Expedition.
+## A `seed_value` of 0 picks a new random seed.
+func start_expedition(player: PlayerData, seed_value: int, portal_id: int) -> void:
+	game_seed = seed_value if seed_value != 0 else randi_range(1, 2147483647)
+	rng.seed = game_seed
+	players = [player]
+	day = 1
+	_clear_board()
+	castle_id = portal_id
 
 
 func get_player_names() -> PackedStringArray:
@@ -96,6 +100,17 @@ func is_last_day() -> bool:
 ## The day within the current week, from 1 to DAYS_PER_WEEK.
 func get_day_of_week() -> int:
 	return (day - 1) % DAYS_PER_WEEK + 1
+
+
+func _clear_board() -> void:
+	towns = {}
+	town_owners.clear()
+	town_levels.clear()
+	quest = {}
+	emptied_chests.clear()
+	shadow_crown = {}
+	crown_left_week = 0
+	castle_id = -1
 
 
 # Fisher-Yates shuffle. Array.shuffle() would ignore our seeded rng.

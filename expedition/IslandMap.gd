@@ -1,0 +1,145 @@
+class_name IslandMap
+extends RefCounted
+## The spaces of a map file and how they link, with no scene and no art. Expedition.gd
+## plays on this, so a thousand trips never have to paint an island. It follows the same
+## walking rules as BoardManager, and tools/test_expedition.gd proves the two agree.
+##     var map := IslandMap.open("res://maps/world_map.json")
+
+## How far days_to() may be from the true answer, in days.
+const DAYS_PRECISION := 0.01
+
+# Path -> IslandMap, because a map never changes while the game runs.
+static var _opened := {}
+
+## The space that leads home. E7 replaces the castle with a PORTAL space.
+var portal := -1
+
+# Space id -> its BoardNode.NodeType, in map-file order.
+var _types := {}
+# Space id -> the ids it links to, from either end.
+var _links := {}
+# Vector3i(id, came_from, steps) -> the ids landings() found.
+var _landings := {}
+# Vector2i(target, die_top) -> space id -> days. See days_to().
+var _days := {}
+
+
+## The map in `path`, read only once.
+static func open(path: String) -> IslandMap:
+	if not _opened.has(path):
+		_opened[path] = IslandMap.new(JSON.parse_string(FileAccess.get_file_as_string(path)))
+	return _opened[path]
+
+
+## `data` has the same shape as a map file, with only the `spaces` list needed.
+func _init(data: Dictionary) -> void:
+	for row: Dictionary in data["spaces"]:
+		var id := int(row["id"])
+		_types[id] = BoardNode.NodeType[row["type"]]
+		_links[id] = [] as Array[int]
+		if _types[id] == BoardNode.NodeType.CASTLE:
+			portal = id
+	for row: Dictionary in data["spaces"]:
+		for link in row.get("to", []):
+			_link(int(row["id"]), int(link))
+
+
+## Every space id, in map-file order.
+func spaces() -> Array[int]:
+	var ids: Array[int] = []
+	ids.assign(_types.keys())
+	return ids
+
+
+func type_of(id: int) -> BoardNode.NodeType:
+	return _types[id]
+
+
+func neighbors(id: int) -> Array[int]:
+	return _links[id]
+
+
+## Where someone on `id` may step next. `came_from` is the space they just left, or -1
+## at the start of a roll. It can't be walked straight back to, unless it is the only
+## way out. This is BoardManager.get_connected_nodes().
+func exits(id: int, came_from := -1) -> Array[int]:
+	var options: Array[int] = _links[id]
+	if came_from == -1 or options.size() == 1 or not options.has(came_from):
+		return options
+	return options.filter(func(other: int) -> bool: return other != came_from)
+
+
+## Every space someone on `id` can stop on after walking exactly `steps` spaces. This is
+## BoardManager.get_landing_nodes().
+func landings(id: int, came_from: int, steps: int) -> Array[int]:
+	if steps == 0:
+		return [id]
+	var key := Vector3i(id, came_from, steps)
+	if not _landings.has(key):
+		var found: Array[int] = []
+		for next in exits(id, came_from):
+			for landing in landings(next, id, steps - 1):
+				if not found.has(landing):
+					found.append(landing)
+		_landings[key] = found
+	return _landings[key]
+
+
+## Space id -> how many days it takes, on average, to land exactly on `target` with a
+## die from 0 to `die_top`, choosing the best road at every fork. Each space's answer
+## depends on the answers of the spaces it can reach, so all of them are worked out
+## again and again until they stop changing.
+func days_to(target: int, die_top: int) -> Dictionary:
+	var key := Vector2i(target, die_top)
+	if not _days.has(key):
+		var days := {}
+		for id: int in _types:
+			days[id] = 0.0
+		var change := INF
+		while change > DAYS_PRECISION:
+			change = 0.0
+			for id: int in _types:
+				if id != target:
+					var value := _days_from(id, days, die_top)
+					change = maxf(change, absf(value - days[id]))
+					days[id] = value
+		_days[key] = days
+	return _days[key]
+
+
+## How many days it takes, on average, to leave `target` and land on it again.
+func days_around(target: int, die_top: int) -> float:
+	return _days_from(target, days_to(target, die_top), die_top)
+
+
+## Space id -> the fewest steps from `start`.
+func steps_from(start: int) -> Dictionary:
+	var steps := {start: 0}
+	var queue: Array[int] = [start]
+	while not queue.is_empty():
+		var current: int = queue.pop_front()
+		for next in _links[current]:
+			if not steps.has(next):
+				steps[next] = steps[current] + 1
+				queue.append(next)
+	return steps
+
+
+# Today's roll, then the best landing for each face, then what is left from there.
+# Rolling 0 stays put and tries again tomorrow, which is why the total is divided by
+# die_top and not by the number of faces.
+func _days_from(id: int, days: Dictionary, die_top: int) -> float:
+	var total := float(die_top + 1)
+	for face in range(1, die_top + 1):
+		var best := INF
+		for landing in landings(id, -1, face):
+			best = minf(best, days[landing])
+		total += best
+	return total / die_top
+
+
+func _link(a: int, b: int) -> void:
+	if not _links[a].has(b):
+		_links[a].append(b)
+	if not _links[b].has(a):
+		_links[b].append(a)
