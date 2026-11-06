@@ -5,6 +5,8 @@ extends RefCounted
 ##     TownData.current().gold
 
 const START_GOLD := 300
+## Where the Portal leads in a new game. A stage id from data/stages.
+const FIRST_STAGE := "grass"
 
 ## What a building is called and what it does, in words for its sign. Every building
 ## here can be visited, so a new one in E10 needs an entry and a place in TownArt.
@@ -20,6 +22,8 @@ var gold := START_GOLD
 var buildings := {}
 ## Who works for the town. One adventurer at a time.
 var hired: Adventurer
+## Where the Portal leads.
+var stage: Stage = Database.get_stage(FIRST_STAGE)
 
 
 func _init() -> void:
@@ -51,6 +55,11 @@ func hire_problem(person: Adventurer) -> String:
 	if person.fee > gold:
 		return "Need %d more gold" % (person.fee - gold)
 	return ""
+
+
+## Why nobody can go through the Portal, in a few words for a button, or "" if they can.
+func send_problem() -> String:
+	return "Hire someone first" if hired == null else ""
 
 
 ## Pays `person` and takes them on. Returns false, changing nothing, if that can't be done.

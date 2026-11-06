@@ -176,6 +176,19 @@ def sfx():
     swirl *= 1 + 0.5 * np.sin(2 * np.pi * 14 * times(0.5))
     write_wav("magic", swirl * 0.22)
 
+    charge_seconds = 2.6
+    charge = sine(glide(90, 720, charge_seconds), charge_seconds)
+    charge += 0.5 * pulse(glide(180, 1440, charge_seconds), charge_seconds, 0.25)
+    charge *= 1 + 0.6 * np.sin(2 * np.pi * np.geomspace(5, 28, charge.size).cumsum() / RATE)
+    charge += 0.5 * noise(charge_seconds, 21, 0.7)
+    write_wav("portal_charge", 0.24 * charge * np.linspace(0.08, 1.0, charge.size) ** 1.4)
+
+    flash = np.zeros(int(1.3 * RATE))
+    for at, note in [(0, "C5"), (0.03, "G5"), (0.06, "C6"), (0.09, "E6"), (0.12, "G6")]:
+        mix_at(flash, sine(hz(note), 1.1) * decay_curve(int(1.1 * RATE), 4), at)
+    mix_at(flash, 0.9 * noise(0.5, 22, 0.3) * decay_curve(int(0.5 * RATE), 9), 0)
+    write_wav("portal_flash", 0.24 * flash)
+
     length = int(0.32 * RATE)
     trap = pulse(glide(400, 70, 0.32), 0.32, 0.25) * decay_curve(length, 5)
     write_wav("trap", 0.34 * trap + 0.24 * noise(0.32, 5, 0.5) * decay_curve(length, 16))

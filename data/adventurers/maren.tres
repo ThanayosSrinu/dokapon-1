@@ -18,3 +18,5 @@ bonus_food = 4
 fee = 400
 lines = Array[String](["My fee is high. So is my survival rate.", "I packed for the whole trip. Did you?", "Come back when your purse is heavier."])
 hired_line = "A wise choice."
+send_line = "Do try not to worry."
+arrive_line = "Pleasant. I give it a week."

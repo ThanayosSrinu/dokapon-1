@@ -5,7 +5,7 @@ extends Control
 
 const MENU := "res://ui/menu/MainMenu.tscn"
 const TAVERN := "res://tavern/TavernScreen.tscn"
-const SOON_WIDTH := 420.0
+const PORTAL := "res://portal/PortalScreen.tscn"
 ## How far the resources stand from the screen's edge. Back has the other corner.
 const BAR_MARGIN := 24.0
 ## Where a hired adventurer waits, from the Portal's feet.
@@ -24,7 +24,6 @@ var signs := {}
 
 var _world: Node2D
 var _ui: Control
-var _page: KitPage
 
 
 func _ready() -> void:
@@ -45,11 +44,6 @@ func _process(_delta: float) -> void:
 
 func building(id: String) -> TownBuilding:
 	return buildings[id]
-
-
-## The window that is open, if any.
-func page() -> KitPage:
-	return _page
 
 
 func _build_world(town: TownData) -> void:
@@ -135,29 +129,4 @@ func _refresh_signs() -> void:
 
 
 func _visit(place: TownBuilding) -> void:
-	if place.id == "tavern":
-		Screens.go(TAVERN)
-		return
-	# E4 replaces this window with the Portal.
-	_page = KitPage.new(place.text)
-	var words := Kit.text("Its doors open in the next part of the build.", SOON_WIDTH)
-	words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_page.panel.body.add_child(words)
-	_page.closed.connect(_on_page_closed.bind(place))
-	_ui.add_child(_page)
-	back.hide()
-	_set_buildings_focusable(false)
-	_page.open()
-
-
-func _on_page_closed(place: TownBuilding) -> void:
-	_page.queue_free()
-	_page = null
-	back.show()
-	_set_buildings_focusable(true)
-	place.grab_focus()
-
-
-func _set_buildings_focusable(able: bool) -> void:
-	for id: String in buildings:
-		buildings[id].focus_mode = Control.FOCUS_ALL if able else Control.FOCUS_NONE
+	Screens.go(TAVERN if place.id == "tavern" else PORTAL)

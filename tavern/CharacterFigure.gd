@@ -16,6 +16,7 @@ const WALK_FRAMES: Array[int] = [2, 0, 3, 1]
 ## A greeting: the swing from the character sheets, or a spell for a caster.
 const SWING_FRAMES: Array[int] = [5, 6, 7, 6, 0]
 const CAST_FRAMES: Array[int] = [13, 14, 15, 14, 0]
+const DISSOLVE: Shader = preload("res://ui/kit/dissolve.gdshader")
 
 var _clock := randf()
 var _acting: Array[int] = []
@@ -59,10 +60,39 @@ func walk(walking: bool) -> void:
 	_walking = walking
 
 
+## Walks along `path`, in the coordinates of its parent, at `speed` pixels a second.
+func walk_along(path: Array[Vector2], speed: float) -> void:
+	walk(true)
+	for goal in path:
+		var way := goal - position
+		face(row_for(way))
+		var tween := create_tween()
+		tween.tween_method(_step, position, goal, way.length() / speed)
+		await tween.finished
+	walk(false)
+
+
+## Breaks into, or forms from, sparks of light. 0 is whole and 1 is gone.
+func dissolve(from: float, to: float, seconds: float) -> void:
+	var magic := ShaderMaterial.new()
+	magic.shader = DISSOLVE
+	magic.set_shader_parameter("progress", from)
+	material = magic
+	var tween := create_tween()
+	tween.tween_property(magic, "shader_parameter/progress", to, seconds)
+	await tween.finished
+	if to == 0.0:
+		material = null
+
+
 static func row_for(way: Vector2) -> int:
 	if absf(way.x) > absf(way.y):
 		return FACING_RIGHT if way.x > 0.0 else FACING_LEFT
 	return FACING_DOWN if way.y > 0.0 else FACING_UP
+
+
+func _step(spot: Vector2) -> void:
+	position = Kit.snap_point(spot)
 
 
 func _act() -> void:

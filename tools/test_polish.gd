@@ -7,7 +7,7 @@ extends Node
 
 const SPEED := 300.0
 const SOURCE_FOLDERS: Array[String] = ["res://autoload", "res://board", "res://combat", "res://main",
-		"res://player", "res://ui", "res://ui/kit", "res://ui/menu", "res://town"]
+		"res://player", "res://ui", "res://ui/kit", "res://ui/menu", "res://town", "res://portal"]
 
 var _failures := 0
 

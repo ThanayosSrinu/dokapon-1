@@ -11,7 +11,8 @@ extends Node
 const EFFECTS: Array[String] = [
 	"back", "battle_start", "click", "coin", "coin_loss", "counter", "crown", "defeat",
 	"deny", "dice_land", "dice_roll", "fanfare", "flee", "heal", "hit", "hover", "item",
-	"level_up", "magic", "miss", "step", "town", "trap", "victory", "week", "whoosh",
+	"level_up", "magic", "miss", "portal_charge", "portal_flash", "step", "town", "trap",
+	"victory", "week", "whoosh",
 ]
 const TUNES: Array[String] = ["battle", "board", "hometown", "shop", "title"]
 const FOLDER := "res://assets/custom/sound/%s.wav"

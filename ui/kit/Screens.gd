@@ -4,6 +4,10 @@ extends CanvasLayer
 ##     Screens.go("res://town/TownScreen.tscn")
 
 const WIPE_SECONDS := 0.4
+const FLASH_IN_SECONDS := 0.3
+const FLASH_OUT_SECONDS := 0.9
+## Rather than pure white, so that the moment is bright without being painful.
+const FLASH := Color(0.86, 1.0, 0.98)
 const SHADER: Shader = preload("res://ui/kit/screen_wipe.gdshader")
 
 ## True during a wipe. Nothing should respond to the player then.
@@ -40,6 +44,30 @@ func go(path: String) -> void:
 	await _uncover()
 
 
+## Floods the screen with light, and lets it fade to show the scene at `path`.
+func flash_to(path: String) -> void:
+	if busy:
+		return
+	busy = true
+	Tips.close()
+	get_tree().root.gui_disable_input = true
+	_wipe.material = null
+	_wipe.color = Color(FLASH, 0.0)
+	_wipe.show()
+	await _fade(1.0, FLASH_IN_SECONDS)
+	var problem := get_tree().change_scene_to_file(path)
+	if problem != OK:
+		push_error("Screens: could not open %s." % path)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _fade(0.0, FLASH_OUT_SECONDS)
+	_wipe.hide()
+	_wipe.material = _material
+	_wipe.color = Kit.INK
+	get_tree().root.gui_disable_input = false
+	busy = false
+
+
 ## Wipes the screen, then closes the game.
 func quit() -> void:
 	if busy:
@@ -71,6 +99,12 @@ func _uncover() -> void:
 	_wipe.hide()
 	get_tree().root.gui_disable_input = false
 	busy = false
+
+
+func _fade(alpha: float, seconds: float) -> void:
+	var tween := create_tween()
+	tween.tween_property(_wipe, "color:a", alpha, seconds)
+	await tween.finished
 
 
 func _run(from: float, to: float) -> void:

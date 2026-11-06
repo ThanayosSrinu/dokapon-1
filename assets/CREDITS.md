@@ -14,6 +14,7 @@ keeps it anyway.
 | `custom/kit/`, `custom/menu/` | Made for this game by `tools/art_kit.py` | The UI kit and the main menu's scene |
 | `custom/town/` | Made for this game by `tools/art_town.py` | The Tavern and the Portal in town |
 | `custom/tavern/` | Made for this game by `tools/art_tavern.py` | The inside of the Tavern and the adventurers' portraits |
+| `custom/portal/` | Made for this game by `tools/art_portal.py` | The hilltop, the great ring and the stage pictures |
 | `custom/sound/` | Made for this game by `tools/make_sound.py` | All music and sound effects |
 
 The Puny packs have no license file; their itch.io pages state CC0.

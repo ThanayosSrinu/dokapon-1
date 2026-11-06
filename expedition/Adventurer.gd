@@ -26,6 +26,10 @@ extends Resource
 @export var lines: Array[String] = []
 ## What they say on being hired.
 @export var hired_line := ""
+## What they say on the way into the Portal.
+@export var send_line := ""
+## What they say on reaching the far side.
+@export var arrive_line := ""
 
 
 func class_data() -> ClassData:

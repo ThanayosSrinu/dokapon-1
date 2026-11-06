@@ -1,5 +1,5 @@
 extends Node
-## Every item, spell, class, monster and adventurer in the game. Registered as the "Database"
+## Every item, spell, class, monster, adventurer and stage in the game. Registered as the "Database"
 ## autoload. It reads the folders under data/, so adding a .tres file is all it
 ## takes to add content: no code changes.
 
@@ -8,6 +8,7 @@ const SPELL_FOLDER := "res://data/spells"
 const CLASS_FOLDER := "res://data/classes"
 const MONSTER_FOLDER := "res://data/monsters"
 const ADVENTURER_FOLDER := "res://data/adventurers"
+const STAGE_FOLDER := "res://data/stages"
 
 ## Every stat a character has.
 const STATS: Array[String] = ["max_hp", "max_mp", "attack", "defense", "magic", "speed"]
@@ -21,6 +22,7 @@ var spells := {}
 var classes := {}
 var monsters := {}
 var adventurers := {}
+var stages := {}
 
 
 func _ready() -> void:
@@ -33,6 +35,7 @@ func load_all() -> void:
 	classes = _load_folder(CLASS_FOLDER)
 	monsters = _load_folder(MONSTER_FOLDER)
 	adventurers = _load_folder(ADVENTURER_FOLDER)
+	stages = _load_folder(STAGE_FOLDER)
 
 
 func get_item(id: String) -> ItemData:
@@ -53,6 +56,10 @@ func get_monster(id: String) -> MonsterData:
 
 func get_adventurer(id: String) -> Adventurer:
 	return adventurers.get(id)
+
+
+func get_stage(id: String) -> Stage:
+	return stages.get(id)
 
 
 ## Everyone at the Tavern, cheapest first.
@@ -85,7 +92,7 @@ func sorted_ids(table: Dictionary) -> Array[String]:
 ## Lists every mistake in the data. tools/check_data.gd prints these.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
-	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER]:
+	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER, STAGE_FOLDER]:
 		_check_folder(folder, problems)
 	for id: String in items:
 		_check_item(items[id], problems)
@@ -99,6 +106,10 @@ func validate() -> PackedStringArray:
 		problems.append("the Tavern needs %d adventurers, not %d" % [TAVERN_SIZE, adventurers.size()])
 	for id: String in adventurers:
 		_check_adventurer(adventurers[id], problems)
+	for id: String in stages:
+		_check_stage(stages[id], problems)
+	if not stages.has(TownData.FIRST_STAGE):
+		problems.append("no stage called '%s'" % TownData.FIRST_STAGE)
 	for level in range(1, PlayerData.MAX_LEVEL + 1):
 		if monster_ids_for_level(level).is_empty():
 			problems.append("no monster for a player of level %d" % level)
@@ -201,8 +212,17 @@ func _check_adventurer(person: Adventurer, problems: PackedStringArray) -> void:
 		problems.append("adventurer %s has negative food" % person.id)
 	if person.fee <= 0:
 		problems.append("adventurer %s needs a fee above 0" % person.id)
-	if person.lines.is_empty() or person.hired_line == "":
+	if person.lines.is_empty() or person.hired_line == "" or person.send_line == "" or person.arrive_line == "":
 		problems.append("adventurer %s needs something to say" % person.id)
+
+
+func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
+	if not FileAccess.file_exists(stage.map_file):
+		problems.append("stage %s has no map at '%s'" % [stage.id, stage.map_file])
+	if stage.picture == null:
+		problems.append("stage %s needs a picture" % stage.id)
+	if stage.food_days <= 0:
+		problems.append("stage %s needs food above 0" % stage.id)
 
 
 func _check_monster(monster: MonsterData, problems: PackedStringArray) -> void:
