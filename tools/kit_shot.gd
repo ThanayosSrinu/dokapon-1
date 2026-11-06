@@ -1,5 +1,5 @@
 extends Node
-## Saves screenshots of the menu, its pages, the town placeholder and the kit gallery,
+## Saves screenshots of the menu, its pages, the town and the kit gallery,
 ## to check them by eye. Run with:
 ##   godot --path . res://tools/kit_shot.tscn -- <folder>
 
@@ -33,6 +33,17 @@ func _ready() -> void:
 	await _save(folder + "/wipe.png")
 	await _settle(1.2)
 	await _save(folder + "/town.png")
+	var town: TownScreen = get_tree().current_scene
+	town.building("portal").grab_focus()
+	await _settle(2.0)
+	await _save(folder + "/town_portal.png")
+	town.back.grab_focus()
+	await _settle(0.5)
+	await _save(folder + "/town_back.png")
+	town.building("tavern").pressed.emit()
+	await _settle(0.5)
+	await _save(folder + "/town_visit.png")
+	town.page().close()
 	Screens.go("res://ui/kit/KitGallery.tscn")
 	await _settle(1.5)
 	await _save(folder + "/gallery.png")

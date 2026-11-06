@@ -12,6 +12,7 @@ keeps it anyway.
 | `puny/characters/` | [16x16 Puny Characters](https://merchant-shade.itch.io/16x16-puny-characters) by Kurt Gabriel Sotelo (CC0) | The heroes and the monsters |
 | `custom/` | Made for this game by `tools/make_art.py` | Spaces, icons, the die, effects, the battle backdrop, item pictures, the shop, the window icon |
 | `custom/kit/`, `custom/menu/` | Made for this game by `tools/art_kit.py` | The UI kit and the main menu's scene |
+| `custom/town/` | Made for this game by `tools/art_town.py` | The Tavern and the Portal in town |
 | `custom/sound/` | Made for this game by `tools/make_sound.py` | All music and sound effects |
 
 The Puny packs have no license file; their itch.io pages state CC0.

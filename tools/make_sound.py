@@ -239,7 +239,7 @@ def sfx():
 CHORDS = {
     "C": ["C", "E", "G"], "F": ["F", "A", "C"], "G": ["G", "B", "D"], "Am": ["A", "C", "E"],
     "Em": ["E", "G", "B"], "Dm": ["D", "F", "A"], "Bb": ["Bb", "D", "F"], "Gm": ["G", "Bb", "D"],
-    "E": ["E", "G#", "B"],
+    "E": ["E", "G#", "B"], "D": ["D", "F#", "A"], "Bm": ["B", "D", "F#"],
 }
 
 
@@ -260,6 +260,11 @@ def lead_voice(duty, vibrato=5.0):
         n = int(seconds * RATE)
         return pulse(freq, seconds, duty, vibrato if seconds > 0.3 else 0.0) * envelope(n, decay=0.1, sustain=0.62, release=0.04)
     return voice
+
+
+def pluck_voice(freq, seconds):
+    n = int(seconds * RATE)
+    return triangle(freq, seconds) * envelope(n, decay=0.25, sustain=0.28, release=0.05)
 
 
 def bass_voice(freq, seconds):
@@ -392,6 +397,21 @@ def tunes():
         chord_arpeggio(chords, bar, step, [-1, -1, 0, 1, 2, 1], 4, 0.2),
         0.8 * bass_line(chords, bar, step, [(0, 0, 2)], 2),
         drums(16, bar, step, [0], [], [2, 4], 0.6),
+    ], step, 16, bar)
+
+    # Hometown: a slow, warm stroll at 92, plucked instead of blown.
+    step, bar = 60 / 92 / 2, 8
+    chords = ["G", "Em", "C", "D", "G", "Bm", "C", "D", "Em", "C", "G", "D", "C", "D", "G", "G"]
+    melody = parse("""
+        B4 . D5 . G5 . . F#5 | E5 . . . B4 . . . | C5 . E5 . G5 . E5 . | D5 . . . A4 . . .
+        B4 . D5 . G5 . A5 . | B5 . . A5 F#5 . . . | E5 . G5 . C6 . B5 . | A5 . . . . . - .
+        G5 . . E5 B4 . E5 . | C5 . E5 . G5 . . . | B4 . D5 . G5 . B5 . | A5 . F#5 . D5 . . .
+        E5 . G5 . C6 . B5 . | A5 . F#5 . D5 . F#5 . | G5 . . . D5 . B4 . | G4 . . . . . - .
+    """)
+    finish("hometown", [
+        0.7 * sequence(melody, step, pluck_voice),
+        chord_arpeggio(chords, bar, step, [0, 1, 2, 1, 0, 1, 2, 1], 3, 0.17),
+        0.75 * bass_line(chords, bar, step, [(0, 0, 4), (4, 2, 4)], 2),
     ], step, 16, bar)
 
 

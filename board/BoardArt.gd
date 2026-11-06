@@ -360,41 +360,45 @@ func _lay_bridges() -> void:
 
 func _place_castle(nodes: Array[BoardNode]) -> void:
 	for node in nodes:
-		if node.node_type != BoardNode.NodeType.CASTLE:
-			continue
-		var rect := CASTLE_RECT
-		rect.position += vertex_of(node)
-		# Nothing else may grow or be built inside the walls.
-		_reserve(rect)
-		var last := rect.end - Vector2i.ONE
-		_put(rect.position, WALL_TOP_LEFT)
-		_put(Vector2i(last.x, rect.position.y), WALL_TOP_RIGHT)
-		_put(Vector2i(rect.position.x, last.y), WALL_BOTTOM_LEFT)
-		_put(last, WALL_BOTTOM_RIGHT)
-		for x in range(rect.position.x + 1, last.x):
-			_put(Vector2i(x, rect.position.y), WALL_TOP)
-			_put(Vector2i(x, last.y), WALL_BOTTOM)
-		for y in range(rect.position.y + 1, last.y):
-			_put(Vector2i(rect.position.x, y), WALL_LEFT)
-			_put(Vector2i(last.x, y), WALL_RIGHT)
+		if node.node_type == BoardNode.NodeType.CASTLE:
+			_build_castle(vertex_of(node))
 
-		# The gate in the middle of the south wall, and a path to the road.
-		var gate := Vector2i(rect.position.x + rect.size.x / 2, last.y)
-		_put(gate, WALL_GATE)
-		for vertex_x: int in [gate.x, gate.x + 1]:
-			for vertex_y in range(gate.y + 1, vertex_of(node).y):
-				_ground[Vector2i(vertex_x, vertex_y)] = DIRT
 
-		# The courtyard, then the keep in it: two tiles wide and four tall.
-		for offset_y in range(rect.position.y + 1, last.y + 1):
-			for offset_x in range(rect.position.x + 1, last.x + 1):
-				_ground[Vector2i(offset_x, offset_y)] = GRASS
-		var keep := Vector2i(gate.x, rect.position.y + 1)
-		_put_centered_block(keep, KEEP_TOP)
-		_put_centered_block(keep + Vector2i(0, 2), KEEP_BOTTOM)
-		flag_points.append((Vector2(gate.x, rect.position.y + 1) + Vector2(0.0, 0.1)) * GameArt.CELL)
-		flag_points.append((Vector2(rect.position) + Vector2(0.5, 0.1)) * GameArt.CELL)
-		flag_points.append((Vector2(last.x, rect.position.y) + Vector2(0.5, 0.1)) * GameArt.CELL)
+## Builds the castle that belongs to a space at `spot`.
+func _build_castle(spot: Vector2i) -> void:
+	var rect := CASTLE_RECT
+	rect.position += spot
+	# Nothing else may grow or be built inside the walls.
+	_reserve(rect)
+	var last := rect.end - Vector2i.ONE
+	_put(rect.position, WALL_TOP_LEFT)
+	_put(Vector2i(last.x, rect.position.y), WALL_TOP_RIGHT)
+	_put(Vector2i(rect.position.x, last.y), WALL_BOTTOM_LEFT)
+	_put(last, WALL_BOTTOM_RIGHT)
+	for x in range(rect.position.x + 1, last.x):
+		_put(Vector2i(x, rect.position.y), WALL_TOP)
+		_put(Vector2i(x, last.y), WALL_BOTTOM)
+	for y in range(rect.position.y + 1, last.y):
+		_put(Vector2i(rect.position.x, y), WALL_LEFT)
+		_put(Vector2i(last.x, y), WALL_RIGHT)
+
+	# The gate in the middle of the south wall, and a path to the road.
+	var gate := Vector2i(rect.position.x + rect.size.x / 2, last.y)
+	_put(gate, WALL_GATE)
+	for vertex_x: int in [gate.x, gate.x + 1]:
+		for vertex_y in range(gate.y + 1, spot.y):
+			_ground[Vector2i(vertex_x, vertex_y)] = DIRT
+
+	# The courtyard, then the keep in it: two tiles wide and four tall.
+	for offset_y in range(rect.position.y + 1, last.y + 1):
+		for offset_x in range(rect.position.x + 1, last.x + 1):
+			_ground[Vector2i(offset_x, offset_y)] = GRASS
+	var keep := Vector2i(gate.x, rect.position.y + 1)
+	_put_centered_block(keep, KEEP_TOP)
+	_put_centered_block(keep + Vector2i(0, 2), KEEP_BOTTOM)
+	flag_points.append((Vector2(gate.x, rect.position.y + 1) + Vector2(0.0, 0.1)) * GameArt.CELL)
+	flag_points.append((Vector2(rect.position) + Vector2(0.5, 0.1)) * GameArt.CELL)
+	flag_points.append((Vector2(last.x, rect.position.y) + Vector2(0.5, 0.1)) * GameArt.CELL)
 
 
 func _put_centered_block(cell: Vector2i, tile: Vector2i) -> void:
@@ -515,14 +519,18 @@ func _grow_forests() -> void:
 	for vertex: Vector2i in _ground:
 		if _ground[vertex] != GRASS or not _forest_may_stand(vertex):
 			continue
-		var edge := clampf(_distance_to_rect(vertex, _land_rect.grow(-LAND_MARGIN)) / LAND_MARGIN, 0.0, 1.0)
-		if noise.get_noise_2d(vertex.x, vertex.y) + edge * 0.5 > 0.0:
+		if noise.get_noise_2d(vertex.x, vertex.y) + _forest_edge(vertex) * 0.5 > 0.0:
 			if shade_noise.get_noise_2d(vertex.x, vertex.y) > 0.0:
 				_forest[vertex] = true
 			else:
 				_forest_dark[vertex] = true
 	_forest = _without_thin_parts(_forest)
 	_forest_dark = _without_thin_parts(_forest_dark)
+
+
+## How much `vertex` favors forest, from 0 up to 1 at the edge of the land.
+func _forest_edge(vertex: Vector2i) -> float:
+	return clampf(_distance_to_rect(vertex, _land_rect.grow(-LAND_MARGIN)) / LAND_MARGIN, 0.0, 1.0)
 
 
 # A tree reaches a cell around its vertex, so this looks one vertex further.
@@ -678,6 +686,11 @@ func _set_atlas(layer: TileMapLayer, cell: Vector2i, coords: Vector2i) -> void:
 	if not source.has_tile(coords):
 		source.create_tile(coords)
 	layer.set_cell(cell, 0, coords)
+
+
+## Lets go of the shared tiles, so that nothing is left over when the game closes.
+static func forget() -> void:
+	_tile_set = null
 
 
 static func _get_tile_set() -> TileSet:

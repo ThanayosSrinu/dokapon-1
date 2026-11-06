@@ -38,6 +38,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Kit.forget()
+	BoardArt.forget()
 
 
 ## A tooltip card, as [the card, its title, its text]. The gallery shows one by itself.

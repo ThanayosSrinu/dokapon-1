@@ -65,12 +65,12 @@ func _process(delta: float) -> void:
 	if _smoke_clock >= SMOKE_INTERVAL and not art.smoke_points.is_empty():
 		_smoke_clock = 0.0
 		var point: Vector2 = art.smoke_points.pick_random()
-		BoardFx.play(self, point, BoardFx.Kind.SMOKE, 1.6, Vector2(randf_range(4.0, 16.0), -44.0))
+		BoardFx.play(self, to_global(point), BoardFx.Kind.SMOKE, 1.6, Vector2(randf_range(4.0, 16.0), -44.0))
 
 	_glint_clock += delta
 	if _glint_clock >= GLINT_INTERVAL and not art.water_points.is_empty():
 		_glint_clock = 0.0
-		BoardFx.play(self, art.water_points.pick_random(), BoardFx.Kind.SPARKLE, 0.5, Vector2.ZERO,
+		BoardFx.play(self, to_global(art.water_points.pick_random()), BoardFx.Kind.SPARKLE, 0.5, Vector2.ZERO,
 				Color(1, 1, 1, 0.7))
 
 	_update_birds(delta)

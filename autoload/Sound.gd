@@ -13,7 +13,7 @@ const EFFECTS: Array[String] = [
 	"deny", "dice_land", "dice_roll", "fanfare", "flee", "heal", "hit", "hover", "item",
 	"level_up", "magic", "miss", "step", "town", "trap", "victory", "week", "whoosh",
 ]
-const TUNES: Array[String] = ["battle", "board", "shop", "title"]
+const TUNES: Array[String] = ["battle", "board", "hometown", "shop", "title"]
 const FOLDER := "res://assets/custom/sound/%s.wav"
 ## How many sound effects can play at once.
 const VOICES := 12

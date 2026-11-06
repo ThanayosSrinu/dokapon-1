@@ -8,7 +8,8 @@ extends Node
 const MENU := "res://ui/menu/MainMenu.tscn"
 const TOWN := "res://town/TownScreen.tscn"
 const GALLERY := "res://ui/kit/KitGallery.tscn"
-const ART_FOLDERS: Array[String] = ["res://assets/custom/kit", "res://assets/custom/menu"]
+const ART_FOLDERS: Array[String] = ["res://assets/custom/kit", "res://assets/custom/menu",
+		"res://assets/custom/town"]
 const WAIT := 0.15
 const WIDE := Vector2i(1280, 720)
 
@@ -221,7 +222,7 @@ func _test_menu_with_keys() -> void:
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "Play leads to the town")
 	var town: TownScreen = get_tree().current_scene
-	_expect(_focused() == town.back, "the town's Back has focus")
+	_expect(_focused() == town.building("tavern"), "the town starts on the Tavern")
 	_expect(town.back.position == Kit.BACK_POSITION, "Back is in its usual place")
 	await _tap("ui_cancel")
 	await _until_settled()
