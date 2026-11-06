@@ -22,7 +22,7 @@ const HEADING_SPOT := Vector2(200, 30)
 const HEADING_WIDTH := 608.0
 const READY := "%s is ready to go"
 const NOBODY := "Nobody is here yet"
-const RESTING := "Everyone is resting"
+const NOT_READY := "Nobody is ready"
 const GOING := "Good luck, %s!"
 
 const HERO_SPOT := Vector2(404, 610)
@@ -138,7 +138,7 @@ func _build_people(town: TownData) -> void:
 		button.pressed.connect(_choose_person.bind(person))
 		if out > 0:
 			button.text = TownData.days_words(out)
-			button.block("%s is hurt, and can work again in %s." % [person.display_name, TownData.days_words(out)])
+			button.block("%s is down, and can work again in %s." % [person.display_name, TownData.days_words(out)])
 		else:
 			Tips.attach(button, person.display_name, "Walks up to %d spaces a day." % person.die_top)
 
@@ -197,7 +197,7 @@ func _food_tip(town: TownData) -> String:
 
 
 func _build_top_bar(town: TownData) -> void:
-	var words := READY % town.going.display_name if town.going != null else (NOBODY if town.roster.is_empty() else RESTING)
+	var words := READY % town.going.display_name if town.going != null else (NOBODY if town.roster.is_empty() else NOT_READY)
 	heading = Kit.text(words, 0.0, &"Heading")
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	heading.position = HEADING_SPOT
@@ -288,7 +288,7 @@ func _refresh_enter(town: TownData) -> void:
 func _enter_tip(town: TownData) -> String:
 	if town.roster.is_empty():
 		return "Nobody works for you yet. Hire an adventurer at the Tavern."
-	return "Someone can work again in %s. Rest in town to pass the days." % TownData.days_words(town.days_until_ready())
+	return "Nobody on your roster can work. Hire someone new at the Tavern, and dismiss someone if the roster is full."
 
 
 func _on_enter() -> void:

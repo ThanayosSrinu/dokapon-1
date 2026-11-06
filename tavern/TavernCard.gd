@@ -63,7 +63,7 @@ func show_member(one: Member, today: int) -> void:
 	var person := one.person
 	_show_person(person)
 	var out := one.days_out(today)
-	_set_fact(0, "heart", "Ready to go" if out == 0 else "Hurt, back in %s" % TownData.days_words(out))
+	_set_fact(0, "heart", "Ready to go" if out == 0 else "Down, back in %s" % TownData.days_words(out))
 	_set_fact(1, "coin", "Wage: %d gold a month" % person.wage)
 	_set_fact(2, "boot", _past_trips(one))
 	_set_fact(3, "sword", "Gear: %s" % _gear(person))

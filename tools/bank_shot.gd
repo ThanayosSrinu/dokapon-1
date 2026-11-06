@@ -42,8 +42,9 @@ func _ready() -> void:
 	town.member(town.roster[0].person).ready_on = 31
 	town.member(town.roster[1].person).ready_on = 29
 	town.member(town.roster[2].person).ready_on = 29
-	town.rest(0)
-	await _shot("res://portal/PortalScreen.tscn", "portal_resting")
+	town._pick_going()
+	await _shot("res://tavern/TavernScreen.tscn", "tavern_all_down")
+	await _shot("res://portal/PortalScreen.tscn", "portal_nobody_ready")
 	await _shot("res://town/TownScreen.tscn", "town_all_hurt")
 	town = _town()
 	await _shot("res://tavern/TavernScreen.tscn", "tavern_full")

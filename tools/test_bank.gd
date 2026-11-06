@@ -21,13 +21,14 @@ func _ready() -> void:
 	_test_warning_steps()
 	_test_forecast()
 	_test_no_game_over_without_warning()
+	_test_stranded()
 	await _test_date_chip()
 	await _test_bank_screen()
 	await _test_bank_with_mouse_and_pad()
 	await _test_short_of_gold()
 	await _test_loan_screen()
-	await _test_rest()
-	await _test_rest_past_the_due_day()
+	await _test_nobody_ready_in_town()
+	await _test_stranded_screens()
 	await _test_portal_forecast()
 	await _test_pick_who_goes()
 	await _test_warnings_on_a_trip()
@@ -160,15 +161,23 @@ func _test_time_out() -> void:
 	_expect(not town.pick(bram), "the hurt can't be picked")
 	town.bring_home(_ended_trip(town, Expedition.Ending.STARVED, 1))
 	_expect(town.member(wren).days_out(town.day) == TownData.OUT_AFTER_DEFEAT, "hunger counts as a defeat")
-	_expect(town.going == null and town.send_problem() == "Everyone is resting", "with all hurt, nobody can go")
-	_expect(town.days_until_ready() == TownData.OUT_AFTER_DEFEAT - 1, "the soonest back is known")
-	town.rest(town.days_until_ready())
+	_expect(town.going == null and town.send_problem() == "Nobody is ready", "with all hurt, nobody can go")
+	town.day += TownData.OUT_AFTER_DEFEAT - 1
+	town._pick_going()
 	_expect(town.going == bram, "they come back in order")
-	town.rest(1)
+	town.day += 1
+	town._pick_going()
 	_expect(town.pick(wren), "and a healed person can be picked")
 	_expect(town.member(bram).days_out(town.day) == 0, "the count stops at 0")
-	town.bring_home(_ended_trip(town, Expedition.Ending.WARPED, 0))
-	_expect(town.member(wren).days_out(town.day) == TownData.OUT_AFTER_WARP, "the Warp Stone costs days too")
+	var warped := _ended_trip(town, Expedition.Ending.WARPED, 0)
+	warped.player.gold = 70
+	var before_warp := town.gold
+	town.bring_home(warped)
+	_expect(town.member(wren).days_out(town.day) == 0, "an Emergency Warp costs no days")
+	_expect(town.gold == before_warp, "but nothing they found comes home")
+	_expect(town.going == wren, "and they can go again")
+	var report := TripReport.new(warped)
+	_expect(report.failed and not report.died, "the trip failed, but nobody died")
 	var going_gold := town.gold
 	town.pick(bram)
 	var good := _ended_trip(town, Expedition.Ending.HOME, 4)
@@ -189,8 +198,11 @@ func _test_next_step() -> void:
 	town.hire(Database.get_adventurer("bram"))
 	_expect(town.next_step() == "portal", "with someone ready, the Portal is next")
 	town.member(town.going).ready_on = 10
-	town.rest(0)
-	_expect(town.next_step() == "rest", "with everyone hurt, resting is next")
+	town._pick_going()
+	_expect(town.next_step() == "tavern", "with nobody ready, the Tavern is next")
+	town.gold = 0
+	_expect(town.next_step() == "bank", "or the Bank, with no gold to hire")
+	town.gold = 500
 	town.day = 49
 	_expect(town.next_step() == "bank", "a warning sends the player to the Bank")
 
@@ -229,35 +241,27 @@ func _test_forecast() -> void:
 	_expect(town.forecast(small, person)["fit"] == TownData.Forecast.LATE, "day 27 is too late for anything")
 
 
-## The plan's fairness test. Every mix of resting and a trip of any length is walked as
-## the screens show it: the town on arrival, and the strip each day of a trip. Whatever
+## The plan's fairness test. A trip of any length, from any day, is walked as the screens
+## show it: the town on arrival, and the strip each day of a trip. Whatever
 ## was shown only counts if it came before the due day had passed.
 func _test_no_game_over_without_warning() -> void:
 	for start in range(29, 56):
 		for away in range(1, 45):
-			for rests: int in [0, 1, 3, 7]:
-				_play_out(start, rests, away)
+			_play_out(start, away)
 
 
-func _play_out(start: int, rests: int, away: int) -> void:
+func _play_out(start: int, away: int) -> void:
 	var town := _town_with(["bram"], 0)
 	var due := town.bill_due()
 	town.day = start
 	town.show_alert()
-	if rests > 0:
-		town.rest(rests)
-		if not town.overdue().is_empty():
-			# One press of Rest can jump the last days, but never from an unwarned town.
-			_expect(town.warned.get(due, 0) != TownData.Alert.NONE, "warned before resting past day %d" % due)
-			return
-		town.show_alert()
 	for trip_day in range(1, away + 1):
 		if town.day + trip_day <= due:
 			town.show_alert(town.day + trip_day)
 	town.day += away
 	if not town.overdue().is_empty():
 		_expect(town.warned.get(due, 0) == TownData.Alert.ALARM,
-				"both steps shown before day %d, from day %d, rest %d, trip %d" % [due, start, rests, away])
+				"both steps shown before day %d, from day %d, trip %d" % [due, start, away])
 
 
 func _test_date_chip() -> void:
@@ -330,7 +334,10 @@ func _test_bank_with_mouse_and_pad() -> void:
 	await _wait()
 	_expect(bank.chosen_loan == TownData.LOAN_SIZES[0], "a click chooses a sum")
 	_expect(bank.sizes[0].lit and not bank.sizes[2].lit, "and it is lit")
-	_expect(bank._loan_words.text.contains("Borrow 100, repay 120 by Y1 M2 D1"), "the sum, cost and day show first")
+	_expect(bank._term_first.value() == "+100" and bank._term_repay.value() == "120", "the sum and what it costs show first")
+	_expect(bank._term_day.value() == "Y1 M2 D1" and bank._term_day.note() == "In 28 days", "with the day and how far off it is")
+	_expect(bank._loss.text.contains("GAME OVER"), "and what happens if it is not repaid")
+	_expect(bank._term_day.size.x <= BankScreen.TERM_DATE_WIDTH, "the date fits its tile")
 	await _pad(JOY_BUTTON_B)
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "B leaves the Bank")
@@ -364,7 +371,8 @@ func _test_loan_screen() -> void:
 	town.gold = 2
 	var bank: BankScreen = await _open(BANK)
 	_expect(not bank.sizes[0].is_visible_in_tree(), "with a loan, no sums are offered")
-	_expect(bank._loan_words.text.contains("300") and bank._loan_words.text.contains("Y1 M2 D1"), "the debt shows with its day")
+	_expect(bank._term_first.value() == "300" and bank._term_day.value() == "Y1 M2 D1", "the debt shows with its day")
+	_expect(bank._term_repay.value() == str(town.gold), "beside the gold there is")
 	_expect(bank.loan_button.disabled, "it can't be repaid short")
 	_expect(_focused() == bank.back, "the way out has focus")
 	town.gold = 400
@@ -378,54 +386,108 @@ func _test_loan_screen() -> void:
 	_expect(bank.bubble.shown_words() == BankScreen.SAY_REPAID, "the banker says so")
 
 
-func _test_rest() -> void:
+func _test_nobody_ready_in_town() -> void:
 	var town := _town_with(["bram"])
-	var person := town.going
-	town.member(person).ready_on = 4
-	town.rest(0)
+	town.member(town.going).ready_on = 4
+	town._pick_going()
 	var screen: TownScreen = await _open(TOWN)
-	_expect(screen.arrow.target == screen.rest_button, "with everyone hurt, the arrow points at Rest")
-	_expect(_focused() == screen.rest_button, "and it has focus")
+	_expect(screen.arrow.target == screen.building("tavern"), "with nobody ready, the arrow points at the Tavern")
+	_expect(_focused() == screen.building("tavern"), "and it has focus")
 	_expect(screen.waiting == null, "nobody waits at the Portal")
-	await _tap("ui_accept")
-	await _wait()
-	_expect(screen.rest_panel.visible, "Enter opens the panel")
-	_expect(_focused() == screen.rest_panel.day_buttons[0], "on the shortest rest")
-	await _tap("ui_accept")
-	await _wait()
-	_expect(town.day == 2, "a day passes")
-	_expect(get_tree().current_scene == screen and screen.rest_panel.visible, "and the panel stays")
-	await _tap("ui_right")
-	await _tap("ui_accept")
-	await _wait()
-	_expect(town.day == 5, "three more pass")
-	_expect(town.going == person, "and they have healed")
-	_expect(screen.date_chip.shown_words() == "Y1 M1 D5", "the date shows the day of the month")
-	_expect(screen.waiting != null, "they wait at the Portal again")
-	await _tap("ui_right")
-	await _tap("ui_accept")
-	await _wait()
-	_expect(screen.date_chip.shown_words() == Calendar.date(town.day) and town.day > 5, "the date moves on")
-	await _tap("ui_cancel")
-	await _wait()
-	_expect(not screen.rest_panel.visible and get_tree().current_scene == screen, "Esc closes the panel, and stays")
-	_expect(_focused() == screen.arrow.target, "focus goes where the arrow points")
-
-
-func _test_rest_past_the_due_day() -> void:
-	var town := _town_with(["bram"])
-	town.day = 55
-	var screen: TownScreen = await _open(TOWN)
-	screen.rest_button.grab_focus()
-	await _tap("ui_accept")
-	await _wait()
-	var panel := screen.rest_panel
-	_expect(not panel.day_buttons[0].danger, "a rest up to the due day is safe")
-	_expect(panel.day_buttons[1].danger and panel.day_buttons[2].danger, "a rest past it is stained red")
-	_expect(panel._warning.visible, "and says why")
-	panel.day_buttons[1].pressed.emit()
+	_expect(town.day == 1, "the town does not skip days by itself")
 	await _until_settled()
-	_expect(get_tree().current_scene is GameOverScreen, "resting past a due day loses the town")
+	_expect(town.day == 1 and get_tree().current_scene == screen, "however long it is left")
+
+
+## Rule: a town nobody can work for, and with no way to pay for anyone, is over.
+func _test_stranded() -> void:
+	var town := _town_with(["bram", "wren", "maren"], 0)
+	for one in town.roster:
+		one.ready_on = 50
+	town._pick_going()
+	_expect(not town.stranded() and town.next_step() == "bank", "with no gold, a loan can still hire someone")
+	town.gold = 100
+	_expect(not town.stranded() and town.next_step() == "tavern", "with a fee in hand, the Tavern is next")
+	town.gold = 50
+	town.loan_owed = 120
+	town.loan_due = 29
+	_expect(town.stranded() and town.lost(), "with a loan in the way and too little gold, the town is lost")
+	_expect(town.final_story(5)[-1]["text"].contains("hire"), "and the story ends by saying why")
+	town.gold = 99
+	town.loan_owed = 60
+	_expect(not town.stranded(), "a small loan can be repaid and a bigger one taken")
+	town.loan_owed = 0
+	town.gold = 100
+	_expect(town.dismiss(town.roster[2].person) and town.roster.size() == 2, "a full roster of the down can lose someone")
+	var maren := Database.get_adventurer("maren")
+	var bram := Database.get_adventurer("bram")
+	town.dismiss(bram)
+	_expect(town.hire(bram) and town.going == bram, "and someone new can go at once")
+	_expect(town.member(bram).is_ready(town.day), "they start fresh")
+	_expect(town.member(maren) == null, "the dismissed stay gone")
+	town = _town_with(["bram"], 40)
+	town.loan_owed = 120
+	town.loan_due = 29
+	_expect(town.dismiss_strands(town.going), "letting the last one go can lose the town")
+	town.gold = 400
+	town.loan_owed = 0
+	town.day = 30
+	town.member(town.going).ready_on = 50
+	town._pick_going()
+	_expect(not town.bill_strands(), "paying a bill is safe with gold left to hire")
+	town.gold = town.bill_amount() + 50
+	town.loan_owed = town.gold + 1
+	_expect(town.bill_strands(), "and not with too little left")
+
+
+func _test_stranded_screens() -> void:
+	var town := _town_with(["bram"], 0)
+	town.member(town.going).ready_on = 50
+	town._pick_going()
+	var screen: TownScreen = await _open(TOWN)
+	_expect(screen.arrow.target == screen.building("bank"), "with no gold to hire, the arrow points at the Bank")
+	var bank: BankScreen = await _open(BANK)
+	_expect(bank.arrow.target == bank.loan_button, "and the Bank points at a loan")
+	_expect(bank.chosen_loan == 100, "of the smallest that hires someone")
+	_expect(bank.bubble.shown_words() == BankScreen.SAY_NOBODY, "and the banker says why")
+	# The last gold goes on the bill, with a loan already out.
+	town = _town_with(["bram"], 0)
+	town.day = 30
+	town.gold = town.bill_amount() + 50
+	town.loan_owed = town.gold + 1
+	town.loan_due = 40
+	town.member(town.going).ready_on = 50
+	town._pick_going()
+	bank = await _open(BANK)
+	_expect(bank._bill_lost.visible and bank.pay.danger, "the Bank warns of a bill that loses the town")
+	_expect(bank.arrow.target != bank.pay, "and does not point at it")
+	bank.pay.pressed.emit()
+	await _until_settled()
+	_expect(get_tree().current_scene is GameOverScreen, "paying it anyway loses the town")
+	town = _town_with(["bram"], 40)
+	town.loan_owed = 120
+	town.loan_due = 40
+	var tavern: TavernScreen = await _open(TAVERN)
+	tavern._show_tab(TavernScreen.Tab.ROSTER)
+	tavern.card.hire.pressed.emit()
+	await _wait()
+	_expect(tavern._dismiss_lost.visible, "dismissing the last one warns of the same")
+	tavern.dismiss_button.pressed.emit()
+	await _until_settled()
+	_expect(get_tree().current_scene is GameOverScreen, "and doing it anyway loses the town")
+	town = _town_with(["bram"], 40)
+	town.loan_owed = 120
+	town.loan_due = 40
+	var island := await _open_trip(5, 0)
+	island._warp_home.call_deferred()
+	while island.report == null:
+		await get_tree().process_frame
+	await _until_settled()
+	town.member(town.going if town.going != null else town.roster[0].person).ready_on = 50
+	town._pick_going()
+	await _tap("ui_accept")
+	await _until_settled()
+	_expect(get_tree().current_scene is GameOverScreen, "a trip that leaves no way on ends the same way")
 
 
 func _test_portal_forecast() -> void:

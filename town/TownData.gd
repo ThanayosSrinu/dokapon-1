@@ -4,9 +4,9 @@ extends RefCounted
 ## UI. A game lasts until the program closes, until E10 adds saving.
 ##     TownData.current().gold
 ##
-## Time stands still in town. It moves only when a trip ends and when the lord rests. A
-## bill or a loan can be paid on its due day, and the game is lost once that day has
-## passed with it unpaid (D11 in EXPEDITION_PLAN.md).
+## Time stands still in town. It moves only when a trip ends. A bill or a loan can be paid
+## on its due day, and the game is lost once that day has passed with it unpaid (D11 in
+## EXPEDITION_PLAN.md), or once nobody can go and no gold can be found to hire anyone.
 
 enum Alert { NONE, WARN, ALARM }
 ## What a forecast's color means. SAFE: a whole trip fits before the due day. TIGHT: only
@@ -24,9 +24,8 @@ const BILL_FREE_MONTHS := 1
 const LOAN_SIZES: Array[int] = [100, 250, 500]
 const LOAN_INTEREST := 0.2
 const LOAN_DAYS := 28
-## Days out of work after each kind of bad ending (D2).
+## Days out of work after dying (D2). Nothing else costs days of work.
 const OUT_AFTER_DEFEAT := 7
-const OUT_AFTER_WARP := 4
 ## Warnings: how many days before a due day each step starts.
 const WARN_DAYS := 7
 const ALARM_DAYS := 3
@@ -81,17 +80,19 @@ static func start_new() -> void:
 	_current = TownData.new()
 
 
-## The building a player should go to next (rule U6), or "rest" if the only thing left
-## to do is wait for someone to heal.
+## The building a player should go to next (rule U6). With nobody able to go, that is the
+## Tavern, or the Bank for the gold to hire someone. Time never passes by itself.
 func next_step() -> String:
 	if alert() != Alert.NONE:
 		return "bank"
-	if roster.is_empty():
-		return "tavern" if _cheapest_fee() <= gold else "bank"
-	return "portal" if going != null else "rest"
+	if going != null:
+		return "portal"
+	return "tavern" if cheapest_fee() <= gold else "bank"
 
 
-func _cheapest_fee() -> int:
+## What the cheapest adventurer asks. Anyone on the roster can be dismissed and hired back
+## for their fee, so this is the price of having someone who can go.
+func cheapest_fee() -> int:
 	return Database.adventurers_by_fee()[0].fee
 
 
@@ -165,27 +166,57 @@ func _pick_going() -> void:
 func send_problem() -> String:
 	if roster.is_empty():
 		return "Hire someone first"
-	return "" if going != null else "Everyone is resting"
+	return "" if going != null else "Nobody is ready"
 
 
-## The fewest days until someone can work, or 0 if someone can now or nobody is on the books.
-func days_until_ready() -> int:
-	if roster.is_empty() or going != null:
-		return 0
-	var least: int = roster[0].days_out(day)
-	for one in roster:
-		least = mini(least, one.days_out(day))
-	return least
+## What selling everything the town owns would raise. The town owns nothing it can sell
+## until the Shop's stock in E8.6, which must add it here.
+func goods_worth() -> int:
+	return 0
+
+
+# The most gold that could be raised from `cash`, with the biggest loan taken. A loan in
+# the way counts only if it can be repaid first.
+func _most_gold(cash: int) -> int:
+	var biggest: int = LOAN_SIZES[-1]
+	if loan_owed == 0:
+		return cash + biggest
+	return maxi(cash, cash - loan_owed + biggest) if cash >= loan_owed else cash
+
+
+func _out_of_money(cash: int) -> bool:
+	return _most_gold(cash + goods_worth()) < cheapest_fee()
+
+
+## True when nobody can go and all that could be borrowed and sold can't hire anyone. No
+## time passes in town, so nothing would ever change: the town is lost.
+func stranded() -> bool:
+	return going == null and _out_of_money(gold)
+
+
+## True if letting `person` go would leave the town stranded.
+func dismiss_strands(person: Adventurer) -> bool:
+	var others := ready_people()
+	others.erase(person)
+	return others.is_empty() and _out_of_money(gold)
+
+
+## True if paying the bill now would leave the town stranded.
+func bill_strands() -> bool:
+	return going == null and _out_of_money(gold - bill_amount())
+
+
+## True when nobody can go and there isn't the gold to hire anyone yet.
+func short_to_hire() -> bool:
+	return going == null and gold < cheapest_fee()
+
+
+## True once the town can't go on, for whatever reason.
+func lost() -> bool:
+	return stranded() or not overdue().is_empty()
 
 
 # --- Time -------------------------------------------------------------------
-
-## Passes `days` days on purpose, so that the hurt can heal.
-func rest(days: int) -> void:
-	day += days
-	remember("Rested for %s." % days_words(days))
-	_pick_going()
-
 
 ## Takes in what `trip` brought home. Call this once, when the trip is over.
 func bring_home(trip: Expedition) -> void:
@@ -197,9 +228,10 @@ func bring_home(trip: Expedition) -> void:
 		one.trips_home += 1
 		one.gold_home += trip.gold_home()
 		remember("%s came home with %d gold." % [trip.person.display_name, trip.gold_home()])
+	elif trip.ending == Expedition.Ending.WARPED:
+		remember("%s warped home, with nothing." % trip.person.display_name)
 	else:
-		var warped := trip.ending == Expedition.Ending.WARPED
-		one.ready_on = day + (OUT_AFTER_WARP if warped else OUT_AFTER_DEFEAT)
+		one.ready_on = day + OUT_AFTER_DEFEAT
 		remember("%s came back hurt, with nothing." % trip.person.display_name)
 	_pick_going()
 
@@ -358,6 +390,8 @@ func final_story(lines: int) -> Array[Dictionary]:
 	if not debt.is_empty():
 		var words := "The %s of %d gold was not paid." % [debt["what"], debt["amount"]]
 		story.append({"day": debt["due"], "text": words})
+	elif stranded():
+		story.append({"day": day, "text": "Nobody could work, and no gold could be found to hire anyone."})
 	return story
 
 

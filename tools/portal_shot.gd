@@ -71,8 +71,10 @@ func _ready() -> void:
 	island.leave_button.pressed.emit()
 	await _real_settle(0.9)
 	await _save(folder + "/warp_line.png")
-	await _real_settle(1.0)
-	await _save(folder + "/warp_fade.png")
+	await _real_settle(1.55)
+	await _save(folder + "/warp_beam.png")
+	await _real_settle(0.3)
+	await _save(folder + "/warp_up.png")
 	while island.report == null:
 		await get_tree().process_frame
 	await _real_settle(0.5)

@@ -255,17 +255,10 @@ func _test_arrival() -> void:
 	_expect(back_home is TownScreen, "leaving goes back to town")
 	var town_now := TownData.current()
 	var one := town_now.member(town_now.roster[0].person)
-	_expect(one.days_out(town_now.day) == TownData.OUT_AFTER_WARP, "the Warp Stone costs them days of work")
-	_expect(town_now.send_problem() != "", "so nobody can be sent")
-	_expect(_focused() == back_home.rest_button, "Rest has focus while they heal")
-	_expect(back_home.arrow.target == back_home.rest_button, "and the arrow points at it")
-	_expect(back_home.waiting == null, "the adventurer is not at the Portal")
-
-
-## Lets them heal after a warp, and comes back to a town where someone can go.
-func _heal() -> void:
-	TownData.current().rest(TownData.OUT_AFTER_WARP)
-	await _open(TOWN)
+	_expect(one.days_out(town_now.day) == 0, "the Warp Stone costs them no days of work")
+	_expect(town_now.send_problem() == "", "so they can be sent again")
+	_expect(back_home.arrow.target == back_home.building("portal"), "and the arrow points at the Portal")
+	_expect(back_home.waiting != null, "where the adventurer waits")
 
 
 ## Uses the Warp Stone with Esc, Down and Enter, then leaves the report.
@@ -301,7 +294,6 @@ func _test_path_with_keys() -> void:
 		await _until_on_island()
 		await _leave_with_keys()
 		_expect(get_tree().current_scene is TownScreen, "keys: the island leads home, trip %d" % trip)
-		await _heal()
 
 
 func _test_path_with_controller() -> void:
@@ -331,7 +323,6 @@ func _test_path_with_controller() -> void:
 		await _pad(JOY_BUTTON_A)
 		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "pad: the island leads home, trip %d" % trip)
-		await _heal()
 
 
 func _test_path_with_mouse() -> void:
@@ -364,7 +355,6 @@ func _test_path_with_mouse() -> void:
 		await _click(island.back)
 		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "mouse: the island leads home, trip %d" % trip)
-		await _heal()
 		await get_tree().create_timer(Screens.WIPE_SECONDS).timeout
 	TownData.start_new()
 

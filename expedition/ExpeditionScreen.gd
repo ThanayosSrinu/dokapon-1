@@ -64,7 +64,7 @@ const LEAVE_HEADING := "Abandon the trip?"
 const LEAVE_TEXT := "Abandon the trip"
 const LEAVE_WORDS := "The Warp Stone saves %s's life and nothing else. The trip fails, and only walking back to the Portal brings anything home."
 const LEAVE_COST := "You will lose %s."
-const WARP_LINE := "I failed you... I'm sorry."
+const WARP_LINE := "Warp Stone, take me home!"
 const WARP_CAMERA_SECONDS := 0.4
 const WARP_LOSS_DELAY := 0.5
 const WARP_LINE_SECONDS := 1.4
@@ -286,9 +286,11 @@ func _close_trip() -> void:
 	if trip.ending == Expedition.Ending.BEATEN:
 		hud.show_beaten()
 	_clear_for_ending()
-	_put_hero_on_board()
-	Sound.play("magic" if trip.ending == Expedition.Ending.HOME else "whoosh")
-	await hero.dissolve(0.0, 1.0, DISSOLVE_SECONDS, true)
+	# The warp has already taken them.
+	if trip.ending != Expedition.Ending.WARPED:
+		_put_hero_on_board()
+		Sound.play("magic" if trip.ending == Expedition.Ending.HOME else "whoosh")
+		await hero.dissolve(0.0, 1.0, DISSOLVE_SECONDS, true)
 	var town := TownData.current()
 	var gold_before := town.gold
 	town.bring_home(trip)
@@ -296,7 +298,10 @@ func _close_trip() -> void:
 	var out: int = town.member(trip.person).days_out(town.day)
 	if out > 0:
 		report.story.append(OUT_WORDS % [trip.person.display_name, TownData.days_words(out)])
-	Sound.play("defeat" if report.failed else "fanfare")
+	if report.died:
+		Sound.play("defeat")
+	elif not report.failed:
+		Sound.play("fanfare")
 	_show_report(town, gold_before)
 
 
@@ -322,7 +327,7 @@ func _put_hero_on_board() -> void:
 func _show_report(town: TownData, gold_before: int) -> void:
 	hud.hide()
 	news.hide()
-	_dim.color = DEFEAT_DIM if report.failed else DIM
+	_dim.color = DEFEAT_DIM if report.died else DIM
 	_dim.show()
 	report_card = TripReportCard.new(trip.person, report)
 	_centered(report_card)
@@ -510,7 +515,7 @@ func _set_time(speed: float) -> void:
 
 func _on_back() -> void:
 	if report != null:
-		Screens.go(GAME_OVER if not TownData.current().overdue().is_empty() else TOWN)
+		Screens.go(GAME_OVER if TownData.current().lost() else TOWN)
 	elif orders.visible:
 		_close_orders()
 	elif leave_panel.visible:
@@ -538,7 +543,8 @@ func _close_leave_panel() -> void:
 
 
 # Time stays stopped from the question to the report, so that whatever was under way,
-# a walk or a fight, never finishes.
+# a walk or a fight, never finishes. Nobody dies here: no red, and they stay whole until
+# the light takes them.
 func _warp_home() -> void:
 	# They may have just reached the Portal, or fallen. Then it is too late to give up.
 	if trip.is_over():
@@ -552,30 +558,21 @@ func _warp_home() -> void:
 	Sound.music("")
 	_clear_for_ending()
 	_put_hero_on_board()
-	_fade_to_defeat()
+	_dim.hide()
 	camera.focus_on(hero.global_position, WARP_CAMERA_SECONDS)
 	await _real_pause(WARP_CAMERA_SECONDS)
 	var head := get_viewport().get_canvas_transform() * (hero.global_position + HEAD)
-	# Above the red, so the last words can be read.
-	_layer.move_child(bubble, -1)
 	bubble.say(WARP_LINE, head, get_viewport_rect())
-	Sound.play("trap")
-	camera.shake()
+	Sound.play("magic")
 	await _real_pause(WARP_LOSS_DELAY)
 	if hud.gold.amount > 0 or not trip.player.inventory.is_empty():
 		Sound.play("coin_loss")
 	hud.gold.set_amount(0)
 	await _real_pause(WARP_LINE_SECONDS)
 	bubble.hide()
+	Sound.play("portal_flash")
+	await WarpBeam.take(hero)
 	await _close_trip()
-
-
-# Bleeds the colour out of the island.
-func _fade_to_defeat() -> void:
-	_dim.color = Color(DEFEAT_DIM, 0.0)
-	_dim.show()
-	var tween := create_tween().set_ignore_time_scale(true)
-	tween.tween_property(_dim, "color", DEFEAT_DIM, WARP_CAMERA_SECONDS)
 
 
 func _real_pause(seconds: float) -> void:

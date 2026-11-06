@@ -24,6 +24,8 @@ var gold_home := 0
 var gold_lost := 0
 ## True for any trip that didn't reach the Portal.
 var failed := false
+## True if they died. An Emergency Warp fails the trip, but nobody dies.
+var died := false
 ## What a failed trip cost, in a line, or "" if it cost nothing.
 var loss := ""
 
@@ -38,6 +40,7 @@ func _init(trip: Expedition) -> void:
 	gold_home = trip.gold_home()
 	gold_lost = trip.player.gold - gold_home
 	failed = trip.ending != Expedition.Ending.HOME
+	died = failed and trip.ending != Expedition.Ending.WARPED
 	if failed:
 		var what := TripReport.lost_words(gold_lost, trip.player.inventory.size())
 		loss = "Lost: " + what if what != "" else ""
@@ -108,7 +111,7 @@ func _how_it_ended(trip: Expedition, who: String) -> String:
 		Expedition.Ending.WARPED:
 			if days == 0:
 				return "You gave up on them before the first day began."
-			return "You gave up on day %d, and the Warp Stone dragged them back with nothing." % days
+			return "You gave up on day %d, and the Warp Stone took them home safe, with nothing." % days
 	return "%s is still out there." % who
 
 

@@ -132,7 +132,7 @@ func _open_trip(seed_value: int, speed := 1.0, recall_day := RECALL_DAY) -> Expe
 	# Whoever a test sends is fit, whatever the last trip did to them.
 	var town := TownData.current()
 	town.member(town.roster[0].person).ready_on = 0
-	town.rest(0)
+	town._pick_going()
 	await Screens.go(SCREEN)
 	await _wait()
 	return get_tree().current_scene
@@ -311,7 +311,7 @@ func _test_leaving() -> void:
 	_expect(screen.trip.day == day, "the stopped day never goes on")
 	_expect(screen.report.failed, "and it is a failed trip")
 	_expect(screen.report.title.contains("abandoned"), "the report says what happened")
-	_expect(screen.report_card.title.has_theme_color_override("font_color"), "in red")
+	_expect(not screen.report_card.title.has_theme_color_override("font_color"), "not in red, because nobody died")
 	_expect(screen.back.text == "Back to Town", "and leads home")
 	_expect(screen.back.kind != KitButton.Kind.PRIMARY, "with no golden button")
 	_expect(screen.arrow == null, "and no arrow")
@@ -336,6 +336,10 @@ func _test_warp_during_a_fight() -> void:
 	_expect(screen.trip.ending == Expedition.Ending.WARPED, "and the trip ends there")
 	_expect(Sound.current_tune() == "", "and the music stops")
 	_expect(screen.hud.gold.amount == 0, "and the gold is gone")
+	_expect(not screen.report.died, "nobody died")
+	_expect(screen._dim.color == ExpeditionScreen.DIM, "so the screen doesn't turn red")
+	_expect(not screen.hero.visible and screen.hero.material == null, "and they left whole, not in sparks")
+	_expect(TownData.current().member(screen.trip.person).is_ready(TownData.current().day), "and they can work at once")
 	await _back_to_town()
 
 

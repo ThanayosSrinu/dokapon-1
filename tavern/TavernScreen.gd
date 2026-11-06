@@ -7,6 +7,7 @@ extends Control
 enum Tab { RECRUIT, ROSTER }
 
 const TOWN := "res://town/TownScreen.tscn"
+const GAME_OVER := "res://town/GameOverScreen.tscn"
 ## The part of the window that a 1280 by 720 layout uses. A larger window centers it.
 const STAGE := Vector2(1280, 720)
 const GUEST_FEET_Y := 440.0
@@ -28,8 +29,14 @@ const BAR_MARGIN := 24.0
 const ASK := "Who will you hire?"
 const FULL := "Your roster is full"
 const OURS := "Your people, %d of %d"
+## The headings when nobody on the roster can go.
+const NOBODY_READY := "Nobody can go. Hire someone new"
+const NOBODY_READY_FULL := "Nobody can go. Dismiss someone"
+## What someone who can't work says.
+const DOWN_LINE := "Ugh... I need %s more."
 const DISMISS_HEADING := "Dismiss %s?"
 const DISMISS_WORDS := "They leave your roster, and their wage of %d gold comes off the next bill. The joining fee is not paid back."
+const DISMISS_LOST := "Nobody else could go, and you could not hire anyone. It is GAME OVER."
 
 var back: KitBackButton
 var card: TavernCard
@@ -53,6 +60,7 @@ var _people: Control
 var _leaving := false
 var _dim: ColorRect
 var _dismiss_words: Label
+var _dismiss_lost: Label
 
 
 func _ready() -> void:
@@ -132,16 +140,19 @@ func _fill_recruits(town: TownData) -> void:
 
 func _fill_roster(town: TownData) -> void:
 	for index in town.roster.size():
-		_add_guest(town.roster[index].person, index)
+		var one := _add_guest(town.roster[index].person, index)
+		if not town.roster[index].is_ready(town.day):
+			one.lie_down()
 
 
-func _add_guest(person: Adventurer, place: int) -> void:
+func _add_guest(person: Adventurer, place: int) -> TavernGuest:
 	var one := TavernGuest.new(person)
 	one.position = Vector2(GUEST_X[place], GUEST_FEET_Y) - TavernGuest.FEET
 	one.focus_entered.connect(_choose.bind(one))
 	one.pressed.connect(_on_guest_pressed)
 	_people.add_child(one)
 	guests.append(one)
+	return one
 
 
 func _refresh_tabs(town: TownData) -> void:
@@ -220,6 +231,10 @@ func _build_dismiss_panel() -> void:
 	_dismiss_words = Kit.text("", DISMISS_WIDTH - 32.0, &"PaperLabel")
 	_dismiss_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dismiss_panel.body.add_child(_dismiss_words)
+	_dismiss_lost = Kit.text(DISMISS_LOST, DISMISS_WIDTH - 32.0, &"PaperLabel")
+	_dismiss_lost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dismiss_lost.add_theme_color_override("font_color", Kit.BLOOD)
+	dismiss_panel.body.add_child(_dismiss_lost)
 	keep_button = KitButton.new()
 	keep_button.pressed.connect(_close_dismiss)
 	dismiss_panel.body.add_child(keep_button)
@@ -297,9 +312,16 @@ func _choose(one: TavernGuest) -> void:
 		card.show_recruit(one.adventurer)
 	else:
 		card.show_member(TownData.current().member(one.adventurer), TownData.current().day)
-	_say(one, one.next_line())
+	_say(one, _line_of(one))
 	_aim_at_chosen()
 	_refresh_hire()
+
+
+func _line_of(one: TavernGuest) -> String:
+	if not one.is_down():
+		return one.next_line()
+	var town := TownData.current()
+	return DOWN_LINE % TownData.days_words(town.member(one.adventurer).days_out(town.day))
 
 
 func _refresh_hire() -> void:
@@ -312,7 +334,7 @@ func _refresh_hire() -> void:
 		hire.icon = null
 		hire.text = "Dismiss %s" % person.display_name
 		hire.block("")
-		_point_at(back, KitArrow.Side.RIGHT)
+		_point_on_roster(town)
 		return
 	hire.kind = KitButton.Kind.PRIMARY
 	hire.danger = false
@@ -327,12 +349,24 @@ func _refresh_hire() -> void:
 	_point_at(null if hire.disabled else hire, KitArrow.Side.LEFT)
 
 
+# With nobody able to go, the way forward is a new face, or a free place for one.
+func _point_on_roster(town: TownData) -> void:
+	if town.going != null:
+		_point_at(back, KitArrow.Side.RIGHT)
+	elif town.roster.size() >= TownData.ROSTER_ROOM:
+		_point_at(card.hire, KitArrow.Side.LEFT)
+	else:
+		_point_at(recruit_tab, KitArrow.Side.LEFT)
+
+
 func _say(one: TavernGuest, words: String) -> void:
 	bubble.say(words, one.head(), Rect2(ROOM_AREA.position + _stage.position, ROOM_AREA.size))
 
 
 func _refresh_heading(town: TownData) -> void:
-	if tab == Tab.ROSTER:
+	if town.going == null and not town.roster.is_empty():
+		heading.text = NOBODY_READY_FULL if town.roster.size() >= TownData.ROSTER_ROOM else NOBODY_READY
+	elif tab == Tab.ROSTER:
 		heading.text = OURS % [town.roster.size(), TownData.ROSTER_ROOM]
 	else:
 		heading.text = FULL if town.roster.size() >= TownData.ROSTER_ROOM else ASK
@@ -359,6 +393,7 @@ func _open_dismiss() -> void:
 	var person := chosen.adventurer
 	dismiss_panel.title.text = DISMISS_HEADING % person.display_name
 	_dismiss_words.text = DISMISS_WORDS % person.wage
+	_dismiss_lost.visible = TownData.current().dismiss_strands(person)
 	keep_button.text = "Keep %s" % person.display_name
 	dismiss_button.text = "Dismiss %s" % person.display_name
 	_dim.show()
@@ -379,7 +414,11 @@ func _on_dismiss() -> void:
 	dismiss_panel.hide()
 	_dim.hide()
 	bubble.hide()
-	_show_tab(Tab.RECRUIT if town.roster.is_empty() else Tab.ROSTER)
+	if town.stranded():
+		_leaving = true
+		Screens.go(GAME_OVER)
+		return
+	_show_tab(Tab.RECRUIT if town.going == null else Tab.ROSTER)
 
 
 func _on_hire() -> void:

@@ -6,7 +6,7 @@ const WIDTH := 560.0
 const PORTRAIT_SIZE := Vector2(112, 112)
 const TEXT_WIDTH := 416.0
 const STAT_GAP := 12
-## Paper and portrait lose their warmth when a trip fails.
+## Paper and portrait lose their warmth when they die.
 const FAILED_PAPER := Color(0.8, 0.72, 0.72)
 const FAILED_PORTRAIT := Color(0.55, 0.5, 0.55)
 
@@ -26,10 +26,11 @@ func _init(person: Adventurer, report: TripReport) -> void:
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	top.add_child(portrait)
 	top.add_child(Kit.text(" ".join(report.story), TEXT_WIDTH, &"PaperLabel"))
-	if report.failed:
+	if report.died:
 		self_modulate = FAILED_PAPER
 		title.add_theme_color_override("font_color", Kit.BLOOD)
 		portrait.modulate = FAILED_PORTRAIT
+	if report.failed:
 		if report.loss != "":
 			body.add_child(_loss(report.loss))
 	elif report.best != "":

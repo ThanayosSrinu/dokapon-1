@@ -16,12 +16,16 @@ const WALK_FRAMES: Array[int] = [2, 0, 3, 1]
 ## A greeting: the swing from the character sheets, or a spell for a caster.
 const SWING_FRAMES: Array[int] = [5, 6, 7, 6, 0]
 const CAST_FRAMES: Array[int] = [13, 14, 15, 14, 0]
+## Lying flat on the floor, slowly breathing.
+const DOWN_FRAMES: Array[int] = [22, 23]
+const DOWN_SECONDS := 0.9
 const DISSOLVE: Shader = preload("res://ui/kit/dissolve.gdshader")
 
 var _clock := randf()
 var _acting: Array[int] = []
 var _act_step := 0
 var _walking := false
+var _down := false
 
 
 func _init(sheet: Texture2D = null, facing := FACING_DOWN) -> void:
@@ -36,7 +40,9 @@ func _init(sheet: Texture2D = null, facing := FACING_DOWN) -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if not _acting.is_empty():
+	if _down:
+		frame_coords.x = DOWN_FRAMES[int(_clock / DOWN_SECONDS) % DOWN_FRAMES.size()]
+	elif not _acting.is_empty():
 		_act()
 	elif _walking:
 		frame_coords.x = WALK_FRAMES[int(_clock / STEP_SECONDS) % WALK_FRAMES.size()]
@@ -49,6 +55,12 @@ func act(frames: Array[int]) -> void:
 	_acting = frames
 	_act_step = 0
 	_clock = 0.0
+
+
+## Lies down, for someone who can't work.
+func lie_down() -> void:
+	_down = true
+	face(FACING_RIGHT)
 
 
 func face(row: int) -> void:

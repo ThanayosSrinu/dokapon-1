@@ -4,12 +4,19 @@ extends Control
 ## panel on the left is the loan. The rules are in TownData: this only asks and redraws.
 
 const TOWN := "res://town/TownScreen.tscn"
+const GAME_OVER := "res://town/GameOverScreen.tscn"
 const STAGE := Vector2(1280, 720)
 const CARD_LEFT := 816.0
 const CARD_TOP := 92.0
 const CARD_WIDTH := 440.0
 const LOAN_SPOT := Vector2(112, 300)
 const LOAN_WIDTH := 584.0
+## The three tiles fill the panel's inside, with the date the widest.
+const TERM_SUM_WIDTH := 170.0
+const TERM_DATE_WIDTH := 196.0
+const TERM_GAP := 8
+const LOSS_LATER := "If it is not all repaid by then, it is GAME OVER."
+const LOSS_TODAY := "If it is not all repaid today, it is GAME OVER."
 ## Speech bubbles stay inside the room's part of the stage.
 const ROOM_AREA := Rect2(0, 0, 808, 720)
 const BAR_MARGIN := 24.0
@@ -19,6 +26,8 @@ const SAY_SHORT := "You are %d gold short, my lord. A loan could help."
 const SAY_PAID := "Paid in full. Thank you, my lord."
 const SAY_LOAN := "The gold is yours. Remember the day, my lord."
 const SAY_REPAID := "The loan is cleared."
+const SAY_NOBODY := "Nobody can work, and you can't hire yet. A loan could help, my lord."
+const BILL_LOST := "Paying leaves no way to hire anyone, and it is GAME OVER."
 
 var back: KitBackButton
 var pay: KitButton
@@ -37,8 +46,14 @@ var _stage: Node2D
 var _lines: VBoxContainer
 var _bill_title: Label
 var _bill_when: Label
-var _loan_words: Label
+var _bill_lost: Label
+var _loan_title: Label
 var _size_row: HBoxContainer
+## The loan's facts in reading order: gold now or owed, what is repaid, and by when.
+var _term_first: LoanTerm
+var _term_repay: LoanTerm
+var _term_day: LoanTerm
+var _loss: Label
 
 
 func _ready() -> void:
@@ -92,6 +107,10 @@ func _build_card() -> Control:
 	_lines = VBoxContainer.new()
 	_lines.add_theme_constant_override("separation", 8)
 	column.add_child(_lines)
+	_bill_lost = Kit.text(BILL_LOST, CARD_WIDTH - 32.0, &"PaperLabel")
+	_bill_lost.add_theme_color_override("font_color", Kit.BLOOD)
+	_bill_lost.hide()
+	column.add_child(_bill_lost)
 	pay = KitButton.new()
 	pay.kind = KitButton.Kind.PRIMARY
 	pay.press_sound = "coin"
@@ -108,7 +127,8 @@ func _build_loan() -> Control:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
-	column.add_child(Kit.text("A loan", 0.0, &"PaperHeading"))
+	_loan_title = Kit.text("", 0.0, &"PaperHeading")
+	column.add_child(_loan_title)
 	_size_row = HBoxContainer.new()
 	_size_row.add_theme_constant_override("separation", 8)
 	column.add_child(_size_row)
@@ -120,13 +140,27 @@ func _build_loan() -> Control:
 		button.pressed.connect(_choose_loan.bind(amount))
 		_size_row.add_child(button)
 		sizes.append(button)
-	_loan_words = Kit.text("", LOAN_WIDTH - 32.0, &"PaperLabel")
-	column.add_child(_loan_words)
+	column.add_child(_build_terms())
+	_loss = Kit.text("", LOAN_WIDTH - 36.0, &"PaperLabel")
+	_loss.add_theme_color_override("font_color", Kit.BLOOD)
+	column.add_child(_loss)
 	loan_button = KitButton.new()
 	loan_button.press_sound = "coin"
 	loan_button.pressed.connect(_on_loan)
 	column.add_child(loan_button)
 	return panel
+
+
+func _build_terms() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", TERM_GAP)
+	_term_first = LoanTerm.new(TERM_SUM_WIDTH, "")
+	row.add_child(_term_first)
+	_term_repay = LoanTerm.new(TERM_SUM_WIDTH, "")
+	row.add_child(_term_repay)
+	_term_day = LoanTerm.new(TERM_DATE_WIDTH, "Repay by")
+	row.add_child(_term_day)
+	return row
 
 
 func _build_top_bar(town: TownData) -> void:
@@ -172,10 +206,12 @@ func _link_focus() -> void:
 	back.focus_neighbor_bottom = back.get_path_to(pay)
 
 
-# With a bill it can't pay, the Bank starts on the smallest loan that covers it.
+# Short of a bill or a new hire, the Bank starts on the smallest loan that covers it.
 func _suggest_loan(town: TownData) -> void:
-	var short := town.bill_amount() - town.gold
-	if not town.bill_open() or short <= 0:
+	var short := town.bill_amount() - town.gold if town.bill_open() else 0
+	if town.short_to_hire():
+		short = maxi(short, town.cheapest_fee() - town.gold)
+	if short <= 0:
 		return
 	for amount in TownData.LOAN_SIZES:
 		if amount >= short:
@@ -195,6 +231,8 @@ func _show_bill(town: TownData) -> void:
 	for child in _lines.get_children():
 		child.queue_free()
 	var problem := town.pay_problem()
+	_bill_lost.visible = problem == "" and town.bill_strands()
+	pay.danger = _bill_lost.visible
 	if not town.bill_open():
 		_bill_title.text = "Nothing to pay"
 		_bill_when.text = "The next bill comes on %s" % Calendar.date(town.bill_due() - Calendar.DAYS_IN_MONTH + 1)
@@ -232,23 +270,38 @@ func _show_loan(town: TownData) -> void:
 		sizes[index].lit = TownData.LOAN_SIZES[index] == chosen_loan
 		sizes[index].visible = not owing
 	_size_row.visible = not owing
+	_loan_title.text = "Your loan" if owing else "A loan"
 	if owing:
-		_loan_words.text = "You owe %d gold by %s. Repay it all, or it is GAME OVER." % [town.loan_owed, Calendar.date(town.loan_due)]
-		var problem := town.repay_problem()
-		loan_button.text = problem if problem != "" else "Repay %d gold" % town.loan_owed
-		loan_button.block("You have %d gold, and the loan is %d." % [town.gold, town.loan_owed] if problem != "" else "")
+		_show_debt(town)
 		return
-	var repays := TownData.loan_repays(chosen_loan)
-	_loan_words.text = "Borrow %d, repay %d by %s. It must all be repaid by then, or it is GAME OVER." % [chosen_loan, repays, Calendar.date(town.new_loan_due())]
+	_term_first.set_title("You get")
+	_term_first.show_term("+%d" % chosen_loan, Kit.HEALTH)
+	_term_repay.set_title("You repay")
+	_term_repay.show_term(str(TownData.loan_repays(chosen_loan)), Kit.DANGER)
+	_term_day.show_term(Calendar.date(town.new_loan_due()), Kit.CREAM, false, "In %s" % TownData.days_words(TownData.LOAN_DAYS))
+	_loss.text = LOSS_LATER
 	loan_button.text = "Borrow %d gold" % chosen_loan
 	loan_button.block("")
 
 
+func _show_debt(town: TownData) -> void:
+	var left := town.loan_due - town.day
+	_term_first.set_title("You owe")
+	_term_first.show_term(str(town.loan_owed), Kit.DANGER)
+	_term_repay.set_title("You have")
+	_term_repay.show_term(str(town.gold), Kit.DANGER if town.gold < town.loan_owed else Kit.HEALTH)
+	_term_day.show_term(Calendar.date(town.loan_due), Kit.CREAM, false, "Today" if left == 0 else "In %s" % TownData.days_words(left))
+	_loss.text = LOSS_TODAY if left == 0 else LOSS_LATER
+	var problem := town.repay_problem()
+	loan_button.text = problem if problem != "" else "Repay %d gold" % town.loan_owed
+	loan_button.block("You have %d gold, and the loan is %d." % [town.gold, town.loan_owed] if problem != "" else "")
+
+
 # The arrow goes to what most needs doing, or the way out.
 func _aim_arrow(town: TownData) -> void:
-	if town.pay_problem() == "":
+	if town.pay_problem() == "" and not town.bill_strands():
 		_point_at(pay, KitArrow.Side.LEFT)
-	elif town.bill_open() and town.loan_owed == 0:
+	elif (town.bill_open() or town.short_to_hire()) and town.loan_owed == 0:
 		_point_at(loan_button, KitArrow.Side.LEFT)
 	elif town.loan_owed > 0 and town.repay_problem() == "":
 		_point_at(loan_button, KitArrow.Side.LEFT)
@@ -263,6 +316,9 @@ func _point_at(target: Control, side: KitArrow.Side) -> void:
 
 
 func _greet(town: TownData) -> void:
+	if town.short_to_hire():
+		_say(SAY_NOBODY)
+		return
 	if not town.bill_open():
 		return
 	var short := town.bill_amount() - town.gold
@@ -283,6 +339,9 @@ func _on_pay() -> void:
 	var town := TownData.current()
 	if not town.pay_bill():
 		pay.deny()
+		return
+	if town.stranded():
+		Screens.go(GAME_OVER)
 		return
 	_say(SAY_PAID)
 	_refresh(town)
