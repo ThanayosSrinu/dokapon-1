@@ -16,9 +16,20 @@ extends RefCounted
 ## The way home is the Portal, and only an exact landing counts. Walking across it does
 ## nothing. A roll starts from 0, and a 0 spends the day standing still.
 ##
+## The lord can give an order at any moment with give_order(). It counts from that moment,
+## and nothing in the dice changes because of it. Nobody comes home without the Return
+## order. They warn when food runs low or a wound is bad, then go on until something stops
+## them, so timing that order is the lord's job.
+##
 ## Every random result uses GameState.rng, so a seed replays the same trip.
 
+## Says a line out loud. The same line goes in the diary as kind "say".
+signal said(line: String)
+
 enum Ending { NONE, HOME, BEATEN, STARVED, WARPED }
+## ROAM: go where the road looks best. HOME: land on the Portal. ZONE: go to order_zone,
+## then look around in it until told otherwise.
+enum Order { ROAM, HOME, ZONE }
 
 ## With no food left, this share of max HP is lost each day. This can kill, so a trip
 ## always ends, however badly the dice go.
@@ -32,6 +43,15 @@ const FIGHT_MOMENT := 1.0
 const LEVEL_MOMENT := 150
 ## A win with this share of HP gone is worth telling as a close call.
 const CLOSE_CALL := 0.7
+## After this many days lost trying to land, they say so.
+const SO_CLOSE_DAYS := 3
+
+const SAY_HOME := "Yes, my lord. Heading home."
+const SAY_ROAM := "Yes, my lord. I'll look around."
+const SAY_ZONE := "Yes, my lord. On to %s."
+const SAY_THERE := "%s at last."
+const SAY_SO_CLOSE := "The Portal is so close..."
+const SAY_CLOSE_CALL := "That was too close!"
 
 ## Who is on the trip, and their sheet for the road.
 var person: Adventurer
@@ -46,8 +66,17 @@ var ending := Ending.NONE
 var space_id := -1
 ## The space stepped off last, or -1. It only matters during a walk.
 var came_from := -1
-## True once they have turned for home. This never turns off.
-var heading_home := false
+## What the lord told them to do, or ROAM if nobody did.
+var order := Order.ROAM
+## The zone of a ZONE order, as the map lists it, or empty.
+var order_zone := {}
+## On this day they are called home before they set out, or never if it is 0. It stands in
+## for a player, so tools can replay a trip with the Return order on a known day.
+var recall_day := 0
+## The day they first stood in order_zone, or 0 if they have not.
+var zone_reached_day := 0
+## True once they have said they should come home, for food or for a wound.
+var asked_home := false
 ## A fight waiting to be played, or null.
 var fight: Battle
 ## Each thing that happened: {"day", "kind", "text"}. The report is written from this.
@@ -94,6 +123,31 @@ func is_over() -> bool:
 	return ending != Ending.NONE
 
 
+## Tells them what to do, from this moment. A trip that has ended takes no orders.
+func give_order(new_order: Order, zone_id := "") -> void:
+	if is_over():
+		return
+	order = new_order
+	order_zone = map.zone(zone_id) if new_order == Order.ZONE else {}
+	zone_reached_day = 0
+	match new_order:
+		Order.HOME:
+			note("recall", "You called %s home." % player.player_name)
+			say(SAY_HOME)
+		Order.ZONE:
+			say(SAY_ZONE % order_zone["name"])
+			_check_zone()
+		Order.ROAM:
+			say(SAY_ROAM)
+	brain.refresh()
+
+
+## Says `line` out loud.
+func say(line: String) -> void:
+	note("say", line)
+	said.emit(line)
+
+
 ## The gold that reaches the town. A defeat loses the lot (D2 in EXPEDITION_PLAN.md).
 func gold_home() -> int:
 	return player.gold if ending == Ending.HOME else 0
@@ -130,13 +184,15 @@ func play_to_end() -> void:
 func start_day() -> bool:
 	day += 1
 	GameState.day = day
+	if day == recall_day:
+		give_order(Order.HOME)
 	for item_name in CpuBrain.tidy(player):
 		note("item", "%s uses a %s." % [player.player_name, item_name])
 	_eat()
 	if is_over():
 		return false
 	brain.plan_day()
-	if heading_home:
+	if order == Order.HOME:
 		_portal_in_reach = _portal_in_reach or _can_reach_portal()
 	if _stop_at_portal():
 		return false
@@ -169,6 +225,7 @@ func walk(steps: int) -> Array[int]:
 		path.append(next)
 	player.space_id = space_id
 	furthest = maxi(furthest, depth_of(space_id))
+	_check_zone()
 	return path
 
 
@@ -234,6 +291,8 @@ func finish_fight(lines: PackedStringArray) -> void:
 func end_day() -> void:
 	if _portal_in_reach and not is_over():
 		landing_days += 1
+		if landing_days == SO_CLOSE_DAYS:
+			say(SAY_SO_CLOSE)
 
 
 ## Adds a line to the diary. The Portal took the castle's place, so older lines shared
@@ -263,9 +322,17 @@ func _eat() -> void:
 		note("end", "%s collapses from hunger." % player.player_name)
 
 
-# Ends the trip if they stand on the Portal and want to go home.
+# Marks the day they reach the zone they were sent to.
+func _check_zone() -> void:
+	if order != Order.ZONE or zone_reached_day > 0 or not order_zone["spaces"].has(space_id):
+		return
+	zone_reached_day = maxi(day, 1)
+	say(SAY_THERE % order_zone["name"])
+
+
+# Ends the trip if they stand on the Portal and were told to come home.
 func _stop_at_portal() -> bool:
-	if space_id != map.portal or not brain.wants_to_stop():
+	if space_id != map.portal or order != Order.HOME:
 		return false
 	ending = Ending.HOME
 	note("end", "%s steps through the Portal with %d gold." % [player.player_name, player.gold])
@@ -315,6 +382,7 @@ func _remember_win(monster: MonsterData, level_before: int) -> void:
 	var text := "%s beat a %s" % [player.player_name, monster.display_name]
 	if hurt > CLOSE_CALL:
 		text += " with only %d HP left" % player.hp
+		say(SAY_CLOSE_CALL)
 	if levels > 0:
 		text += " and reached level %d" % player.level
 	_remember(text + ".", worth)
@@ -351,6 +419,7 @@ func _move_to(id: int) -> void:
 	came_from = -1
 	player.space_id = id
 	furthest = maxi(furthest, depth_of(id))
+	_check_zone()
 
 
 # Puts an item in the bag, or drops the cheapest thing to fit it if that's worth doing.

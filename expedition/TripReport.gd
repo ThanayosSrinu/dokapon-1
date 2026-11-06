@@ -83,8 +83,8 @@ func _how_it_went(who: String) -> String:
 
 func _turning_home(trip: Expedition, who: String) -> String:
 	for line in trip.diary:
-		if line["kind"] == "home":
-			var words := "On day %d, %s turned for home." % [line["day"], who]
+		if line["kind"] == "recall":
+			var words := "On day %d, you called %s home." % [maxi(line["day"], 1), who]
 			if trip.ending == Expedition.Ending.HOME and trip.landing_days > LANDING_WORTH_TELLING:
 				words += " Landing on the Portal took %d extra days." % trip.landing_days
 			return words

@@ -22,7 +22,7 @@ var _types := {}
 var _links := {}
 # Vector3i(id, came_from, steps) -> the ids landings() found.
 var _landings := {}
-# Vector2i(target, die_top) -> space id -> days. See days_to().
+# "die_top: targets" -> space id -> days. See days_to_any().
 var _days := {}
 
 
@@ -74,6 +74,14 @@ func zone_of(id: int) -> String:
 	return ""
 
 
+## The zone called `id`, or an empty dictionary.
+func zone(id: String) -> Dictionary:
+	for row in zones:
+		if row["id"] == id:
+			return row
+	return {}
+
+
 ## Where someone on `id` may step next. `came_from` is the space they just left, or -1
 ## at the start of a roll. It can't be walked straight back to, unless it is the only
 ## way out. This is BoardManager.get_connected_nodes().
@@ -105,7 +113,12 @@ func landings(id: int, came_from: int, steps: int) -> Array[int]:
 ## depends on the answers of the spaces it can reach, so all of them are worked out
 ## again and again until they stop changing.
 func days_to(target: int, die_top: int) -> Dictionary:
-	var key := Vector2i(target, die_top)
+	return days_to_any([target], die_top)
+
+
+## The same as days_to(), for landing on any one of `targets`.
+func days_to_any(targets: Array[int], die_top: int) -> Dictionary:
+	var key := "%d: %s" % [die_top, targets]
 	if not _days.has(key):
 		var days := {}
 		for id: int in _types:
@@ -114,7 +127,7 @@ func days_to(target: int, die_top: int) -> Dictionary:
 		while change > DAYS_PRECISION:
 			change = 0.0
 			for id: int in _types:
-				if id != target:
+				if not targets.has(id):
 					var value := _days_from(id, days, die_top)
 					change = maxf(change, absf(value - days[id]))
 					days[id] = value

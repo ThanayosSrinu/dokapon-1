@@ -367,7 +367,10 @@ func _pad(button: JoyButton) -> void:
 
 
 func _click(button: Control) -> void:
-	var spot := button.get_global_rect().get_center()
+	await _click_at(button.get_global_rect().get_center())
+
+
+func _click_at(spot: Vector2) -> void:
 	var move := InputEventMouseMotion.new()
 	move.position = spot
 	move.global_position = spot

@@ -1,13 +1,17 @@
 extends Node
 ## Runs many expeditions with no window and prints how they went. Run from the project root:
-##   godot --headless --path . res://tools/sim_expedition.tscn -- <trips> <seed> [food] [person] [stage]
+##   godot --headless --path . res://tools/sim_expedition.tscn -- <trips> <seed> [food] [person] [stage] [lord]
 ## `food` replaces the stage's days of food, 0 keeps it. `person` is one adventurer's id
 ## or "all". `stage` is a stage id, or "old" for the old map of E5, which has no spurs and
 ## big loops. Without it every stage runs. Prints one block per adventurer on each stage,
-## then how long it all took.
+## then how long it all took. `lord` is "listens", which calls them home the day after they
+## ask, like a player paying attention. "late" waits until the food is gone, and "away"
+## never gives an order.
 
 const OLD_MAP := "res://maps/world_map.json"
 const OLD_FOOD := 21
+
+var _lord := "listens"
 
 
 func _ready() -> void:
@@ -19,6 +23,7 @@ func _ready() -> void:
 	if args.size() > 3 and args[3] != "all":
 		people.assign([args[3]])
 	var stages := _stages(args[4] if args.size() > 4 else "")
+	_lord = args[5] if args.size() > 5 else "listens"
 	var started := Time.get_ticks_msec()
 	for stage in stages:
 		var report := MapReport.new(IslandMap.open(stage.map_file))
@@ -61,7 +66,7 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 		if food > 0:
 			trip.food_left = food + person.bonus_food
 		trip_food = trip.food_left
-		trip.play_to_end()
+		_play(trip)
 		days.append(trip.day)
 		alike += _overlap(last_seen, trip.visits) if index > 0 else 0.0
 		last_seen = trip.visits
@@ -96,6 +101,22 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 	print("Map seen      %d%% per trip" % roundi(100.0 * seen_share / trips))
 	print("Like last trip %d%% of the same spaces" % roundi(100.0 * alike / maxi(trips - 1, 1)))
 	print("Deep spur end  %d%% of trips" % roundi(100.0 * deep_trips / trips))
+
+
+func _play(trip: Expedition) -> void:
+	while not trip.is_over():
+		if trip.order != Expedition.Order.HOME and _lord_calls(trip):
+			trip.give_order(Expedition.Order.HOME)
+		trip.play_day()
+
+
+func _lord_calls(trip: Expedition) -> bool:
+	match _lord:
+		"listens":
+			return trip.asked_home
+		"late":
+			return trip.food_left == 0
+	return false
 
 
 # How much two trips landed on the same spaces: 100% is the same trip, 0 shares nothing.

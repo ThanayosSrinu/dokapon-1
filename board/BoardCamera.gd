@@ -114,6 +114,11 @@ func _stop_focus() -> void:
 		_focus_tween.kill()
 
 
+## Which of ZOOM_LEVELS is in use.
+func zoom_index() -> int:
+	return _zoom_index
+
+
 ## Moves smoothly to one of ZOOM_LEVELS. Used for the view of the whole island.
 func set_zoom_index(index: int, duration := 0.6) -> void:
 	_zoom_index = clampi(index, 0, ZOOM_LEVELS.size() - 1)

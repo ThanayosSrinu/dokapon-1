@@ -20,6 +20,16 @@ const SPEED_GAP := 8
 const STRIP_FROM_BOTTOM := 12.0
 const NEWS_TOP := 24.0
 const NEWS_WIDTH := 600.0
+const ORDERS_TOP := 80.0
+const ORDERS_PANEL_TOP := 136.0
+## How far right of what matters the camera looks with the orders open, so the panel covers
+## less of it.
+const ORDERS_VIEW_SHIFT := Vector2(240, 0)
+const ORDERS_VIEW_SECONDS := 0.4
+## How long a spoken line stays up, in real time so it can be read at x3.
+const SPEECH_MS := 2200
+## What the Orders button says for each order.
+const ORDER_WORDS := {Expedition.Order.ROAM: "Explore", Expedition.Order.HOME: "Return home"}
 
 ## Waits for the light of the flash to thin out.
 const APPEAR_DELAY := 0.5
@@ -52,11 +62,16 @@ const WARP_LINE := "I failed you... I'm sorry."
 const WARP_CAMERA_SECONDS := 0.4
 const WARP_LOSS_DELAY := 0.5
 const WARP_LINE_SECONDS := 1.4
+## Diary lines the news leaves out, because the die, the fight screen, the bubble or the
+## Orders button has already shown them.
+const SHOWN_ELSEWHERE: Array[String] = ["roll", "fight", "say", "recall"]
 
 ## The speed to start at, so a player who likes ×3 keeps it from trip to trip.
 static var chosen_speed := 1.0
 ## Above 0, the seed of the next trip. For tests.
 static var next_seed := 0
+## Above 0, the day the next trip is called home. For tests.
+static var next_recall_day := 0
 
 var trip: Expedition
 var board: BoardManager
@@ -85,6 +100,12 @@ var stay_button: KitButton
 var leave_button: KitButton
 ## What giving up would cost, right now.
 var leave_cost: Label
+## Opens the orders, and says which one is in force.
+var orders_button: KitButton
+var orders: OrdersPanel
+var zone_overlay: ZoneOverlay
+## Points at the Orders button once they ask to come home.
+var orders_arrow: KitArrow
 
 var _motes: PortalMotes
 var _layer: Control
@@ -93,11 +114,19 @@ var _news_words: Label
 var _speed_row: HBoxContainer
 # The speed in use, kept while the leave panel holds time still.
 var _speed := 1.0
+# The lines waiting to be spoken.
+var _speech: Array[String] = []
+# When the line being spoken ends, in real milliseconds.
+var _speech_ends := 0
+# The camera's zoom from before the orders opened.
+var _zoom_before := 1
 
 
 func _ready() -> void:
 	var town := TownData.current()
 	trip = Expedition.new(town.hired, town.stage, next_seed)
+	trip.recall_day = next_recall_day
+	trip.said.connect(func(line: String) -> void: _speech.append(line))
 	_build_world(town)
 	_build_ui(town)
 	_set_speed(chosen_speed if chosen_speed > 0.0 else 1.0)
@@ -109,6 +138,10 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+
+
+func _process(_delta: float) -> void:
+	_update_speech()
 
 
 # --- Playing the trip -------------------------------------------------------
@@ -134,13 +167,14 @@ func _appear() -> void:
 	bubble.hide()
 	hero.hide()
 	token.show()
-	camera.follow(token)
+	_watch_token()
 
 
 func _play_day() -> void:
 	var read_from := trip.diary.size()
 	var can_move := trip.start_day()
 	hud.refresh()
+	_refresh_orders()
 	await _show_news(read_from)
 	if can_move:
 		await _walk()
@@ -149,6 +183,7 @@ func _play_day() -> void:
 		trip.land()
 		_play_landing_sound(before)
 		hud.refresh()
+		_refresh_orders()
 		await _catch_up_token()
 		await _show_news(read_from)
 		await _fight_if_needed()
@@ -161,7 +196,7 @@ func _walk() -> void:
 	var path: Array[BoardNode] = []
 	for id in trip.walk(steps):
 		path.append(board.get_board_node(id))
-	camera.follow(token)
+	_watch_token()
 	if not path.is_empty():
 		await token.walk_path(path)
 
@@ -229,6 +264,12 @@ func _close_trip() -> void:
 
 
 func _clear_for_ending() -> void:
+	_close_orders(false)
+	orders_button.hide()
+	_drop_orders_arrow()
+	zone_overlay.target_zone = ""
+	_speech.clear()
+	bubble.hide()
 	_speed_row.hide()
 	back.hide()
 	_set_news("")
@@ -283,8 +324,7 @@ func _show_news(read_from: int) -> void:
 	var lines := PackedStringArray()
 	for index in range(read_from, trip.diary.size()):
 		var line := trip.diary[index]
-		# The die and the fight screen have already shown these.
-		if line["kind"] != "roll" and line["kind"] != "fight":
+		if not SHOWN_ELSEWHERE.has(line["kind"]):
 			lines.append(line["text"])
 	_set_news(" ".join(lines))
 	await _pause(NEWS_SECONDS if not lines.is_empty() else QUIET_SECONDS)
@@ -296,6 +336,101 @@ func _set_news(words: String) -> void:
 	news.visible = words != ""
 	if news.visible and not had_news:
 		news.play_open()
+
+
+# --- Speech -----------------------------------------------------------------
+
+# One line at a time, over their head, and none on top of a fight.
+func _update_speech() -> void:
+	if not token.visible or report != null:
+		return
+	if battle_screen.visible:
+		bubble.hide()
+		return
+	var head := get_viewport().get_canvas_transform() * (token.global_position + HEAD)
+	if bubble.visible and Time.get_ticks_msec() >= _speech_ends:
+		bubble.hide()
+	if bubble.visible:
+		bubble.keep_above(head, get_viewport_rect())
+	elif not _speech.is_empty() and not die.visible:
+		bubble.say(_speech.pop_front(), head, get_viewport_rect())
+		_speech_ends = Time.get_ticks_msec() + SPEECH_MS
+
+
+# --- Orders -----------------------------------------------------------------
+
+func _toggle_orders() -> void:
+	if orders.visible:
+		_close_orders()
+	else:
+		_open_orders()
+
+
+# The view pulls back with the zones on it. The trip keeps running.
+func _open_orders() -> void:
+	orders.refresh()
+	orders.show()
+	orders.play_open()
+	zone_overlay.open = true
+	_zoom_before = camera.zoom_index()
+	camera.set_zoom_index(0, ORDERS_VIEW_SECONDS)
+	camera.focus_on(token.global_position + ORDERS_VIEW_SHIFT, ORDERS_VIEW_SECONDS)
+	orders.home_button.grab_focus()
+	_refresh_orders()
+
+
+func _close_orders(take_focus := true) -> void:
+	if not orders.visible:
+		return
+	orders.hide()
+	zone_overlay.open = false
+	camera.set_zoom_index(_zoom_before, ORDERS_VIEW_SECONDS)
+	camera.follow(token)
+	if take_focus:
+		orders_button.grab_focus()
+	_refresh_orders()
+
+
+# Lights a zone, and brings it into view if it was pointed at from the panel.
+func _point_at_zone(id: String) -> void:
+	zone_overlay.lit_zone = id
+	orders.island.lit_zone = id
+	if id != "":
+		camera.focus_on(zone_overlay.middle_of(id) + ORDERS_VIEW_SHIFT, ORDERS_VIEW_SECONDS)
+
+
+func _give_order(order: Expedition.Order, zone_id: String) -> void:
+	trip.give_order(order, zone_id)
+	hud.refresh()
+	_close_orders()
+	_refresh_orders()
+
+
+func _refresh_orders() -> void:
+	var zone_order := trip.order == Expedition.Order.ZONE
+	var words: String = trip.order_zone["name"] if zone_order else ORDER_WORDS[trip.order]
+	orders_button.text = "Orders: %s" % words
+	zone_overlay.target_zone = trip.order_zone["id"] if zone_order else ""
+	if orders.visible:
+		orders.refresh()
+	var waiting := trip.asked_home and trip.order != Expedition.Order.HOME and not orders.visible
+	if waiting and orders_arrow == null:
+		orders_arrow = KitArrow.new(orders_button, KitArrow.Side.LEFT)
+		_layer.get_parent().add_child(orders_arrow)
+	elif not waiting:
+		_drop_orders_arrow()
+
+
+func _drop_orders_arrow() -> void:
+	if orders_arrow != null:
+		orders_arrow.queue_free()
+		orders_arrow = null
+
+
+# The camera goes back to them, unless the whole island is being looked at.
+func _watch_token() -> void:
+	if not orders.visible:
+		camera.follow(token)
 
 
 # --- Speed ------------------------------------------------------------------
@@ -318,6 +453,8 @@ func _set_time(speed: float) -> void:
 func _on_back() -> void:
 	if report != null:
 		Screens.go(TOWN)
+	elif orders.visible:
+		_close_orders()
 	elif leave_panel.visible:
 		_close_leave_panel()
 	else:
@@ -396,6 +533,12 @@ func _build_world(town: TownData) -> void:
 	board.print_on_ready = false
 	board.clickable = false
 	add_child(board)
+	zone_overlay = ZoneOverlay.new(trip.map, board)
+	zone_overlay.zone_clicked.connect(func(id: String) -> void: _give_order(Expedition.Order.ZONE, id))
+	zone_overlay.zone_pointed.connect(func(id: String) -> void:
+			zone_overlay.lit_zone = id
+			orders.island.lit_zone = id)
+	add_child(zone_overlay)
 	var start := board.get_starting_node().global_position
 	camera = BoardCamera.new()
 	camera.world_limit = board.get_world_rect()
@@ -444,6 +587,7 @@ func _build_ui(town: TownData) -> void:
 	_build_strip(town)
 	_build_news()
 	_build_speed_row()
+	_build_orders()
 	_build_cover()
 	_build_leave_panel()
 	back = KitBackButton.new()
@@ -510,6 +654,30 @@ func _build_speed_row() -> void:
 	_speed_row.offset_right -= SPEED_FROM_RIGHT
 	_speed_row.offset_top += SPEED_TOP
 	_speed_row.offset_bottom += SPEED_TOP
+
+
+func _build_orders() -> void:
+	orders_button = KitButton.new()
+	orders_button.kind = KitButton.Kind.SMALL
+	orders_button.icon = Kit.icon("book")
+	orders_button.text = "Orders: %s" % ORDER_WORDS[trip.order]
+	orders_button.pressed.connect(_toggle_orders)
+	_at_top_right(orders_button, ORDERS_TOP)
+	orders = OrdersPanel.new(trip, zone_overlay)
+	orders.chosen.connect(_give_order)
+	orders.zone_pointed.connect(_point_at_zone)
+	_at_top_right(orders, ORDERS_PANEL_TOP)
+	orders.hide()
+
+
+func _at_top_right(part: Control, top: float) -> void:
+	_layer.add_child(part)
+	part.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	part.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
+	part.offset_left -= SPEED_FROM_RIGHT
+	part.offset_right -= SPEED_FROM_RIGHT
+	part.offset_top += top
+	part.offset_bottom += top
 
 
 # Darkens the island under the report and the leave panel, and keeps clicks off the rest.
@@ -582,11 +750,15 @@ func _link_focus() -> void:
 		part.focus_neighbor_top = part.get_path_to(part)
 		part.focus_neighbor_left = part.get_path_to(top[maxi(index - 1, 0)])
 		part.focus_neighbor_right = part.get_path_to(top[mini(index + 1, top.size() - 1)])
-		part.focus_neighbor_bottom = part.get_path_to(hud.hp_bar)
+		part.focus_neighbor_bottom = part.get_path_to(orders_button)
+	orders_button.focus_neighbor_top = orders_button.get_path_to(speed_buttons[1])
+	orders_button.focus_neighbor_bottom = orders_button.get_path_to(hud.hp_bar)
+	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
+	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
 	var strip: Array[Control] = [hud.hp_bar, hud.food_bar, hud.bag, hud.gold]
 	for index in strip.size():
 		var part := strip[index]
-		part.focus_neighbor_top = part.get_path_to(speed_buttons[1])
+		part.focus_neighbor_top = part.get_path_to(orders_button)
 		part.focus_neighbor_bottom = part.get_path_to(part)
 		part.focus_neighbor_left = part.get_path_to(strip[maxi(index - 1, 0)])
 		part.focus_neighbor_right = part.get_path_to(strip[mini(index + 1, strip.size() - 1)])

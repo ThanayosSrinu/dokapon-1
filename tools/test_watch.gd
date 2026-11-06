@@ -9,6 +9,8 @@ const SCREEN := "res://expedition/ExpeditionScreen.tscn"
 const TEST_SPEED := 40.0
 const LOOK_SECONDS := 0.3
 const MOST_SEEDS := 400
+## The day most test trips are called home, so that they end.
+const RECALL_DAY := 6
 
 
 func _ready() -> void:
@@ -16,9 +18,9 @@ func _ready() -> void:
 	get_tree().current_scene = null
 	var bram := Database.get_adventurer("bram")
 	var grass := Database.get_stage(TownData.FIRST_STAGE)
-	await _test_same_as_the_rules(bram, grass, _seed_for(bram, grass, Expedition.Ending.HOME))
-	await _test_same_as_the_rules(bram, grass, _seed_for(bram, grass, Expedition.Ending.BEATEN))
-	await _test_same_as_the_rules(bram, grass, _seed_for(bram, grass, Expedition.Ending.STARVED))
+	await _test_same_as_the_rules(bram, grass, Expedition.Ending.HOME, RECALL_DAY)
+	await _test_same_as_the_rules(bram, grass, Expedition.Ending.BEATEN, RECALL_DAY)
+	await _test_same_as_the_rules(bram, grass, Expedition.Ending.STARVED, 0)
 	await _test_other_dice()
 	await _test_speed_in_a_fight()
 	await _test_keys_and_pad()
@@ -26,8 +28,13 @@ func _ready() -> void:
 	await _test_leaving()
 	await _test_report_screen()
 	await _test_two_trips()
+	await _test_orders_panel()
+	await _test_giving_orders()
+	await _test_asking_to_come_home()
+	await _test_speech()
 	Engine.time_scale = 1.0
 	ExpeditionScreen.next_seed = 0
+	ExpeditionScreen.next_recall_day = 0
 	ExpeditionScreen.chosen_speed = 1.0
 	print("TESTS OK" if _failures == 0 else "%d TEST(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -40,18 +47,21 @@ func _hire(person: Adventurer) -> void:
 	town.hire(person)
 
 
-func _seed_for(person: Adventurer, stage: Stage, ending: Expedition.Ending) -> int:
+# A seed that ends as asked after at least one fight, called home on `recall_day`.
+func _seed_for(person: Adventurer, stage: Stage, ending: Expedition.Ending, recall_day := RECALL_DAY) -> int:
 	for seed_value in range(1, MOST_SEEDS):
 		var trip := Expedition.new(person, stage, seed_value)
+		trip.recall_day = recall_day
 		trip.play_to_end()
-		if trip.ending == ending:
+		if trip.ending == ending and trip.fights > 0:
 			return seed_value
 	_expect(false, "no seed ends in %d" % ending)
 	return 1
 
 
-func _open_trip(seed_value: int, speed := 1.0) -> ExpeditionScreen:
+func _open_trip(seed_value: int, speed := 1.0, recall_day := RECALL_DAY) -> ExpeditionScreen:
 	ExpeditionScreen.next_seed = seed_value
+	ExpeditionScreen.next_recall_day = recall_day
 	ExpeditionScreen.chosen_speed = speed
 	await Screens.go(SCREEN)
 	await _wait()
@@ -64,8 +74,10 @@ func _until_report(screen: ExpeditionScreen) -> void:
 	await _wait()
 
 
-func _test_same_as_the_rules(person: Adventurer, stage: Stage, seed_value: int) -> void:
+func _test_same_as_the_rules(person: Adventurer, stage: Stage, wanted: Expedition.Ending, recall_day: int) -> void:
+	var seed_value := _seed_for(person, stage, wanted, recall_day)
 	var plain := Expedition.new(person, stage, seed_value)
+	plain.recall_day = recall_day
 	plain.play_to_end()
 	var ending := plain.ending
 	var days := plain.day
@@ -75,7 +87,7 @@ func _test_same_as_the_rules(person: Adventurer, stage: Stage, seed_value: int) 
 	_hire(person)
 	var town := TownData.current()
 	var town_gold := town.gold
-	var screen := await _open_trip(seed_value, TEST_SPEED)
+	var screen := await _open_trip(seed_value, TEST_SPEED, recall_day)
 	_expect(Engine.time_scale == TEST_SPEED, "the trip runs at the chosen speed")
 	var token_agreed := [true]
 	screen.token.movement_finished.connect(func(node: BoardNode) -> void:
@@ -147,14 +159,18 @@ func _test_keys_and_pad() -> void:
 	await _pad(JOY_BUTTON_A)
 	_expect(Engine.time_scale == 3.0, "the controller picks a speed")
 	await _tap("ui_down")
-	_expect(_focused() == screen.hud.hp_bar, "down reaches the strip")
+	_expect(_focused() == screen.orders_button, "down reaches the orders")
+	await _tap("ui_down")
+	_expect(_focused() == screen.hud.hp_bar, "down again reaches the strip")
 	await _wait()
 	await _wait()
 	_expect(Tips.showing(), "the bar's tip opens")
 	await _tap("ui_right")
 	_expect(_focused() == screen.hud.food_bar, "right reaches the food")
 	await _tap("ui_up")
-	_expect(_focused() == screen.speed_buttons[1], "up goes back to the row")
+	_expect(_focused() == screen.orders_button, "up goes back to the orders")
+	await _tap("ui_up")
+	_expect(_focused() == screen.speed_buttons[1], "and up again to the row")
 	await _leave()
 
 
@@ -285,3 +301,129 @@ func _test_two_trips() -> void:
 		_expect(screen.trip.player.gold <= SpaceEffects.GOLD_BASE + SpaceEffects.GOLD_PER_LEVEL * screen.trip.player.level * 2, "and keeps no gold from the last one")
 		await _until_report(screen)
 		await _back_to_town()
+
+
+func _test_orders_panel() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(5, 1.0, 0)
+	var zoom := screen.camera.zoom_index()
+	await _click(screen.orders_button)
+	await _wait()
+	_expect(screen.orders.visible, "a click opens the orders")
+	_expect(Engine.time_scale == 1.0, "and the game keeps running")
+	_expect(_focused() == screen.orders.home_button, "Return home has focus")
+	_expect(screen.orders.roam_button.lit, "the order in force is lit")
+	_expect(screen.zone_overlay.open, "the zones show on the island")
+	_expect(screen.orders.facts.text.contains("from the Portal"), "the panel says how far home is")
+	await _until_view_settled(screen)
+	_expect(screen.camera.zoom_index() == 0, "the view pulls back")
+	var ids := screen.orders.zone_buttons.keys()
+	var first: KitButton = screen.orders.zone_buttons[ids[0]]
+	await _tap("ui_down")
+	_expect(_focused() == first, "down reaches the zones")
+	await _wait()
+	_expect(screen.zone_overlay.lit_zone == ids[0], "the zone lights up on the island")
+	_expect(screen.orders.island.lit_zone == ids[0], "and on the small map")
+	_expect(screen.zone_overlay.strength_of(ids[0]) > screen.zone_overlay.strength_of(ids[1]), "brighter than the others")
+	await _tap("ui_up")
+	await _tap("ui_up")
+	_expect(_focused() == screen.orders.home_button, "focus stays in the panel")
+	_expect(screen.zone_overlay.lit_zone == "", "and the zone goes dark")
+	await _tap("ui_cancel")
+	await _wait()
+	_expect(not screen.orders.visible, "Esc closes the orders")
+	_expect(not screen.leave_panel.visible, "and does not ask about leaving")
+	_expect(_focused() == screen.orders_button, "focus goes back to the button")
+	_expect(not screen.zone_overlay.open, "the zones go")
+	_expect(screen.camera.zoom_index() == zoom, "the view comes back")
+	await _click(screen.speed_buttons[0])
+	await _click(screen.orders_button)
+	await _wait()
+	_expect(screen.orders.visible, "the orders open at x0")
+	await _click(screen.orders.home_button)
+	await _wait()
+	_expect(screen.trip.order == Expedition.Order.HOME, "and an order can be given at x0")
+	_expect(Engine.time_scale == 0.0, "which stays at x0")
+	await _click(screen.speed_buttons[1])
+	await _leave()
+
+
+func _test_giving_orders() -> void:
+	var bram := Database.get_adventurer("bram")
+	_hire(bram)
+	var grass := Database.get_stage(TownData.FIRST_STAGE)
+	var screen := await _open_trip(_seed_for(bram, grass, Expedition.Ending.HOME), TEST_SPEED, 0)
+	Engine.time_scale = 1.0
+	_expect(screen.orders_button.text == "Orders: Explore", "the button shows the order in force")
+	var zone: Dictionary = screen.trip.map.zones[0]
+	await _click(screen.orders_button)
+	await _wait()
+	await _click(screen.orders.zone_buttons[zone["id"]])
+	await _wait()
+	_expect(screen.trip.order == Expedition.Order.ZONE, "a zone's button sends them there")
+	_expect(not screen.orders.visible, "and closes the panel")
+	_expect(screen.orders_button.text == "Orders: %s" % zone["name"], "the button names the zone")
+	_expect(screen.zone_overlay.target_zone == zone["id"], "the target stays marked")
+	_expect(screen.zone_overlay.strength_of(zone["id"]) > 0.0, "and shows on the island")
+	await _click(screen.orders_button)
+	await _wait()
+	var dot := screen.orders.island
+	var other: Dictionary = screen.trip.map.zones[1]
+	var spot := dot.get_global_transform() * dot._place(other["spaces"][0])
+	await _click_at(spot)
+	await _wait()
+	_expect(screen.trip.order_zone.get("id", "") == other["id"], "clicking the small map sends them there")
+	await _click(screen.orders_button)
+	await _wait()
+	await _click(screen.orders.home_button)
+	_expect(screen.orders_button.text == "Orders: Return home", "the button says they are coming home")
+	_expect(screen.zone_overlay.target_zone == "", "and no zone is marked")
+	Engine.time_scale = TEST_SPEED
+	await _until_report(screen)
+	_expect(screen.trip.ending == Expedition.Ending.HOME or screen.trip.ending == Expedition.Ending.BEATEN or screen.trip.ending == Expedition.Ending.STARVED, "the trip ends")
+	_expect(not screen.orders_button.visible, "the orders go with the trip")
+	await _back_to_town()
+
+
+func _test_asking_to_come_home() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(5, TEST_SPEED, 0)
+	while not screen.trip.asked_home:
+		await get_tree().process_frame
+	Engine.time_scale = 0.0
+	await _wait()
+	_expect(screen.orders_arrow != null, "an arrow points at the orders when they ask")
+	await _click(screen.orders_button)
+	await _wait()
+	_expect(screen.orders_arrow == null, "it goes while the orders are open")
+	await _click(screen.orders.home_button)
+	await _wait()
+	_expect(screen.orders_arrow == null, "and stays gone once called")
+	Engine.time_scale = TEST_SPEED
+	await _until_report(screen)
+	await _back_to_town()
+
+
+func _test_speech() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(5, 1.0, 0)
+	while not screen.token.visible:
+		await get_tree().process_frame
+	while screen.die.visible:
+		await get_tree().process_frame
+	screen.trip.say("One")
+	screen.trip.say("Two")
+	await _wait()
+	_expect(screen.bubble.shown_words() == "One", "the first line shows")
+	_expect(not screen.news.visible or not screen._news_words.text.contains("One"), "and not in the news as well")
+	await get_tree().create_timer(ExpeditionScreen.SPEECH_MS / 1000.0 + 0.2).timeout
+	while screen.bubble.shown_words() == "One" or screen.die.visible:
+		await get_tree().process_frame
+	await _wait()
+	_expect(screen.bubble.shown_words() == "Two", "then the next")
+	await _leave()
+
+
+func _until_view_settled(screen: ExpeditionScreen) -> void:
+	while not is_equal_approx(screen.camera.zoom.x, BoardCamera.ZOOM_LEVELS[0]):
+		await get_tree().process_frame

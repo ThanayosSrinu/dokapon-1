@@ -4,6 +4,8 @@ extends Node
 ## Prints "TESTS OK" or one FAIL line per problem, and exits with 1 on failures.
 
 const WORLD := "res://maps/world_map.json"
+## The day the report's test trips are called home.
+const RECALL_DAY := 12
 ## A row: portal 0 - 1 - 2 - 3, and a fork at 1 with a branch to 4.
 const LINE := {"spaces": [
 	{"id": 0, "type": "CASTLE", "to": [1]},
@@ -148,7 +150,7 @@ func _test_hunger() -> void:
 
 func _test_exact_landing() -> void:
 	var trip := _trip_on_line()
-	trip.heading_home = true
+	trip.order = Expedition.Order.HOME
 	trip.space_id = 1
 	trip.player.gold = 70
 	trip.brain.plan_day()
@@ -163,7 +165,7 @@ func _test_exact_landing() -> void:
 		{"id": 1, "type": "NORMAL"},
 		{"id": 2, "type": "NORMAL"},
 	]}))
-	trip.heading_home = true
+	trip.order = Expedition.Order.HOME
 	trip.space_id = 1
 	trip.brain.plan_day()
 	var path := trip.walk(2)
@@ -187,17 +189,15 @@ func _test_turning_for_home() -> void:
 	trip.day = 1
 	trip.food_left = 1
 	trip.brain.plan_day()
-	_expect(not trip.heading_home, "nobody turns back on the first day")
+	_expect(not trip.asked_home, "nobody asks on the first day")
 	trip.day = 2
 	trip.food_left = 99
 	trip.brain.plan_day()
-	_expect(not trip.heading_home, "plenty of food means no hurry")
+	_expect(not trip.asked_home, "plenty of food means no hurry")
 	trip.food_left = int(trip.brain.days_home() * ExpeditionBrain.HOME_CAUTION)
 	trip.brain.plan_day()
-	_expect(trip.heading_home, "food running short turns them for home")
-	trip.food_left = 99
-	trip.brain.plan_day()
-	_expect(trip.heading_home, "they never change their mind")
+	_expect(trip.asked_home, "food running short makes them ask to come home")
+	_expect(trip.order == Expedition.Order.ROAM, "only the lord can send them")
 
 	trip = _trip_on_line()
 	trip.space_id = 3
@@ -206,7 +206,7 @@ func _test_turning_for_home() -> void:
 	trip.player.inventory.clear()
 	trip.player.hp = 1
 	trip.brain.plan_day()
-	_expect(trip.heading_home, "badly hurt with nothing to heal with turns them for home")
+	_expect(trip.asked_home, "badly hurt with nothing to heal with, they ask too")
 
 
 func _test_forks() -> void:
@@ -240,7 +240,7 @@ func _test_forks() -> void:
 		{"id": 3, "type": "NORMAL"},
 	]})
 	trip = _trip_on_map(home)
-	trip.heading_home = true
+	trip.order = Expedition.Order.HOME
 	trip.space_id = 1
 	trip.brain.plan_day()
 	_expect(trip.brain.choose_path([0, 2], 1, 1) == 0, "heading home, it takes the exact landing")
@@ -280,7 +280,7 @@ func _test_spaces() -> void:
 
 	var fall := Expedition.new(_bram, _grass, 1)
 	fall.space_id = gold
-	fall.heading_home = true
+	fall.order = Expedition.Order.HOME
 	var trapdoor := SpaceEffects.Result.new("A trapdoor!")
 	trapdoor.to_castle = true
 	fall._take(trapdoor)
@@ -372,6 +372,7 @@ func _test_report() -> void:
 	var seen := {}
 	for seed_value in range(1, 121):
 		var trip := Expedition.new(_bram, _grass, seed_value)
+		trip.recall_day = RECALL_DAY
 		trip.play_to_end()
 		var report := TripReport.new(trip)
 		var words := " ".join(report.story)

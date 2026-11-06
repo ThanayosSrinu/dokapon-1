@@ -44,9 +44,7 @@ func say(words: String, head: Vector2, room: Rect2) -> void:
 	_words.text = words
 	show()
 	reset_size()
-	var left := clampf(head.x - size.x / 2.0, room.position.x + EDGE, room.end.x - size.x - EDGE)
-	var spot := Kit.snap_point(Vector2(left, head.y - size.y - TAIL - GAP))
-	_tail_x = Kit.snap(head.x - left)
+	var spot := _spot_for(head, room)
 	queue_redraw()
 	if _tween != null:
 		_tween.kill()
@@ -55,3 +53,16 @@ func say(words: String, head: Vector2, room: Rect2) -> void:
 	_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_ignore_time_scale(true)
 	_tween.tween_property(self, "global_position", spot, POP_SECONDS)
 	_tween.tween_property(self, "modulate:a", 1.0, POP_SECONDS)
+
+
+## Moves the bubble with whoever is talking, once it has finished appearing.
+func keep_above(head: Vector2, room: Rect2) -> void:
+	if not _tween.is_running():
+		global_position = _spot_for(head, room)
+		queue_redraw()
+
+
+func _spot_for(head: Vector2, room: Rect2) -> Vector2:
+	var left := clampf(head.x - size.x / 2.0, room.position.x + EDGE, room.end.x - size.x - EDGE)
+	_tail_x = Kit.snap(head.x - left)
+	return Kit.snap_point(Vector2(left, head.y - size.y - TAIL - GAP))

@@ -1,6 +1,7 @@
 class_name TripHud
 extends KitPanel
 ## The strip along the bottom while a trip plays: the day, health, food, bag and gold.
+## Food turns gold once they ask to come home, because that is the lord's cue.
 ## Each part has a tip with the exact numbers (rule U3).
 
 const BAR_WIDTH := 200.0
@@ -53,7 +54,7 @@ func refresh(slide := true) -> void:
 	hp_bar.set_amount(player.hp, max_hp, slide)
 	food_bar.set_amount(_trip.food_left, _food_full, slide)
 	food_words.text = "No food!" if _trip.food_left == 0 else _days(_trip.food_left)
-	food_words.modulate = Kit.DANGER.lightened(0.3) if _trip.food_left == 0 else Color.WHITE
+	food_words.modulate = _food_color()
 	bag.set_amount(player.inventory.size(), slide)
 	gold.set_amount(player.gold, slide)
 	Tips.attach(hp_bar, "Health", "%d of %d HP." % [player.hp, max_hp])
@@ -67,10 +68,17 @@ func show_beaten() -> void:
 	hp_bar.set_amount(0.0, 1.0)
 
 
+func _food_color() -> Color:
+	if _trip.food_left == 0:
+		return Kit.DANGER.lightened(0.3)
+	return Kit.GOLD if _trip.asked_home else Color.WHITE
+
+
 func _food_tip() -> String:
+	var home := "About %s from the Portal." % _days(ceili(_trip.brain.days_home()))
 	if _trip.food_left > 0:
-		return "Food for %s. One roll of the die is one day." % _days(_trip.food_left)
-	return "No food left. They lose health every day, and grow weak."
+		return "Food for %s. One roll of the die is one day. %s" % [_days(_trip.food_left), home]
+	return "No food left. They lose health every day, and grow weak. %s" % home
 
 
 func _days(count: int) -> String:
