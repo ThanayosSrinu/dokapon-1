@@ -10,7 +10,7 @@ const WIDTH := 520.0
 const HEADING := "Home in time?"
 const SOON := "%s can be home about %s if called back early, or %s if all the food is used."
 const TOO_LATE := "%s can't be home before about %s, or %s if all the food is used."
-const LOST := "If it is not paid by then, the town is lost."
+const LOST := "If it is not paid by then, it is GAME OVER."
 
 var go_button: KitButton
 var bank_button: KitButton

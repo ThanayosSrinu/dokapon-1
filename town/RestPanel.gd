@@ -68,5 +68,5 @@ func show_town(town: TownData) -> void:
 		var too_far: bool = town.day + DAYS[index] > debt["due"]
 		day_buttons[index].danger = too_far
 		fatal = fatal or too_far
-	_warning.text = "A red choice goes past the due day, and the town is lost." if fatal else ""
+	_warning.text = "A red choice goes past the due day, and it is GAME OVER." if fatal else ""
 	_warning.visible = fatal
