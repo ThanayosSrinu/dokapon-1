@@ -3,23 +3,24 @@ extends Control
 ## The roll of a trip: a block over the adventurer's head with a number running through
 ## what their die can roll, slowing down until it stops on the result:
 ##     await block.throw(steps, person.die_top)
+## It returns once the block has gone, so the walk starts on a clear head.
 ## The result is decided before this starts, so nothing here touches the game's dice.
 
-const BLOCK_SIZE := Vector2(96, 96)
+const BLOCK_SIZE := Vector2(56, 56)
 ## How many numbers run past before the result.
 const SPINS := 20
 const SPIN_SECONDS := 0.95
 const APPEAR_SECONDS := 0.12
 const SETTLE_SECONDS := 0.24
 ## Seconds the result stays on screen before the block leaves.
-const REST_SECONDS := 0.9
-const FADE_SECONDS := 0.25
-const CORNER := 4.0
-const RIM := 8.0
-const SHADOW := 6.0
-const NUMBER_SIZE := 64
+const REST_SECONDS := 0.5
+const FADE_SECONDS := 0.2
+const CORNER := 2.0
+const RIM := 6.0
+const SHADOW := 4.0
+const NUMBER_SIZE := 32
 ## How far below the middle of the block the number's baseline is.
-const BASELINE := 22.0
+const BASELINE := 11.0
 const RIM_COLOR := Color(0.72, 0.48, 0.16)
 
 # The number shown right now.
@@ -32,7 +33,6 @@ var _spin := 0.0:
 		if int(new_value) != int(_spin):
 			_next_number()
 		_spin = new_value
-var _leave_tween: Tween
 
 
 func _init() -> void:
@@ -43,8 +43,6 @@ func _init() -> void:
 ## Plays the animation for a die that goes up to `top` and stops on `result`, which a
 ## bonus can take past `top`.
 func throw(result: int, top: int) -> void:
-	if _leave_tween != null and _leave_tween.is_valid():
-		_leave_tween.kill()
 	_top = top
 	_spin = 0.0
 	_next_number()
@@ -69,10 +67,11 @@ func throw(result: int, top: int) -> void:
 	settle.tween_property(self, "scale", Vector2.ONE, SETTLE_SECONDS)
 	await settle.finished
 
-	_leave_tween = create_tween()
-	_leave_tween.tween_interval(REST_SECONDS)
-	_leave_tween.tween_property(self, "modulate:a", 0.0, FADE_SECONDS)
-	_leave_tween.tween_callback(hide)
+	var leave := create_tween()
+	leave.tween_interval(REST_SECONDS)
+	leave.tween_property(self, "modulate:a", 0.0, FADE_SECONDS)
+	await leave.finished
+	hide()
 
 
 ## The number on the block now.

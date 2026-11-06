@@ -51,8 +51,12 @@ const QUIET_SECONDS := 0.25
 const DISSOLVE_SECONDS := 0.7
 const HERO_LAYER := 10
 const HEAD := Vector2(0, -46)
-## How far above their head the roll stands, clear of the steps left over the token.
-const DIE_GAP := 28.0
+## How far above their head the roll stands.
+const DIE_GAP := 8.0
+## How much of the air over their head the steps left take up, in the map's pixels.
+const STEPS_ROOM := 24.0
+## How fast a speech bubble moves out of the way, in pixels a second.
+const BUBBLE_LIFT_SPEED := 500.0
 const TOKEN_RING := Color(1.0, 0.85, 0.42)
 const FIGHT_LAYER := 1
 const UI_LAYER := 2
@@ -134,6 +138,8 @@ var _speed_row: HBoxContainer
 var _speed := 1.0
 # The lines waiting to be spoken.
 var _speech: Array[String] = []
+# How far above their head the bubble stands now, to clear the roll or the steps left.
+var _bubble_lift := 0.0
 # When the line being spoken ends, in real milliseconds.
 var _speech_ends := 0
 # The camera's zoom from before the orders opened.
@@ -162,8 +168,8 @@ func _exit_tree() -> void:
 	Engine.time_scale = 1.0
 
 
-func _process(_delta: float) -> void:
-	_update_speech()
+func _process(delta: float) -> void:
+	_update_speech(delta)
 	_update_bag_panel()
 
 
@@ -384,7 +390,7 @@ func _set_news(words: String) -> void:
 # --- Speech -----------------------------------------------------------------
 
 # One line at a time, over their head, and none on top of a fight.
-func _update_speech() -> void:
+func _update_speech(delta: float) -> void:
 	if not token.visible or report != null:
 		return
 	if battle_screen.visible:
@@ -392,13 +398,25 @@ func _update_speech() -> void:
 		return
 	var head := get_viewport().get_canvas_transform() * (token.global_position + HEAD)
 	die.position = (head - Vector2(die.size.x * 0.5, die.size.y + DIE_GAP)).round()
+	var lift := _lift_wanted()
 	if bubble.visible and Time.get_ticks_msec() >= _speech_ends:
 		bubble.hide()
 	if bubble.visible:
-		bubble.keep_above(head, get_viewport_rect())
+		_bubble_lift = move_toward(_bubble_lift, lift, BUBBLE_LIFT_SPEED * delta)
+		bubble.keep_above(head + Vector2.UP * _bubble_lift, get_viewport_rect())
 	elif not _speech.is_empty() and not die.visible:
-		bubble.say(_speech.pop_front(), head, get_viewport_rect())
+		_bubble_lift = lift
+		bubble.say(_speech.pop_front(), head + Vector2.UP * lift, get_viewport_rect())
 		_speech_ends = Time.get_ticks_msec() + SPEECH_MS
+
+
+# How far up a bubble must stand to clear what is over their head right now.
+func _lift_wanted() -> float:
+	if die.visible:
+		return die.size.y + DIE_GAP
+	if token.steps_left > 0:
+		return STEPS_ROOM * get_viewport().get_canvas_transform().get_scale().y
+	return 0.0
 
 
 # Each step of the warning is spoken once on a trip, however it began, so a lord who sent
