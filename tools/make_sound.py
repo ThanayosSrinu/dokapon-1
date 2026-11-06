@@ -151,6 +151,7 @@ def sfx():
     write_wav("click", 0.35 * blip(880, 0.05, 0.25, 60))
     write_wav("hover", 0.14 * blip(1320, 0.03, 0.5, 90))
     write_wav("back", 0.3 * pulse(glide(660, 440, 0.07), 0.07, 0.25) * decay_curve(int(0.07 * RATE), 30))
+    write_wav("deny", 0.3 * tones(["D3", "D3"], 0.09, lambda f: blip(f, 0.08, 0.5, 30)))
 
     rattle = np.zeros(int(0.7 * RATE))
     gaps = np.cumsum(np.linspace(0.04, 0.11, 8))

@@ -10,7 +10,7 @@ extends Node
 ## A file in assets/custom/sound for each name.
 const EFFECTS: Array[String] = [
 	"back", "battle_start", "click", "coin", "coin_loss", "counter", "crown", "defeat",
-	"dice_land", "dice_roll", "fanfare", "flee", "heal", "hit", "hover", "item",
+	"deny", "dice_land", "dice_roll", "fanfare", "flee", "heal", "hit", "hover", "item",
 	"level_up", "magic", "miss", "step", "town", "trap", "victory", "week", "whoosh",
 ]
 const TUNES: Array[String] = ["battle", "board", "shop", "title"]

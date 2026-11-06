@@ -1,0 +1,147 @@
+[gd_resource type="Theme" format=3]
+
+[ext_resource type="FontFile" path="res://assets/kenney/fonts/KenneyMiniSquare.ttf" id="1_font"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/panel.png" id="2_panel"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/paper.png" id="3_paper"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/chip.png" id="4_chip"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/button_wood.png" id="5_wood"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/button_wood_hot.png" id="6_hot"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/button_wood_down.png" id="7_down"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/button_stone.png" id="8_stone"]
+[ext_resource type="Texture2D" path="res://assets/custom/kit/focus.png" id="9_focus"]
+
+[sub_resource type="StyleBoxTexture" id="panel"]
+content_margin_left = 24.0
+content_margin_top = 22.0
+content_margin_right = 24.0
+content_margin_bottom = 22.0
+texture = ExtResource("2_panel")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="paper"]
+content_margin_left = 18.0
+content_margin_top = 16.0
+content_margin_right = 18.0
+content_margin_bottom = 16.0
+texture = ExtResource("3_paper")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="chip"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 16.0
+content_margin_bottom = 4.0
+texture = ExtResource("4_chip")
+texture_margin_left = 14.0
+texture_margin_top = 14.0
+texture_margin_right = 14.0
+texture_margin_bottom = 14.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="button"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+texture = ExtResource("5_wood")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="button_hover"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+texture = ExtResource("6_hot")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="button_pressed"]
+content_margin_left = 18.0
+content_margin_top = 10.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+texture = ExtResource("7_down")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="button_disabled"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+texture = ExtResource("8_stone")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="StyleBoxTexture" id="button_focus"]
+texture = ExtResource("9_focus")
+texture_margin_left = 12.0
+texture_margin_top = 12.0
+texture_margin_right = 12.0
+texture_margin_bottom = 12.0
+expand_margin_left = 6.0
+expand_margin_top = 6.0
+expand_margin_right = 6.0
+expand_margin_bottom = 6.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[resource]
+default_font = ExtResource("1_font")
+default_font_size = 16
+Button/colors/font_color = Color(1, 0.95, 0.82, 1)
+Button/colors/font_disabled_color = Color(0.78, 0.76, 0.8, 1)
+Button/colors/font_focus_color = Color(1, 0.95, 0.82, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Button/colors/font_pressed_color = Color(1, 0.85, 0.42, 1)
+Button/font_sizes/font_size = 16
+Button/styles/disabled = SubResource("button_disabled")
+Button/styles/focus = SubResource("button_focus")
+Button/styles/hover = SubResource("button_hover")
+Button/styles/normal = SubResource("button")
+Button/styles/pressed = SubResource("button_pressed")
+Chip/base_type = &"PanelContainer"
+Chip/styles/panel = SubResource("chip")
+Heading/base_type = &"Label"
+Heading/colors/font_color = Color(1, 0.85, 0.42, 1)
+Heading/font_sizes/font_size = 32
+Label/colors/font_color = Color(1, 0.95, 0.82, 1)
+Label/font_sizes/font_size = 16
+PanelContainer/styles/panel = SubResource("panel")
+PaperHeading/base_type = &"Label"
+PaperHeading/colors/font_color = Color(0.125, 0.086, 0.133, 1)
+PaperHeading/font_sizes/font_size = 32
+PaperLabel/base_type = &"Label"
+PaperLabel/colors/font_color = Color(0.33, 0.23, 0.2, 1)
+PaperPanel/base_type = &"PanelContainer"
+PaperPanel/styles/panel = SubResource("paper")
+PaperTitle/base_type = &"Label"
+PaperTitle/colors/font_color = Color(0.125, 0.086, 0.133, 1)

@@ -402,23 +402,7 @@ def framed(width, height, top, bottom, frame=GOLD, light=GOLD_LIGHT, dark=GOLD_D
     return image
 
 
-def button(top, bottom, offset=0):
-    image = framed(32, 16, top, bottom, studs=False)
-    if offset:
-        shifted = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        shifted.paste(image.crop((0, 0, 32, 15)), (0, 1))
-        return shifted
-    return image
-
-
 def make_ui():
-    x2(framed(32, 32, hexc("#2a3163"), hexc("#141734"))).save(OUT / "panel.png")
-    x2(button(hexc("#b23a35"), hexc("#7b1f28"))).save(OUT / "button.png")
-    x2(button(hexc("#dc5a48"), hexc("#a02c30"))).save(OUT / "button_hover.png")
-    x2(button(hexc("#7b1f28"), hexc("#5b1720"), 1)).save(OUT / "button_pressed.png")
-    x2(framed(32, 16, hexc("#5b5a6a"), hexc("#3d3c4a"), hexc("#85838e"), hexc("#a5a3ad"),
-              hexc("#55535e"), studs=False)).save(OUT / "button_disabled.png")
-
     # A ribbon, grey so that code can tint it with the player's color.
     ribbon = Image.new("RGBA", (96, 28), (0, 0, 0, 0))
     for y in range(4, 26):
@@ -802,4 +786,7 @@ if __name__ == "__main__":
     make_battle()
     make_items()
     make_shop()
+    import art_kit
+    art_kit.make_kit()
+    art_kit.make_menu()
     make_tile_table()
