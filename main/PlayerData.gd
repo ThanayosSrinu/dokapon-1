@@ -18,7 +18,7 @@ const EXP_PER_LEVEL := 30
 const KO_TURNS_LOST := 1
 ## Weak: these stats drop to this share, on an expedition with no food left.
 const WEAK_SHARE := 0.75
-const WEAK_STATS: Array[String] = ["attack", "defense", "magic"]
+const WEAK_STATS: Array[String] = ["attack", "defense", "magic", "speed"]
 ## The slots a player can wear something in.
 const EQUIPMENT_SLOTS: Array[ItemData.Kind] = [
 	ItemData.Kind.WEAPON, ItemData.Kind.ARMOR, ItemData.Kind.ACCESSORY,
@@ -148,15 +148,21 @@ func get_stat_with(item_id: String, stat: String) -> int:
 	return maxi(get_stat(stat) - worn_bonus + item.bonuses.get(stat, 0), 1)
 
 
-## A stat's current value: class, then level, then everything worn. Always at
-## least 1, because equipment can lower a stat.
+## A stat's current value: the fed value, less what being weak takes.
 func get_stat(stat: String) -> int:
+	var value := fed_stat(stat)
+	if weak and WEAK_STATS.has(stat):
+		value = int(value * WEAK_SHARE)
+	return maxi(value, 1)
+
+
+## A stat when not weak: class, then level, then everything worn. Always at least 1,
+## because equipment can lower a stat.
+func fed_stat(stat: String) -> int:
 	var data := Database.get_class_data(class_id)
 	var value: int = data.base_stats[stat] + data.growth[stat] * (level - 1)
 	for item_id: String in equipment.values():
 		value += Database.get_item(item_id).bonuses.get(stat, 0)
-	if weak and WEAK_STATS.has(stat):
-		value = int(value * WEAK_SHARE)
 	return maxi(value, 1)
 
 

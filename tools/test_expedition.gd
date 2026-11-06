@@ -140,7 +140,8 @@ func _test_hunger() -> void:
 	_expect(trip.hungry_days == 1, "the hungry day is counted")
 	_expect(player.get_stat("attack") == int(strength * PlayerData.WEAK_SHARE), "weak lowers attack")
 	_expect(player.get_stat("defense") == int(guard * PlayerData.WEAK_SHARE), "weak lowers defense")
-	_expect(player.get_stat("speed") == quickness, "weak leaves speed alone")
+	_expect(player.get_stat("speed") == int(quickness * PlayerData.WEAK_SHARE), "weak lowers speed")
+	_expect(player.fed_stat("attack") == strength, "the fed value stays known while weak")
 	player.hp = 1
 	player.inventory.clear()
 	trip.start_day()

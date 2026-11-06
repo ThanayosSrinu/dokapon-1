@@ -51,6 +51,11 @@ func _ready() -> void:
 	await _save(folder + "/trip_leave.png")
 	screen.stay_button.pressed.emit()
 	await _real(0.1)
+	screen.trip.food_left = 0
+	screen.trip.player.weak = true
+	screen.hud.refresh()
+	await _real(0.7)
+	await _save(folder + "/trip_weak.png")
 	screen.speed_buttons[1].pressed.emit()
 	Engine.time_scale = 40.0
 	while screen.report == null:

@@ -13,7 +13,7 @@ WOOD_DARK, WOOD, WOOD_LIGHT = hexc("#3f2822"), hexc("#6e452b"), hexc("#a4713f")
 PAPER, PAPER_DARK = hexc("#f2e2b8"), hexc("#d9bf8a")
 ICON_NAMES = ["play", "back", "book", "gear", "door", "coin", "food", "heart", "sword", "boot",
               "wood", "ore", "herb", "die", "bag", "lock", "check", "star", "music", "sound", "cross",
-              "spring", "summer", "autumn", "winter", "moon"]
+              "spring", "summer", "autumn", "winter", "moon", "shield", "magic"]
 
 
 def cut_corners(image, amount):
@@ -423,6 +423,33 @@ def ki_winter():
     return with_outline(image)
 
 
+def ki_shield():
+    rows = ["..hhhhhhhhh..", ".hllllsdddddh", ".hllllsdddddh", ".hllllsdddddh", ".hllllsdddddh",
+            ".hllllsdddddh", "..hlllsdddh..", "..hlllsdddh..", "...hllsdh....", "....hlsdh....",
+            ".....hsh.....", "......h......"]
+    image, _ = icon_canvas()
+    colors = {"h": hexc("#f2c23e"), "l": hexc("#8fb4e8"), "s": hexc("#d7dce8"), "d": hexc("#4f74b8")}
+    for y, row in enumerate(rows):
+        for x, key in enumerate(row):
+            if key in colors:
+                image.putpixel((x + 1, y + 2), colors[key])
+    return with_outline(image)
+
+
+def ki_magic():
+    rows = [".......w.....", "......wlw....", ".....wlmlw...", "....wlmmdlw..", "...wlmmmddlw.",
+            "...lmmmmddd..", "....lmmddd...", ".....lmdd....", "......ld.....", "...y.....y...",
+            "..yWy...yWy..", "...y.....y..."]
+    image, _ = icon_canvas()
+    colors = {"w": hexc("#ffffff"), "l": hexc("#bcdcff"), "m": hexc("#4da3f2"), "d": hexc("#2a5fc4"),
+              "y": hexc("#f2c23e"), "W": hexc("#fff3b0")}
+    for y, row in enumerate(rows):
+        for x, key in enumerate(row):
+            if key in colors:
+                image.putpixel((x + 1, y + 2), colors[key])
+    return with_outline(image)
+
+
 def ki_moon():
     image, draw = icon_canvas()
     draw.ellipse((2, 2, 13, 13), fill=hexc("#f2c23e"))
@@ -457,7 +484,7 @@ def make_kit():
               "ore": ki_ore, "herb": icon_herb, "die": ki_die, "bag": ki_bag, "lock": ki_lock,
               "check": ki_check, "cross": ki_cross, "star": ki_star, "music": ki_music, "sound": ki_sound,
               "spring": ki_spring, "summer": ki_summer, "autumn": ki_autumn, "winter": ki_winter,
-              "moon": ki_moon,
+              "moon": ki_moon, "shield": ki_shield, "magic": ki_magic,
               "sword": lambda: icon_blade(10, 2, hexc("#d7dce8"), hexc("#f2c23e"), hexc("#a8682f"))}
     sheet = Image.new("RGBA", (ITEM_CELL * len(ICON_NAMES), ITEM_CELL), (0, 0, 0, 0))
     for index, name in enumerate(ICON_NAMES):

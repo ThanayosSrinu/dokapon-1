@@ -19,6 +19,8 @@ const SPEED_FROM_RIGHT := 24.0
 const SPEED_TOP := 24.0
 const SPEED_GAP := 8
 const STRIP_FROM_BOTTOM := 12.0
+## Keeps the fight's window clear of the strip.
+const FIGHT_ROOM_BELOW := 44.0
 const NEWS_TOP := 24.0
 const NEWS_WIDTH := 600.0
 const ORDERS_TOP := 80.0
@@ -604,6 +606,7 @@ func _build_ui(town: TownData) -> void:
 	fight_layer.layer = FIGHT_LAYER
 	add_child(fight_layer)
 	battle_screen = BattleScreen.new()
+	battle_screen.room_below = FIGHT_ROOM_BELOW
 	fight_layer.add_child(battle_screen)
 	var ui := CanvasLayer.new()
 	ui.layer = UI_LAYER
@@ -787,12 +790,20 @@ func _link_focus() -> void:
 	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
 	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
 	var strip: Array[Control] = [hud.date, hud.hp_bar, hud.food_bar, hud.bag, hud.gold]
+	var lower: Array[Control] = []
+	lower.assign(hud.stats)
 	for index in strip.size():
 		var part := strip[index]
 		part.focus_neighbor_top = part.get_path_to(orders_button)
-		part.focus_neighbor_bottom = part.get_path_to(part)
+		part.focus_neighbor_bottom = part.get_path_to(lower[mini(index, lower.size() - 1)])
 		part.focus_neighbor_left = part.get_path_to(strip[maxi(index - 1, 0)])
 		part.focus_neighbor_right = part.get_path_to(strip[mini(index + 1, strip.size() - 1)])
+	for index in lower.size():
+		var part := lower[index]
+		part.focus_neighbor_top = part.get_path_to(strip[index])
+		part.focus_neighbor_bottom = part.get_path_to(part)
+		part.focus_neighbor_left = part.get_path_to(lower[maxi(index - 1, 0)])
+		part.focus_neighbor_right = part.get_path_to(lower[mini(index + 1, lower.size() - 1)])
 	for part: Control in [stay_button, leave_button]:
 		for way: StringName in [&"focus_neighbor_left", &"focus_neighbor_right"]:
 			part.set(way, part.get_path_to(part))

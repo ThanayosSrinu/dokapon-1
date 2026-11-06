@@ -55,6 +55,10 @@ var _sprites := {}
 var _panels := {}
 
 
+## Space left clear along the bottom, for a strip that stays on top. Set it before adding this.
+var room_below := 0.0
+
+
 func _ready() -> void:
 	# Keeps clicks from reaching the board and buttons behind the window.
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -62,6 +66,7 @@ func _ready() -> void:
 
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.offset_bottom = -room_below
 	add_child(center)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 8)

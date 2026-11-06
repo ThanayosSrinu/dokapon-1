@@ -30,7 +30,7 @@ const ICONS: Texture2D = preload("res://assets/custom/kit/icons.png")
 ## In the order they sit on ICONS. tools/art_kit.py draws them.
 const ICON_NAMES: Array[String] = ["play", "back", "book", "gear", "door", "coin", "food", "heart",
 		"sword", "boot", "wood", "ore", "herb", "die", "bag", "lock", "check", "star", "music", "sound", "cross",
-		"spring", "summer", "autumn", "winter", "moon"]
+		"spring", "summer", "autumn", "winter", "moon", "shield", "magic"]
 const FOLDER := "res://assets/custom/kit/%s.png"
 
 static var _icons := {}

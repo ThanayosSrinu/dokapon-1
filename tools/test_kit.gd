@@ -143,6 +143,18 @@ func _test_bar_and_chip() -> void:
 	_expect(chip._label.text == "90", "a chip rolls to its new number")
 	chip.queue_free()
 
+	var stat := KitStat.new("sword", "AT")
+	add_child(stat)
+	stat.set_value(16, 16, false)
+	_expect(not stat.is_low and stat._number.text == "16", "a stat at its normal value is plain")
+	stat.set_value(12, 16)
+	await get_tree().create_timer(KitStat.ROLL_SECONDS + WAIT).timeout
+	_expect(stat._number.text == "12", "a stat rolls to its new number")
+	_expect(stat.is_low and stat._number.modulate == KitStat.LOW, "a lowered stat stays red")
+	stat.set_value(16, 16, false)
+	_expect(not stat.is_low and stat._number.modulate == Color.WHITE, "a stat back to normal is plain")
+	stat.queue_free()
+
 
 func _test_tips_follow_focus() -> void:
 	var first := KitButton.new()
