@@ -8,6 +8,8 @@ extends RefCounted
 const WORLD: Texture2D = preload("res://assets/puny/world/punyworld-overworld-tileset.png")
 const SPACES: Texture2D = preload("res://assets/custom/spaces.png")
 const ICONS: Texture2D = preload("res://assets/custom/space_icons.png")
+## The Portal's gate on the island, one row of frames. Its foot is at the bottom middle.
+const PORTAL_GATE: Texture2D = preload("res://assets/custom/portal/board_gate.png")
 const DIE: Texture2D = preload("res://assets/custom/die.png")
 ## Resting faces with the numbers 0 to 10, for a movement die.
 const DIE_NUMBERS: Texture2D = preload("res://assets/custom/die_numbers.png")

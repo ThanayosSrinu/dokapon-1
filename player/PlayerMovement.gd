@@ -284,9 +284,11 @@ func _ask_for_path(options: Array[BoardNode]) -> BoardNode:
 
 func _slide_to(node: BoardNode) -> void:
 	_face(node.global_position - global_position)
-	# The same speed all the way, so one step runs smoothly into the next.
+	# The same speed all the way, so one step runs smoothly into the next. A long road
+	# is one step that takes longer to walk.
+	var roads := maxf(global_position.distance_to(node.global_position) / BoardManager.GRID, 1.0)
 	var tween := create_tween()
-	tween.tween_property(self, "global_position", node.global_position, step_duration)
+	tween.tween_property(self, "global_position", node.global_position, step_duration * roads)
 	await tween.finished
 	node.bump()
 	BoardFx.dust(get_parent(), node.global_position)

@@ -1,13 +1,15 @@
 class_name WorldAmbience
 extends Node2D
 ## Keeps the island alive: cloud shadows drift over it, birds cross the sky,
-## chimneys smoke, flags wave and water glints. It is decoration only, so it
+## chimneys smoke, flags wave, a Portal swirls and water glints. It is decoration only, so it
 ## uses Godot's global random functions and never GameState.rng.
 
 const CLOUD_COUNT := 6
 const CLOUD_SPEED := 14.0
 const CLOUD_OPACITY := 0.45
 const FLAG_FRAME_TIME := 0.16
+const GATE_FRAME_TIME := 0.12
+const GATE_FRAMES := 6
 const BIRD_FRAME_TIME := 0.14
 const BIRD_SPEED := 90.0
 const SMOKE_INTERVAL := 0.7
@@ -19,6 +21,8 @@ var art: BoardArt
 var _clouds: Array[Sprite2D] = []
 var _flags: Array[Sprite2D] = []
 var _birds: Array[Sprite2D] = []
+var _gates: Array[Sprite2D] = []
+var _gate_clock := 0.0
 var _flag_clock := 0.0
 var _bird_clock := 0.0
 var _smoke_clock := 0.0
@@ -48,6 +52,16 @@ func _ready() -> void:
 		add_child(flag)
 		_flags.append(flag)
 
+	for point in art.gate_points:
+		var gate := Sprite2D.new()
+		gate.texture = GameArt.PORTAL_GATE
+		gate.hframes = GATE_FRAMES
+		gate.centered = false
+		gate.offset = Vector2(-GameArt.PORTAL_GATE.get_width() / GATE_FRAMES / 2, -GameArt.PORTAL_GATE.get_height())
+		gate.position = point.round()
+		add_child(gate)
+		_gates.append(gate)
+
 
 func _process(delta: float) -> void:
 	for cloud in _clouds:
@@ -60,6 +74,12 @@ func _process(delta: float) -> void:
 		_flag_clock = 0.0
 		for flag in _flags:
 			flag.frame = (flag.frame + 1) % 4
+
+	_gate_clock += delta
+	if _gate_clock >= GATE_FRAME_TIME:
+		_gate_clock = 0.0
+		for gate in _gates:
+			gate.frame = (gate.frame + 1) % GATE_FRAMES
 
 	_smoke_clock += delta
 	if _smoke_clock >= SMOKE_INTERVAL and not art.smoke_points.is_empty():

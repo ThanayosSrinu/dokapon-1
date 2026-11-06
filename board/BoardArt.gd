@@ -60,6 +60,12 @@ const WALL_GATE := Vector2i(19, 29)
 const KEEP_TOP := Vector2i(12, 26)
 const KEEP_BOTTOM := Vector2i(12, 28)
 
+## The Portal's gate, as cells relative to its space. It stands right behind the space,
+## so no road may leave a Portal to the north.
+const GATE_RECT := Rect2i(-2, -4, 4, 3)
+## Where the foot of the gate stands, in cells from the space.
+const GATE_FOOT := Vector2(0.0, -0.8)
+
 ## House tiles per town style; the second number of each pair of styles is how
 ## far the same house in another roof color is on the sheet.
 const HOUSES := [Vector2i(4, 27), Vector2i(5, 27), Vector2i(6, 27), Vector2i(7, 26),
@@ -84,6 +90,9 @@ const SPACE_PROPS := {
 }
 const PROP_OFFSETS := [Vector2i(2, -2), Vector2i(-3, -2), Vector2i(2, 1), Vector2i(-3, 1),
 		Vector2i(2, -3), Vector2i(-3, -3), Vector2i(3, 2), Vector2i(-4, 2), Vector2i(3, -3)]
+
+## The kinds of space that stand on a square of bare ground.
+const BARE_GROUND := [BoardNode.NodeType.TOWN, BoardNode.NodeType.CASTLE, BoardNode.NodeType.PORTAL]
 
 ## Things scattered over the grass, on land and on the beach.
 const SCATTER_LAND := [Vector2i(0, 27), Vector2i(3, 26), Vector2i(3, 27), Vector2i(2, 26),
@@ -125,6 +134,8 @@ var centered_objects := {}
 var smoke_points: Array[Vector2] = []
 ## Places in the world where a flag flies.
 var flag_points: Array[Vector2] = []
+## Places in the world where the foot of a Portal's gate stands.
+var gate_points: Array[Vector2] = []
 ## Places in the world on open water.
 var water_points: Array[Vector2] = []
 ## The painted part of the world.
@@ -179,6 +190,7 @@ func _plan(nodes: Array[BoardNode], neighbors: Dictionary) -> void:
 	_lay_dirt(nodes)
 	_lay_bridges()
 	_place_castle(nodes)
+	_place_portal(nodes)
 	_place_towns(nodes)
 	_place_props(nodes)
 	_raise_cliffs()
@@ -327,9 +339,9 @@ func _lay_dirt(nodes: Array[BoardNode]) -> void:
 		if not _near_water(vertex, 1):
 			_ground[vertex] = DIRT
 
-	# Squares of bare ground around towns and the castle's gate.
+	# Squares of bare ground around towns, the castle's gate and the Portal.
 	for node in nodes:
-		if node.node_type == BoardNode.NodeType.TOWN or node.node_type == BoardNode.NodeType.CASTLE:
+		if BARE_GROUND.has(node.node_type):
 			var center := vertex_of(node)
 			for offset_y in range(-2, 3):
 				for offset_x in range(-2, 3):
@@ -399,6 +411,16 @@ func _build_castle(spot: Vector2i) -> void:
 	flag_points.append((Vector2(gate.x, rect.position.y + 1) + Vector2(0.0, 0.1)) * GameArt.CELL)
 	flag_points.append((Vector2(rect.position) + Vector2(0.5, 0.1)) * GameArt.CELL)
 	flag_points.append((Vector2(last.x, rect.position.y) + Vector2(0.5, 0.1)) * GameArt.CELL)
+
+
+# Keeps the place behind a Portal clear for its gate. WorldAmbience stands it there,
+# because it moves.
+func _place_portal(nodes: Array[BoardNode]) -> void:
+	for node in nodes:
+		if node.node_type == BoardNode.NodeType.PORTAL:
+			var spot := vertex_of(node)
+			_reserve(Rect2i(GATE_RECT.position + spot, GATE_RECT.size))
+			gate_points.append((Vector2(spot) + GATE_FOOT) * GameArt.CELL)
 
 
 func _put_centered_block(cell: Vector2i, tile: Vector2i) -> void:

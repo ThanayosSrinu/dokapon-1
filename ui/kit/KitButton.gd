@@ -206,7 +206,7 @@ func _draw_contents(face: Rect2, look: Look) -> void:
 	var font_size := _text_size()
 	var base := Kit.snap(middle - font.get_height(font_size) / 2.0 + font.get_ascent(font_size))
 	var spot := Vector2(left, base)
-	var dark_text := kind == Kind.PRIMARY and look != Look.OFF
+	var dark_text := (kind == Kind.PRIMARY or lit) and look != Look.OFF
 	if not dark_text:
 		draw_string(font, spot + TEXT_SHADOW, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Kit.INK)
 	var color := Kit.INK if dark_text else Kit.MUTED if look == Look.OFF else Kit.CREAM

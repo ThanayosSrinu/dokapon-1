@@ -26,6 +26,8 @@ enum NodeType {
 	TREASURE,  # Search for hidden treasure.
 	SHRINE,    # Heal and change class.
 	TRAP,      # Lose gold or HP.
+	# --- Added in E7 ---
+	PORTAL,    # The start of a trip, and the only way home.
 }
 
 ## Display data for each type: readable name and the color of its effects. The
@@ -43,6 +45,7 @@ const TYPE_INFO := {
 	NodeType.TREASURE: {"name": "Treasure", "color": Color(0.28, 0.75, 0.75)},
 	NodeType.SHRINE:   {"name": "Shrine",   "color": Color(0.70, 0.88, 1.00)},
 	NodeType.TRAP:     {"name": "Trap",     "color": Color(0.50, 0.36, 0.42)},
+	NodeType.PORTAL:   {"name": "Portal",   "color": Color(0.35, 0.43, 0.88)},
 }
 
 ## Half the width of the top face of a space, in the world.

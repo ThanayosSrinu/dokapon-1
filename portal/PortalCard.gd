@@ -1,13 +1,15 @@
 class_name PortalCard
 extends PanelContainer
-## What the Portal offers: where it leads, who is going, the food they carry and the one
-## main button. It holds no rules: PortalScreen tells it what to show.
+## What the Portal offers: where it leads, how big a trip, who is going, the food they
+## carry and the one main button. It holds no rules: PortalScreen tells it what to show.
 
 const WIDTH := 440.0
 const PORTRAIT_SIZE := Vector2(112, 112)
 
 var food: FoodDays
 var enter: KitButton
+## One button for each size of trip, the shortest first.
+var sizes: Array[KitButton] = []
 
 var _picture: TextureRect
 var _name: Label
@@ -17,6 +19,7 @@ var _portrait: TextureRect
 var _person: Label
 var _class: Label
 var _die: Label
+var _size_row: HBoxContainer
 
 
 func _init() -> void:
@@ -35,6 +38,9 @@ func _init() -> void:
 	place.add_child(_name)
 	_about = Kit.text("", 0.0, &"PaperLabel")
 	place.add_child(_about)
+	_size_row = HBoxContainer.new()
+	_size_row.add_theme_constant_override("separation", 8)
+	column.add_child(_size_row)
 	var supplies := VBoxContainer.new()
 	supplies.add_theme_constant_override("separation", 6)
 	column.add_child(supplies)
@@ -47,6 +53,23 @@ func _init() -> void:
 	enter.kind = KitButton.Kind.PRIMARY
 	enter.press_sound = "magic"
 	column.add_child(enter)
+
+
+## Makes a button for each of `stages`, which PortalScreen then connects.
+func build_sizes(stages: Array[Stage]) -> void:
+	for stage in stages:
+		var button := KitButton.new()
+		button.kind = KitButton.Kind.SMALL
+		button.text = stage.size_name
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_size_row.add_child(button)
+		sizes.append(button)
+
+
+## Lights the button of the size in use.
+func mark_size(index: int) -> void:
+	for place in sizes.size():
+		sizes[place].lit = place == index
 
 
 func show_stage(stage: Stage) -> void:

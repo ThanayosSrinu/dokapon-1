@@ -62,6 +62,16 @@ func get_stage(id: String) -> Stage:
 	return stages.get(id)
 
 
+## The sizes of `place`, the shortest trip first.
+func sizes_of(place: String) -> Array[Stage]:
+	var found: Array[Stage] = []
+	for id: String in stages:
+		if stages[id].place == place:
+			found.append(stages[id])
+	found.sort_custom(func(a: Stage, b: Stage) -> bool: return a.food_days < b.food_days)
+	return found
+
+
 ## Everyone at the Tavern, cheapest first.
 func adventurers_by_fee() -> Array[Adventurer]:
 	var list: Array[Adventurer] = []
@@ -223,6 +233,8 @@ func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
 		problems.append("stage %s needs a picture" % stage.id)
 	if stage.food_days <= 0:
 		problems.append("stage %s needs food above 0" % stage.id)
+	if stage.place == "" or stage.size_name == "":
+		problems.append("stage %s needs a place and a size name" % stage.id)
 
 
 func _check_monster(monster: MonsterData, problems: PackedStringArray) -> void:

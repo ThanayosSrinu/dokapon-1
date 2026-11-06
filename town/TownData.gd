@@ -6,7 +6,7 @@ extends RefCounted
 
 const START_GOLD := 300
 ## Where the Portal leads in a new game. A stage id from data/stages.
-const FIRST_STAGE := "grass"
+const FIRST_STAGE := "grass_s"
 
 ## What a building is called and what it does, in words for its sign. Every building
 ## here can be visited, so a new one in E10 needs an entry and a place in TownArt.
@@ -22,7 +22,7 @@ var gold := START_GOLD
 var buildings := {}
 ## Who works for the town. One adventurer at a time.
 var hired: Adventurer
-## Where the Portal leads.
+## Where the Portal leads, and how big a trip. The Portal screen changes this.
 var stage: Stage = Database.get_stage(FIRST_STAGE)
 
 

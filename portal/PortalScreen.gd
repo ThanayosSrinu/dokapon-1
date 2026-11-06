@@ -41,6 +41,8 @@ var heading: Label
 var hero: CharacterFigure
 
 var _stage: Node2D
+# The sizes of trip on offer, in the same order as the card's buttons.
+var _sizes: Array[Stage] = []
 var _leaving := false
 var _shaking := false
 
@@ -85,20 +87,47 @@ func _build_hero(town: TownData) -> void:
 func _build_card(town: TownData) -> void:
 	card = PortalCard.new()
 	card.position = Vector2(CARD_LEFT, CARD_TOP)
-	card.show_stage(town.stage)
-	card.show_person(town.stage, town.hired)
 	card.enter.pressed.connect(_on_enter)
 	var layer := Control.new()
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage.add_child(layer)
 	layer.add_child(card)
+	_build_sizes(town)
+	_show_trip(town)
+
+
+func _build_sizes(town: TownData) -> void:
+	_sizes = Database.sizes_of(town.stage.place)
+	card.build_sizes(_sizes)
+	for index in _sizes.size():
+		var stage := _sizes[index]
+		card.sizes[index].pressed.connect(_choose_size.bind(stage))
+		var spaces := IslandMap.open(stage.map_file).spaces().size()
+		Tips.attach(card.sizes[index], "%s trip" % stage.size_name,
+				"%d spaces, and %d days of food." % [spaces, stage.food_days])
+
+
+## Makes the card show the trip the town has chosen.
+func _show_trip(town: TownData) -> void:
+	card.show_stage(town.stage)
+	card.show_person(town.stage, town.hired)
+	card.mark_size(_sizes.find(town.stage))
 	Tips.attach(card.food, "Food", _food_tip(town))
+
+
+func _choose_size(stage: Stage) -> void:
+	var town := TownData.current()
+	if _leaving or town.stage == stage:
+		return
+	town.stage = stage
+	_show_trip(town)
+	card.food.focus_neighbor_top = card.food.get_path_to(_chosen_size_button())
 
 
 ## Says where the food comes from, because that is what the player can change.
 func _food_tip(town: TownData) -> String:
 	var stage := town.stage
-	var words := "One roll of the die is one day. %s gives %d days of food." % [stage.display_name, stage.food_days]
+	var words := "One roll of the die is one day. A %s trip gives %d days of food." % [stage.size_name.to_lower(), stage.food_days]
 	if town.hired != null and town.hired.bonus_food > 0:
 		words += " %s brings %d more." % [town.hired.display_name, town.hired.bonus_food]
 	return words
@@ -120,21 +149,33 @@ func _build_top_bar(town: TownData) -> void:
 	add_child(back)
 
 
-## Up from the button reads the food, and every way out of the card reaches Back.
+## Up from the button reads the food, then the sizes, and every way out of the card
+## reaches Back. Left and right walk along the sizes.
 func _link_focus() -> void:
 	var enter := card.enter
 	var food := card.food
 	enter.focus_neighbor_top = enter.get_path_to(food)
 	enter.focus_neighbor_bottom = enter.get_path_to(enter)
 	food.focus_neighbor_bottom = food.get_path_to(enter)
-	food.focus_neighbor_top = food.get_path_to(back)
+	food.focus_neighbor_top = food.get_path_to(_chosen_size_button())
 	for part: Control in [enter, food]:
 		part.focus_neighbor_left = part.get_path_to(back)
 		part.focus_neighbor_right = part.get_path_to(part)
+	var sizes := card.sizes
+	for index in sizes.size():
+		var button := sizes[index]
+		button.focus_neighbor_top = button.get_path_to(back)
+		button.focus_neighbor_bottom = button.get_path_to(food)
+		button.focus_neighbor_left = button.get_path_to(sizes[index - 1] if index > 0 else back)
+		button.focus_neighbor_right = button.get_path_to(sizes[mini(index + 1, sizes.size() - 1)])
 	back.focus_neighbor_top = back.get_path_to(back)
 	back.focus_neighbor_left = back.get_path_to(back)
 	for way: StringName in [&"focus_neighbor_bottom", &"focus_neighbor_right"]:
 		back.set(way, back.get_path_to(enter))
+
+
+func _chosen_size_button() -> KitButton:
+	return card.sizes[_sizes.find(TownData.current().stage)]
 
 
 func _refresh_enter(town: TownData) -> void:
@@ -166,6 +207,9 @@ func _on_enter() -> void:
 	card.enter.focus_mode = Control.FOCUS_NONE
 	card.food.focus_mode = Control.FOCUS_NONE
 	card.enter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for button in card.sizes:
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	heading.text = GOING % town.hired.display_name
 	_clear_the_card()
 	bubble.say(town.hired.send_line, hero.global_position + HERO_HEAD, _site_area())

@@ -16,6 +16,7 @@ func _ready() -> void:
 	await _test_nobody_hired()
 	await _test_opening()
 	await _test_food_shows_the_bonus()
+	await _test_sizes()
 	await _test_keys()
 	await _test_controller()
 	await _test_mouse()
@@ -113,6 +114,48 @@ func _test_food_shows_the_bonus() -> void:
 	_expect(portal.card.food.extra_days == town.hired.bonus_food, "and the days they bring")
 
 
+func _test_sizes() -> void:
+	_hired_town()
+	var town := TownData.current()
+	var sizes := Database.sizes_of(town.stage.place)
+	_expect(sizes.size() == 3, "grass comes in three sizes")
+	_expect(sizes[0].food_days < sizes[1].food_days and sizes[1].food_days < sizes[2].food_days,
+			"a bigger trip carries more food")
+	var portal: PortalScreen = await _open(PORTAL)
+	var card := portal.card
+	_expect(card.sizes.size() == 3, "the card offers each size")
+	_expect(card.sizes[0].lit and not card.sizes[1].lit, "the size in use is lit")
+	_expect(card.sizes[1].get_global_rect().size.y > 0.0 and card.sizes[1].size.x >= card.sizes[1].get_combined_minimum_size().x,
+			"the sizes' words fit")
+	await _tap("ui_up")
+	await _tap("ui_up")
+	await _tap("ui_right")
+	_expect(_focused() == card.sizes[1], "right walks along the sizes")
+	_expect(town.stage == sizes[0], "walking along them changes nothing")
+	await _tap("ui_accept")
+	_expect(town.stage == sizes[1], "pressing one chooses it")
+	_expect(card.sizes[1].lit and not card.sizes[0].lit, "and it is lit")
+	_expect(card.shown_food() == "Food for %d days" % sizes[1].food_days, "the food follows the size")
+	_expect(card.food.trip_days == sizes[1].food_days, "and so does its picture")
+	_expect(card._picture.texture == sizes[1].picture, "and so does the island")
+	await _tap("ui_right")
+	await _tap("ui_accept")
+	_expect(town.stage == sizes[2], "the largest can be chosen")
+	await _tap("ui_right")
+	_expect(_focused() == card.sizes[2], "the sizes end at the last one")
+	await _tap("ui_down")
+	await _tap("ui_up")
+	_expect(_focused() == card.sizes[2], "up from the food comes back to the size in use")
+	var middle := portal.get_viewport_rect().size / 2.0
+	var screen := Rect2(middle - Vector2(WIDE) / 2.0, Vector2(WIDE))
+	_expect(screen.encloses(card.get_global_rect()), "the card with its sizes fits the window")
+	portal = await _open(PORTAL)
+	_expect(portal.card.sizes[2].lit, "the Portal remembers the size")
+	var trip := Expedition.new(town.hired, town.stage, 1)
+	_expect(trip.food_left == sizes[2].food_for(town.hired), "and the trip carries its food")
+	_expect(trip.map == IslandMap.open(sizes[2].map_file), "on its island")
+
+
 func _test_keys() -> void:
 	_hired_town()
 	var portal: PortalScreen = await _open(PORTAL)
@@ -122,7 +165,9 @@ func _test_keys() -> void:
 	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
 	_expect(Tips.showing() and Tips.shown_text().contains("one day"), "the food's tip explains days")
 	await _tap("ui_up")
-	_expect(_focused() == portal.back, "up again reaches Back")
+	_expect(_focused() == portal.card.sizes[0], "up again reaches the size in use")
+	await _tap("ui_left")
+	_expect(_focused() == portal.back, "left of the first size is Back")
 	await _tap("ui_down")
 	_expect(_focused() == enter, "down leaves Back for Enter")
 	await _tap("ui_down")

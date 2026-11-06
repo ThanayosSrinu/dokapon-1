@@ -27,7 +27,7 @@ def x2(image):
 
 SPACE_CELL = 40
 SPACE_COLORS = ["#e8b33a", "#b9a98c", "#46a65c", "#8b5fd0", "#e08a3e", "#4c8fe6",
-                "#dd5fa3", "#f0cf4f", "#d8423f", "#2fb3ad", "#a9dcf2", "#6b4a63"]
+                "#dd5fa3", "#f0cf4f", "#d8423f", "#2fb3ad", "#a9dcf2", "#6b4a63", "#4a5fd8"]
 
 
 def space_disc(color, rim_light, rim_dark):
@@ -79,7 +79,7 @@ def make_spaces():
     stone_light, stone_dark = hexc("#cfc4ab"), hexc("#94866f")
     gold_light, gold_dark = hexc("#f6dc86"), hexc("#b57f2c")
     for index, color in enumerate(SPACE_COLORS):
-        special = index in (0, 4)
+        special = index in (0, 4, 12)
         disc = space_disc(hexc(color), gold_light if special else stone_light,
                           gold_dark if special else stone_dark)
         sheet.alpha_composite(disc, (index * SPACE_CELL, 0))
@@ -130,6 +130,9 @@ ICONS = [
     # Trap: a skull.
     ["...ssssss...", "..ssssssss..", ".ssssssssss.", ".sNNssssNNs.", ".sNNssssNNs.",
      ".ssssNNssss.", "..ssssssss..", "...sNsNsN...", "...ssssss..."],
+    # Portal: a swirling ring.
+    ["....cccc....", "..ccwwwwcc..", ".cwwbbbbwwc.", ".cwbBBBBbwc.", "cwbBBccBBbwc",
+     "cwbBBccBBbwc", ".cwbBBBBbwc.", ".cwwbbbbwwc.", "..ccwwwwcc..", "....cccc...."],
 ]
 ICON_CELL = 20
 

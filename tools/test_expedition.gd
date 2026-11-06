@@ -19,7 +19,7 @@ var _bram: Adventurer
 
 
 func _ready() -> void:
-	_grass = Database.get_stage("grass")
+	_grass = Database.get_stage("grass_l")
 	_bram = Database.get_adventurer("bram")
 	_test_map_matches_the_board()
 	_test_days_to()

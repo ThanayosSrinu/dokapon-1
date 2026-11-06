@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="Stage" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://expedition/Stage.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/custom/portal/stage_grass_m.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "grass_m"
+display_name = "Grass Island"
+place = "grass"
+size_name = "Medium"
+description = "Fields and woods, with more to find."
+map_file = "res://maps/grass_m_1.json"
+picture = ExtResource("2")
+food_days = 14

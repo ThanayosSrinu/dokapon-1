@@ -20,6 +20,8 @@ STAGE_X, STAGE_Y = 180, 100
 RING_X, RING_FEET_Y = 202, 214
 HORIZON_Y = 150
 RING_W, RING_H, RING_FRAMES = 120, 176, 8
+# board/WorldAmbience.gd: GATE_FRAMES must agree. These are art pixels; the file is 2x.
+BOARD_GATE_W, BOARD_GATE_H, BOARD_GATE_FRAMES = 30, 40, 6
 CARD_PICTURE_W, CARD_PICTURE_H = 200, 72
 
 SKY = ["#1c1642", "#2c1f63", "#4a2a7f", "#7a3a8c", "#b84f80", "#e87a62", "#f9b268", "#fddf98"]
@@ -238,7 +240,8 @@ def stage_picture(map_file):
     """A small view of a stage, drawn from its real map file, so it shows the real island."""
     spaces = json.loads(Path(map_file).read_text(encoding="utf-8"))["spaces"]
     w, h = CARD_PICTURE_W, CARD_PICTURE_H
-    scale = 4.0
+    # The same for every map, so a small trip looks small.
+    scale = 3.0
     xs = [s["x"] for s in spaces]
     ys = [s["y"] for s in spaces]
     left = w / 2 - (min(xs) + max(xs)) / 2 * scale
@@ -276,13 +279,41 @@ def stage_picture(map_file):
         if 1.5 < nearest(x, y) < 3.8 and px[x, y][:3] != (232, 207, 150):
             draw.rectangle((x, y, x + 1, y + 1), fill=hexc("#2f7a4f"))
             draw.point((x, y), fill=hexc("#4fae55"))
-    castle = next(s for s in spaces if s["type"] == "CASTLE")
-    cx, cy = int(left + castle["x"] * scale), int(top + castle["y"] * scale)
-    draw.rectangle((cx - 3, cy - 5, cx + 3, cy), fill=hexc("#e4dfe6"))
-    draw.rectangle((cx - 1, cy - 8, cx + 1, cy - 5), fill=hexc("#4c8fe6"))
-    draw.line((cx - 3, cy, cx + 3, cy), fill=hexc("#7c7688"))
+    portal = next(s for s in spaces if s["type"] == "PORTAL")
+    cx, cy = int(left + portal["x"] * scale), int(top + portal["y"] * scale)
+    draw.ellipse((cx - 3, cy - 7, cx + 3, cy), fill=hexc("#4cc6f0"), outline=hexc("#e4dfe6"))
     draw.rectangle((0, 0, w - 1, h - 1), outline=hexc("#20161f"))
     return image
+
+
+def board_gate():
+    """The Portal on the island, small enough to stand behind a space. One row of frames."""
+    w, h = BOARD_GATE_W, BOARD_GATE_H
+    sheet = Image.new("RGBA", (w * BOARD_GATE_FRAMES, h), (0, 0, 0, 0))
+    cx, cy = (w - 1) / 2, 19.0
+    rx, ry = 11.0, 15.0
+    for frame in range(BOARD_GATE_FRAMES):
+        image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        px = image.load()
+        for y in range(h - 4):
+            for x in range(w):
+                u, v = (x - cx) / rx, (y - cy) / ry
+                d = math.hypot(u, v)
+                if d <= 0.74:
+                    turn = math.atan2(v, u) * 2 + d * 7 - frame * math.tau / BOARD_GATE_FRAMES
+                    band = (math.sin(turn) + 1) / 2 * (1 - d * 0.7)
+                    px[x, y] = hexc(SWIRL[min(int(band * len(SWIRL)) + 1, len(SWIRL) - 1)])
+                elif d <= 1.0:
+                    shine = u * -0.5 + v * -0.8
+                    px[x, y] = STONE_LIGHT if shine > 0.42 else STONE_DARK if shine < -0.38 else STONE
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((5, h - 7, w - 6, h - 5), fill=STONE)
+        draw.line((5, h - 7, w - 6, h - 7), fill=STONE_LIGHT)
+        draw.rectangle((2, h - 4, w - 3, h - 2), fill=STONE_DARK)
+        draw.line((2, h - 4, w - 3, h - 4), fill=STONE)
+        outline_outside(image)
+        sheet.alpha_composite(image, (frame * w, 0))
+    return sheet
 
 
 def make_portal():
@@ -290,4 +321,6 @@ def make_portal():
     x2(site()).save(PORTAL / "site.png")
     x2(ring()).save(PORTAL / "ring.png")
     x2(flare()).save(PORTAL / "flare.png")
-    x2(stage_picture("maps/world_map.json")).save(PORTAL / "stage_grass.png")
+    x2(board_gate()).save(PORTAL / "board_gate.png")
+    for stage in ("grass_s", "grass_m", "grass_l"):
+        x2(stage_picture(f"maps/{stage}_1.json")).save(PORTAL / f"stage_{stage}.png")

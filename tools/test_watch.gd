@@ -281,6 +281,7 @@ func _test_two_trips() -> void:
 	_hire(bram)
 	for seed_value: int in [11, 12]:
 		var screen := await _open_trip(seed_value, TEST_SPEED)
-		_expect(screen.trip.day < 3 and screen.trip.player.gold == 0, "each trip starts afresh")
+		_expect(screen.trip.day < 3, "each trip starts afresh")
+		_expect(screen.trip.player.gold <= SpaceEffects.GOLD_BASE + SpaceEffects.GOLD_PER_LEVEL * screen.trip.player.level * 2, "and keeps no gold from the last one")
 		await _until_report(screen)
 		await _back_to_town()

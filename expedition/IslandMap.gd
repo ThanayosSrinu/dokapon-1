@@ -11,8 +11,10 @@ const DAYS_PRECISION := 0.01
 # Path -> IslandMap, because a map never changes while the game runs.
 static var _opened := {}
 
-## The space that leads home. E7 replaces the castle with a PORTAL space.
+## The space that leads home: the PORTAL space, or the castle on the old map.
 var portal := -1
+## The named parts of the map, as the file lists them: {"id", "name", "spaces"}.
+var zones: Array[Dictionary] = []
 
 # Space id -> its BoardNode.NodeType, in map-file order.
 var _types := {}
@@ -37,11 +39,16 @@ func _init(data: Dictionary) -> void:
 		var id := int(row["id"])
 		_types[id] = BoardNode.NodeType[row["type"]]
 		_links[id] = [] as Array[int]
-		if _types[id] == BoardNode.NodeType.CASTLE:
+		if _types[id] == BoardNode.NodeType.PORTAL or _types[id] == BoardNode.NodeType.CASTLE:
 			portal = id
 	for row: Dictionary in data["spaces"]:
 		for link in row.get("to", []):
 			_link(int(row["id"]), int(link))
+	for row: Dictionary in data.get("zones", []):
+		var ids: Array[int] = []
+		for id in row["spaces"]:
+			ids.append(int(id))
+		zones.append({"id": row["id"], "name": row["name"], "spaces": ids})
 
 
 ## Every space id, in map-file order.
@@ -57,6 +64,14 @@ func type_of(id: int) -> BoardNode.NodeType:
 
 func neighbors(id: int) -> Array[int]:
 	return _links[id]
+
+
+## The id of the zone that holds space `id`, or "" if none does. The Portal is in none.
+func zone_of(id: int) -> String:
+	for zone in zones:
+		if zone["spaces"].has(id):
+			return zone["id"]
+	return ""
 
 
 ## Where someone on `id` may step next. `came_from` is the space they just left, or -1

@@ -1,11 +1,13 @@
 extends Node
 ## Runs many expeditions with no window and prints how they went. Run from the project root:
-##   godot --headless --path . res://tools/sim_expedition.tscn -- <trips> <seed> [food] [person]
-## `food` replaces the stage's days of food, and `person` is one adventurer's id. Without
-## them it runs each adventurer on the stage's own food. Prints one block per adventurer,
+##   godot --headless --path . res://tools/sim_expedition.tscn -- <trips> <seed> [food] [person] [stage]
+## `food` replaces the stage's days of food, 0 keeps it. `person` is one adventurer's id
+## or "all". `stage` is a stage id, or "old" for the old map of E5, which has no spurs and
+## big loops. Without it every stage runs. Prints one block per adventurer on each stage,
 ## then how long it all took.
 
-const STAGE := "grass"
+const OLD_MAP := "res://maps/world_map.json"
+const OLD_FOOD := 21
 
 
 func _ready() -> void:
@@ -14,24 +16,46 @@ func _ready() -> void:
 	var first_seed := int(args[1]) if args.size() > 1 else 1
 	var food := int(args[2]) if args.size() > 2 else 0
 	var people := Database.sorted_ids(Database.adventurers)
-	if args.size() > 3:
+	if args.size() > 3 and args[3] != "all":
 		people.assign([args[3]])
-	var stage := Database.get_stage(STAGE)
+	var stages := _stages(args[4] if args.size() > 4 else "")
 	var started := Time.get_ticks_msec()
-	for id in people:
-		_run(Database.get_adventurer(id), stage, trips, first_seed, food)
+	for stage in stages:
+		var report := MapReport.new(IslandMap.open(stage.map_file))
+		print("=== %s, a roll can end on %.1f spaces (0-6) or %.1f (0-10)"
+				% [stage.map_file, report.landing_choices(6), report.landing_choices(10)])
+		for id in people:
+			_run(Database.get_adventurer(id), stage, trips, first_seed, food, report)
 	var seconds := (Time.get_ticks_msec() - started) / 1000.0
-	print("%d trips in %.1f s" % [trips * people.size(), seconds])
+	print("%d trips in %.1f s" % [trips * people.size() * stages.size(), seconds])
 	get_tree().quit()
 
 
-func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: int) -> void:
+func _stages(id: String) -> Array[Stage]:
+	var found: Array[Stage] = []
+	if id == "old":
+		var old := Stage.new()
+		old.map_file = OLD_MAP
+		old.food_days = OLD_FOOD
+		found.append(old)
+	elif id != "":
+		found.append(Database.get_stage(id))
+	else:
+		found = Database.sizes_of(Database.get_stage(TownData.FIRST_STAGE).place)
+	return found
+
+
+func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: int, report: MapReport) -> void:
 	var days: Array[int] = []
 	var gold: Array[int] = []
 	var landing: Array[int] = []
 	var endings := {}
 	var totals := {"gold": 0, "levels": 0, "fights": 0, "won": 0, "hungry": 0, "spare": 0, "far": 0}
 	var trip_food := 0
+	var last_seen := {}
+	var alike := 0.0
+	var seen_share := 0.0
+	var deep_trips := 0
 	for index in trips:
 		var trip := Expedition.new(person, stage, first_seed + index)
 		if food > 0:
@@ -39,6 +63,10 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 		trip_food = trip.food_left
 		trip.play_to_end()
 		days.append(trip.day)
+		alike += _overlap(last_seen, trip.visits) if index > 0 else 0.0
+		last_seen = trip.visits
+		seen_share += float(trip.visits.size()) / trip.map.spaces().size()
+		deep_trips += 1 if _reached_spur_end(trip, report) else 0
 		endings[trip.ending] = endings.get(trip.ending, 0) + 1
 		totals["levels"] += trip.player.level - person.level
 		totals["fights"] += trip.fights
@@ -65,6 +93,30 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 	print("Fights        %.1f per trip, %.1f won" % [float(totals["fights"]) / trips, float(totals["won"]) / trips])
 	print("Levels gained %.1f per trip" % (float(totals["levels"]) / trips))
 	print("Furthest      %.1f steps from the Portal" % (float(totals["far"]) / trips))
+	print("Map seen      %d%% per trip" % roundi(100.0 * seen_share / trips))
+	print("Like last trip %d%% of the same spaces" % roundi(100.0 * alike / maxi(trips - 1, 1)))
+	print("Deep spur end  %d%% of trips" % roundi(100.0 * deep_trips / trips))
+
+
+# How much two trips landed on the same spaces: 100% is the same trip, 0 shares nothing.
+func _overlap(first: Dictionary, second: Dictionary) -> float:
+	var shared := 0
+	for id: int in first:
+		if second.has(id):
+			shared += 1
+	var either := first.size() + second.size() - shared
+	return float(shared) / either if either > 0 else 1.0
+
+
+# True if they landed on the last space of a spur at least two spaces deep.
+func _reached_spur_end(trip: Expedition, report: MapReport) -> bool:
+	for spur in report.spurs:
+		if spur["depth"] < 2:
+			continue
+		for id: int in spur["spaces"]:
+			if trip.map.neighbors(id).size() == 1 and trip.visits.has(id):
+				return true
+	return false
 
 
 # Average, then the low end, the middle and the high end, so odd trips stand out.

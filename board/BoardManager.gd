@@ -19,6 +19,9 @@ signal board_ready
 
 ## World distance between two neighboring grid points of the map file.
 const GRID := 160
+## The longest a link should be, in grid points. A link of 2 is what lets a map have a
+## loop of 5 spaces: with every link 1 long, every loop on a grid has an even size.
+const LONGEST_LINK := 2
 
 ## The map to play. The editor reloads it whenever the file changes.
 @export_file("*.json") var map_file := "res://maps/world_map.json"
@@ -129,12 +132,12 @@ func get_board_node(id: int) -> BoardNode:
 	return _nodes_by_id.get(id)
 
 
-## Returns the Castle space where every player begins.
+## Returns the space where play begins: the Portal, or the Castle on the old map.
 func get_starting_node() -> BoardNode:
 	for node in _nodes:
-		if node.node_type == BoardNode.NodeType.CASTLE:
+		if _is_start(node):
 			return node
-	push_error("BoardManager: the map has no Castle space.")
+	push_error("BoardManager: the map has no Portal or Castle space.")
 	return null
 
 
@@ -231,14 +234,13 @@ func validate() -> PackedStringArray:
 		problems.append("The map has no spaces yet.")
 		return problems
 
-	# Exactly one Castle (the start).
-	var castles := _nodes.filter(func(n: BoardNode) -> bool:
-			return n.node_type == BoardNode.NodeType.CASTLE)
-	if castles.is_empty():
-		problems.append("There is no Castle space. Players need one to start on.")
-	elif castles.size() > 1:
-		problems.append("There are %d Castles. Only the first one ('%s') is the start."
-				% [castles.size(), castles[0].name])
+	# Exactly one start.
+	var starts := _nodes.filter(_is_start)
+	if starts.is_empty():
+		problems.append("There is no Portal or Castle space. A trip needs one to start on.")
+	elif starts.size() > 1:
+		problems.append("There are %d start spaces. Only the first one ('%s') is the start."
+				% [starts.size(), starts[0].name])
 
 	for node in _nodes:
 		if get_neighbors(node).is_empty():
@@ -247,11 +249,11 @@ func validate() -> PackedStringArray:
 	problems.append_array(_find_layout_problems())
 
 	# Every linked space must be reachable from the start.
-	if not castles.is_empty():
-		var reached := _collect_reachable(castles[0])
+	if not starts.is_empty():
+		var reached := _collect_reachable(starts[0])
 		for node in _nodes:
 			if not reached.has(node) and not get_neighbors(node).is_empty():
-				problems.append("'%s' cannot be reached from the Castle." % node.name)
+				problems.append("'%s' cannot be reached from the start." % node.name)
 
 	return problems
 
@@ -270,6 +272,10 @@ func print_board() -> void:
 
 
 # --- Internal helpers -------------------------------------------------------
+
+func _is_start(node: BoardNode) -> bool:
+	return node.node_type == BoardNode.NodeType.PORTAL or node.node_type == BoardNode.NodeType.CASTLE
+
 
 func _add_link(a: BoardNode, b: BoardNode) -> void:
 	if not _neighbors[a].has(b):
@@ -341,8 +347,9 @@ func _create_spaces(rows: Array) -> void:
 				_add_link(node, other)
 
 
-## Finds roads that pass through a third space. The map still works, but the
-## road on screen is not the way the token walks.
+## Finds roads that draw badly: through a third space, stepped on a diagonal, or
+## longer than a link may be. The map still works, but the road on screen is not
+## the way the token walks, or doesn't look like one step.
 func get_layout_notes() -> PackedStringArray:
 	var notes := PackedStringArray()
 	var spaces := {}
@@ -352,6 +359,11 @@ func get_layout_notes() -> PackedStringArray:
 		for other in get_neighbors(node):
 			if node.node_id > other.node_id:
 				continue
+			var gap := (other.position - node.position).abs() / GRID
+			if gap.x > 0.0 and gap.y > 0.0:
+				notes.append("The road %s-%s is diagonal." % [node.name, other.name])
+			elif maxf(gap.x, gap.y) > LONGEST_LINK:
+				notes.append("The road %s-%s is longer than %d grid points." % [node.name, other.name, LONGEST_LINK])
 			for vertex in BoardArt.road_between(BoardArt.vertex_of(node), BoardArt.vertex_of(other)):
 				var met: BoardNode = spaces.get(vertex)
 				if met != null and met != node and met != other:
@@ -360,7 +372,7 @@ func get_layout_notes() -> PackedStringArray:
 
 
 ## Finds places where the map cannot draw properly: spaces on top of each other,
-## or a road inside the castle walls.
+## or a road inside the castle walls or the Portal's gate.
 func _find_layout_problems() -> PackedStringArray:
 	var problems := PackedStringArray()
 	var spaces := {}
@@ -370,19 +382,22 @@ func _find_layout_problems() -> PackedStringArray:
 			problems.append("'%s' and '%s' are on the same spot." % [spaces[vertex].name, node.name])
 		spaces[vertex] = node
 
-	var castle_rects: Array[Rect2i] = []
+	# Rect -> what stands there.
+	var buildings := {}
 	for node in _nodes:
+		var spot := BoardArt.vertex_of(node)
 		if node.node_type == BoardNode.NodeType.CASTLE:
-			castle_rects.append(Rect2i(BoardArt.CASTLE_RECT.position + BoardArt.vertex_of(node),
-					BoardArt.CASTLE_RECT.size))
+			buildings[Rect2i(BoardArt.CASTLE_RECT.position + spot, BoardArt.CASTLE_RECT.size)] = "castle walls"
+		elif node.node_type == BoardNode.NodeType.PORTAL:
+			buildings[Rect2i(BoardArt.GATE_RECT.position + spot, BoardArt.GATE_RECT.size)] = "Portal's gate"
 
 	for node in _nodes:
 		for other in get_neighbors(node):
 			if node.node_id > other.node_id:
 				continue
 			for vertex in BoardArt.road_between(BoardArt.vertex_of(node), BoardArt.vertex_of(other)):
-				for rect in castle_rects:
+				for rect: Rect2i in buildings:
 					if rect.has_point(vertex):
-						problems.append("The road %s-%s runs through the castle walls." % [node.name, other.name])
+						problems.append("The road %s-%s runs through the %s." % [node.name, other.name, buildings[rect]])
 						break
 	return problems
