@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Adventurer" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://expedition/Adventurer.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Green.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/custom/tavern/portrait_wren.png" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = "wren"
+display_name = "Wren"
+description = "Fast feet. Packs light."
+class_id = "rogue"
+sheet = ExtResource("2")
+portrait = ExtResource("3")
+level = 1
+die_top = 10
+bonus_food = 0
+fee = 150
+lines = Array[String](["Ten steps ahead of trouble. Usually.", "I know a shortcut. I know all of them.", "Pay me and I'm already gone."])
+hired_line = "Race you there!"

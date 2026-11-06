@@ -16,6 +16,7 @@ func _ready() -> void:
 	await _test_mouse()
 	await _test_press()
 	await _test_arrow_follows_the_plan()
+	await _test_tavern_door()
 	print("TESTS OK" if _failures == 0 else "%d TEST(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -121,9 +122,10 @@ func _test_keys() -> void:
 	_expect(_focused() == town.back, "up reaches Back")
 	await _tap("ui_down")
 	_expect(_focused() == tavern, "down leaves Back for the buildings")
+	await _tap("ui_right")
 	await _tap("ui_accept")
 	await _wait()
-	_expect(town.page() != null and town.page().visible, "Enter visits the Tavern")
+	_expect(town.page() != null and town.page().visible, "Enter visits the Portal")
 	_expect(_focused() == town.page().back, "the visit starts on its Back")
 	await _tap("ui_left")
 	await _tap("ui_right")
@@ -133,7 +135,7 @@ func _test_keys() -> void:
 	await _wait()
 	_expect(town.page() == null, "Esc closes the window")
 	_expect(get_tree().current_scene == town, "and stays in town")
-	_expect(_focused() == tavern, "focus goes back to the Tavern")
+	_expect(_focused() == portal, "focus goes back to the Portal")
 	await _tap("ui_cancel")
 	await _until_settled()
 	_expect(get_tree().current_scene is MainMenu, "Esc in town goes back to the menu")
@@ -192,8 +194,21 @@ func _test_press() -> void:
 
 func _test_arrow_follows_the_plan() -> void:
 	TownData.start_new()
-	TownData.current().has_adventurer = true
+	TownData.current().hire(Database.adventurers_by_fee()[0])
 	var town: TownScreen = await _open(TOWN)
 	_expect(town.arrow.target == town.building("portal"), "with someone hired, the arrow moves to the Portal")
 	_expect(_focused() == town.building("portal"), "and so does the focus")
+	_expect(town.waiting != null, "the hired adventurer waits in town")
 	TownData.start_new()
+
+
+func _test_tavern_door() -> void:
+	await _open_town()
+	await _tap("ui_accept")
+	await _until_settled()
+	_expect(get_tree().current_scene is TavernScreen, "Enter on the Tavern goes inside")
+	await _tap("ui_cancel")
+	await _until_settled()
+	_expect(get_tree().current_scene is TownScreen, "Esc in the Tavern goes back to town")
+	var town: TownScreen = get_tree().current_scene
+	_expect(_focused() == town.building("tavern"), "and the Tavern has focus again")

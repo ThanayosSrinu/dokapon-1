@@ -18,8 +18,8 @@ static var _current: TownData
 var gold := START_GOLD
 ## Building id -> its level. Levels start at 1, and E10 raises them.
 var buildings := {}
-## True once someone has been hired. E3 sets this.
-var has_adventurer := false
+## Who works for the town. One adventurer at a time.
+var hired: Adventurer
 
 
 func _init() -> void:
@@ -41,4 +41,22 @@ static func start_new() -> void:
 
 ## The building a player should go to next (rule U6).
 func next_step() -> String:
-	return "portal" if has_adventurer else "tavern"
+	return "portal" if hired != null else "tavern"
+
+
+## Why `person` can't be hired, in a few words for a button, or "" if they can.
+func hire_problem(person: Adventurer) -> String:
+	if hired != null:
+		return "%s has the job" % hired.display_name
+	if person.fee > gold:
+		return "Need %d more gold" % (person.fee - gold)
+	return ""
+
+
+## Pays `person` and takes them on. Returns false, changing nothing, if that can't be done.
+func hire(person: Adventurer) -> bool:
+	if hire_problem(person) != "":
+		return false
+	gold -= person.fee
+	hired = person
+	return true

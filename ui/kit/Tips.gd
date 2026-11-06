@@ -74,6 +74,9 @@ func attach(control: Control, title: String, body: String) -> void:
 
 ## Takes a tip away.
 func detach(control: Control) -> void:
+	# Marking one that never had a tip would stop attach() from ever hooking it up.
+	if not control.has_meta(META):
+		return
 	control.set_meta(META, [])
 	_close_if_owned_by(control)
 

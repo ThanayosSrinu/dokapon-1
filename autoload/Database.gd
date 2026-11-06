@@ -1,5 +1,5 @@
 extends Node
-## Every item, spell, class and monster in the game. Registered as the "Database"
+## Every item, spell, class, monster and adventurer in the game. Registered as the "Database"
 ## autoload. It reads the folders under data/, so adding a .tres file is all it
 ## takes to add content: no code changes.
 
@@ -7,14 +7,20 @@ const ITEM_FOLDER := "res://data/items"
 const SPELL_FOLDER := "res://data/spells"
 const CLASS_FOLDER := "res://data/classes"
 const MONSTER_FOLDER := "res://data/monsters"
+const ADVENTURER_FOLDER := "res://data/adventurers"
 
 ## Every stat a character has.
 const STATS: Array[String] = ["max_hp", "max_mp", "attack", "defense", "magic", "speed"]
+## The movement dice an adventurer can have, by their highest number.
+const DIE_TOPS: Array[int] = [6, 8, 10]
+## How many people the Tavern has room for.
+const TAVERN_SIZE := 3
 
 var items := {}
 var spells := {}
 var classes := {}
 var monsters := {}
+var adventurers := {}
 
 
 func _ready() -> void:
@@ -26,6 +32,7 @@ func load_all() -> void:
 	spells = _load_folder(SPELL_FOLDER)
 	classes = _load_folder(CLASS_FOLDER)
 	monsters = _load_folder(MONSTER_FOLDER)
+	adventurers = _load_folder(ADVENTURER_FOLDER)
 
 
 func get_item(id: String) -> ItemData:
@@ -42,6 +49,19 @@ func get_class_data(id: String) -> ClassData:
 
 func get_monster(id: String) -> MonsterData:
 	return monsters.get(id)
+
+
+func get_adventurer(id: String) -> Adventurer:
+	return adventurers.get(id)
+
+
+## Everyone at the Tavern, cheapest first.
+func adventurers_by_fee() -> Array[Adventurer]:
+	var list: Array[Adventurer] = []
+	for id in sorted_ids(adventurers):
+		list.append(adventurers[id])
+	list.sort_custom(func(a: Adventurer, b: Adventurer) -> bool: return a.fee < b.fee)
+	return list
 
 
 ## The monsters a player of `level` may meet, sorted like sorted_ids().
@@ -65,7 +85,7 @@ func sorted_ids(table: Dictionary) -> Array[String]:
 ## Lists every mistake in the data. tools/check_data.gd prints these.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
-	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER]:
+	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER]:
 		_check_folder(folder, problems)
 	for id: String in items:
 		_check_item(items[id], problems)
@@ -75,6 +95,10 @@ func validate() -> PackedStringArray:
 		_check_class(classes[id], problems)
 	for id: String in monsters:
 		_check_monster(monsters[id], problems)
+	if adventurers.size() != TAVERN_SIZE:
+		problems.append("the Tavern needs %d adventurers, not %d" % [TAVERN_SIZE, adventurers.size()])
+	for id: String in adventurers:
+		_check_adventurer(adventurers[id], problems)
 	for level in range(1, PlayerData.MAX_LEVEL + 1):
 		if monster_ids_for_level(level).is_empty():
 			problems.append("no monster for a player of level %d" % level)
@@ -162,6 +186,23 @@ func _check_class(data: ClassData, problems: PackedStringArray) -> void:
 	for level: int in data.spells_by_level:
 		if not spells.has(data.spells_by_level[level]):
 			problems.append("class %s learns unknown spell at level %d" % [data.id, level])
+
+
+func _check_adventurer(person: Adventurer, problems: PackedStringArray) -> void:
+	if not classes.has(person.class_id):
+		problems.append("adventurer %s has unknown class '%s'" % [person.id, person.class_id])
+	if person.sheet == null or person.portrait == null:
+		problems.append("adventurer %s needs a sheet and a portrait" % person.id)
+	if person.level < 1 or person.level > PlayerData.MAX_LEVEL:
+		problems.append("adventurer %s has a bad level" % person.id)
+	if not DIE_TOPS.has(person.die_top):
+		problems.append("adventurer %s has a die that does not exist: %d" % [person.id, person.die_top])
+	if person.bonus_food < 0:
+		problems.append("adventurer %s has negative food" % person.id)
+	if person.fee <= 0:
+		problems.append("adventurer %s needs a fee above 0" % person.id)
+	if person.lines.is_empty() or person.hired_line == "":
+		problems.append("adventurer %s needs something to say" % person.id)
 
 
 func _check_monster(monster: MonsterData, problems: PackedStringArray) -> void:

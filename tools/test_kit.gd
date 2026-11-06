@@ -9,7 +9,7 @@ const MENU := "res://ui/menu/MainMenu.tscn"
 const TOWN := "res://town/TownScreen.tscn"
 const GALLERY := "res://ui/kit/KitGallery.tscn"
 const ART_FOLDERS: Array[String] = ["res://assets/custom/kit", "res://assets/custom/menu",
-		"res://assets/custom/town"]
+		"res://assets/custom/town", "res://assets/custom/tavern"]
 const WAIT := 0.15
 const WIDE := Vector2i(1280, 720)
 

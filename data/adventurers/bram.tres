@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Adventurer" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://expedition/Adventurer.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Warrior-Red.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/custom/tavern/portrait_bram.png" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = "bram"
+display_name = "Bram"
+description = "Hits hard. Walks slowly."
+class_id = "warrior"
+sheet = ExtResource("2")
+portrait = ExtResource("3")
+level = 1
+die_top = 6
+bonus_food = 0
+fee = 100
+lines = Array[String](["I hit things. Mostly the right things.", "Point me at the monster, boss.", "Is the food free out there?"])
+hired_line = "Ha! Let's go!"

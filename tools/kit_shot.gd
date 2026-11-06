@@ -40,7 +40,7 @@ func _ready() -> void:
 	town.back.grab_focus()
 	await _settle(0.5)
 	await _save(folder + "/town_back.png")
-	town.building("tavern").pressed.emit()
+	town.building("portal").pressed.emit()
 	await _settle(0.5)
 	await _save(folder + "/town_visit.png")
 	town.page().close()

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Adventurer" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://expedition/Adventurer.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Mage-Cyan.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/custom/tavern/portrait_maren.png" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = "maren"
+display_name = "Maren"
+description = "Old, wise and well fed."
+class_id = "mage"
+sheet = ExtResource("2")
+portrait = ExtResource("3")
+level = 3
+die_top = 8
+bonus_food = 4
+fee = 400
+lines = Array[String](["My fee is high. So is my survival rate.", "I packed for the whole trip. Did you?", "Come back when your purse is heavier."])
+hired_line = "A wise choice."

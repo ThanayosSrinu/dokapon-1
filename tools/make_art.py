@@ -791,4 +791,6 @@ if __name__ == "__main__":
     art_kit.make_menu()
     import art_town
     art_town.make_town()
+    import art_tavern
+    art_tavern.make_tavern()
     make_tile_table()

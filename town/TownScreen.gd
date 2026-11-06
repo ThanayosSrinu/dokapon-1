@@ -4,14 +4,19 @@ extends Control
 ## clicking it or pressing Accept. Only buildings in TownData.BUILDINGS can be visited.
 
 const MENU := "res://ui/menu/MainMenu.tscn"
+const TAVERN := "res://tavern/TavernScreen.tscn"
 const SOON_WIDTH := 420.0
 ## How far the resources stand from the screen's edge. Back has the other corner.
 const BAR_MARGIN := 24.0
+## Where a hired adventurer waits, from the Portal's feet.
+const WAITING_SPOT := Vector2(124, -36)
 
 var back: KitBackButton
 var art: TownArt
 var gold_chip: KitChip
 var arrow: KitArrow
+## The hired adventurer, waiting by the Portal, if there is one.
+var waiting: CharacterFigure
 ## Building id -> its TownBuilding.
 var buildings := {}
 ## Building id -> its TownSign.
@@ -73,6 +78,10 @@ func _build_world(town: TownData) -> void:
 		var sign_board := TownSign.new(id, TownArt.BUILDING_FEET[id])
 		_world.add_child(sign_board)
 		signs[id] = sign_board
+	if town.hired != null:
+		waiting = CharacterFigure.new(town.hired.sheet, CharacterFigure.FACING_LEFT)
+		waiting.position = TownArt.BUILDING_FEET["portal"] + WAITING_SPOT
+		_world.add_child(waiting)
 	arrow = KitArrow.new(buildings[town.next_step()], KitArrow.Side.ABOVE)
 	_world.add_child(arrow)
 
@@ -126,7 +135,10 @@ func _refresh_signs() -> void:
 
 
 func _visit(place: TownBuilding) -> void:
-	# E3 and E4 replace this window with the Tavern and the Portal.
+	if place.id == "tavern":
+		Screens.go(TAVERN)
+		return
+	# E4 replaces this window with the Portal.
 	_page = KitPage.new(place.text)
 	var words := Kit.text("Its doors open in the next part of the build.", SOON_WIDTH)
 	words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
