@@ -233,13 +233,13 @@ func _show_loan(town: TownData) -> void:
 		sizes[index].visible = not owing
 	_size_row.visible = not owing
 	if owing:
-		_loan_words.text = "You owe %d gold by %s. Repay it all, or the town is lost." % [town.loan_owed, Calendar.date(town.loan_due)]
+		_loan_words.text = "You owe %d gold by %s. Repay it all, or it is GAME OVER." % [town.loan_owed, Calendar.date(town.loan_due)]
 		var problem := town.repay_problem()
 		loan_button.text = problem if problem != "" else "Repay %d gold" % town.loan_owed
 		loan_button.block("You have %d gold, and the loan is %d." % [town.gold, town.loan_owed] if problem != "" else "")
 		return
 	var repays := TownData.loan_repays(chosen_loan)
-	_loan_words.text = "Borrow %d, repay %d by %s. It must all be repaid by then, or the town is lost." % [chosen_loan, repays, Calendar.date(town.new_loan_due())]
+	_loan_words.text = "Borrow %d, repay %d by %s. It must all be repaid by then, or it is GAME OVER." % [chosen_loan, repays, Calendar.date(town.new_loan_due())]
 	loan_button.text = "Borrow %d gold" % chosen_loan
 	loan_button.block("")
 
