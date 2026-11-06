@@ -89,9 +89,9 @@ func _test_opening() -> void:
 	_expect(_focused() == enter, "Enter has focus")
 	_expect(portal.arrow.target == enter, "the arrow points at Enter")
 	_expect(portal.back.position == Kit.BACK_POSITION, "Back is in its usual place")
-	_expect(portal.hero != null and portal.hero.texture == town.hired.sheet, "the adventurer stands on the road")
-	_expect(portal.card.shown_person() == town.hired.display_name, "the card shows who is going")
-	_expect(portal.heading.text.contains(town.hired.display_name), "the heading names them")
+	_expect(portal.hero != null and portal.hero.texture == town.going.sheet, "the adventurer stands on the road")
+	_expect(portal.card.shown_person() == town.going.display_name, "the card shows who is going")
+	_expect(portal.heading.text.contains(town.going.display_name), "the heading names them")
 	var middle := portal.get_viewport_rect().size / 2.0
 	var screen := Rect2(middle - Vector2(WIDE) / 2.0, Vector2(WIDE))
 	_expect(screen.encloses(portal.card.get_global_rect()), "the card fits a 1280 by 720 window")
@@ -108,10 +108,10 @@ func _test_food_shows_the_bonus() -> void:
 	_hired_town("maren")
 	var town := TownData.current()
 	var portal: PortalScreen = await _open(PORTAL)
-	var food := town.stage.food_for(town.hired)
+	var food := town.stage.food_for(town.going)
 	_expect(portal.card.shown_food() == "Food for %d days" % food, "the food is counted in days")
 	_expect(portal.card.food.trip_days == town.stage.food_days, "the picture shows the trip's days")
-	_expect(portal.card.food.extra_days == town.hired.bonus_food, "and the days they bring")
+	_expect(portal.card.food.extra_days == town.going.bonus_food, "and the days they bring")
 
 
 func _test_sizes() -> void:
@@ -151,8 +151,8 @@ func _test_sizes() -> void:
 	_expect(screen.encloses(card.get_global_rect()), "the card with its sizes fits the window")
 	portal = await _open(PORTAL)
 	_expect(portal.card.sizes[2].lit, "the Portal remembers the size")
-	var trip := Expedition.new(town.hired, town.stage, 1)
-	_expect(trip.food_left == sizes[2].food_for(town.hired), "and the trip carries its food")
+	var trip := Expedition.new(town.going, town.stage, 1)
+	_expect(trip.food_left == sizes[2].food_for(town.going), "and the trip carries its food")
 	_expect(trip.map == IslandMap.open(sizes[2].map_file), "on its island")
 
 
@@ -169,7 +169,9 @@ func _test_keys() -> void:
 	await _tap("ui_left")
 	_expect(_focused() == portal.back, "left of the first size is Back")
 	await _tap("ui_down")
-	_expect(_focused() == enter, "down leaves Back for Enter")
+	_expect(_focused() == portal.bank_button, "down leaves Back for the Bank")
+	await _tap("ui_right")
+	_expect(_focused() == enter, "right leaves the Bank for Enter")
 	await _tap("ui_down")
 	await _tap("ui_right")
 	_expect(_focused() == enter, "the arrows stay on the card")
@@ -179,7 +181,7 @@ func _test_keys() -> void:
 	await _until_settled()
 	var town: TownScreen = get_tree().current_scene
 	_expect(town is TownScreen, "Esc goes back to town")
-	_expect(TownData.current().hired != null, "and nobody is lost")
+	_expect(TownData.current().going != null, "and nobody is lost")
 	_expect(_focused() == town.building("portal"), "and the Portal has focus")
 
 
@@ -219,7 +221,7 @@ func _test_send_off() -> void:
 	await _wait()
 	_expect(portal._leaving, "Enter starts the send-off")
 	_expect(not portal.back.visible and portal.arrow.target == null, "there is nothing to press now")
-	_expect(portal.bubble.shown_words() == town.hired.send_line, "the adventurer says their line")
+	_expect(portal.bubble.shown_words() == town.going.send_line, "the adventurer says their line")
 	await _tap("ui_cancel")
 	await _tap("ui_accept")
 	await _wait()
@@ -234,7 +236,7 @@ func _test_send_off() -> void:
 	_expect(portal.hero.position == PortalScreen.HERO_GOAL, "the adventurer reached the Portal")
 	await _until_on_island()
 	_expect(get_tree().current_scene is ExpeditionScreen, "the send-off reaches the island")
-	_expect(town.gold == gold and town.hired != null, "the trip changes nothing yet")
+	_expect(town.gold == gold and town.going != null, "the trip changes nothing yet")
 
 
 ## Runs straight after _test_send_off, on the island it reached.
@@ -246,15 +248,26 @@ func _test_arrival() -> void:
 	_expect(island.board.map_file == town.stage.map_file, "the island is the stage's own map")
 	_expect(island.hero.visible and island.hero.global_position == start, "the adventurer stands on the first space")
 	_expect(island.hero.material == null, "and has fully appeared")
-	_expect(island.bubble.shown_words() == town.hired.arrive_line, "they say their line")
+	_expect(island.bubble.shown_words() == town.going.arrive_line, "they say their line")
 	_expect(island.back.position == Kit.BACK_POSITION, "Back is in its usual place")
 	_expect(Sound.current_tune() == "board", "the island has its music")
 	_expect(island.camera.is_current(), "the island's camera is in use")
 	await _leave_with_keys()
 	var back_home: TownScreen = get_tree().current_scene
 	_expect(back_home is TownScreen, "leaving goes back to town")
-	_expect(_focused() == back_home.building("portal"), "the Portal has focus for the next trip")
-	_expect(back_home.waiting != null, "the adventurer is home")
+	var town_now := TownData.current()
+	var one := town_now.member(town_now.roster[0].person)
+	_expect(one.days_out(town_now.day) == TownData.OUT_AFTER_WARP, "the Warp Stone costs them days of work")
+	_expect(town_now.send_problem() != "", "so nobody can be sent")
+	_expect(_focused() == back_home.rest_button, "Rest has focus while they heal")
+	_expect(back_home.arrow.target == back_home.rest_button, "and the arrow points at it")
+	_expect(back_home.waiting == null, "the adventurer is not at the Portal")
+
+
+## Lets them heal after a warp, and comes back to a town where someone can go.
+func _heal() -> void:
+	TownData.current().rest(TownData.OUT_AFTER_WARP)
+	await _open(TOWN)
 
 
 ## Uses the Warp Stone with Esc, Down and Enter, then leaves the report.
@@ -290,6 +303,7 @@ func _test_path_with_keys() -> void:
 		await _until_on_island()
 		await _leave_with_keys()
 		_expect(get_tree().current_scene is TownScreen, "keys: the island leads home, trip %d" % trip)
+		await _heal()
 
 
 func _test_path_with_controller() -> void:
@@ -303,7 +317,7 @@ func _test_path_with_controller() -> void:
 	await _wait()
 	await _pad(JOY_BUTTON_A)
 	await _until_town()
-	_expect(TownData.current().hired != null, "pad: someone is hired")
+	_expect(TownData.current().going != null, "pad: someone is hired")
 	for trip in 2:
 		await _pad(JOY_BUTTON_A)
 		await _until_settled()
@@ -319,6 +333,7 @@ func _test_path_with_controller() -> void:
 		await _pad(JOY_BUTTON_A)
 		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "pad: the island leads home, trip %d" % trip)
+		await _heal()
 
 
 func _test_path_with_mouse() -> void:
@@ -334,7 +349,7 @@ func _test_path_with_mouse() -> void:
 	await _wait()
 	await _click(tavern.card.hire)
 	await _until_town()
-	_expect(TownData.current().hired != null, "mouse: someone is hired")
+	_expect(TownData.current().going != null, "mouse: someone is hired")
 	for trip in 2:
 		town = get_tree().current_scene
 		await _click(town.building("portal"))
@@ -351,6 +366,8 @@ func _test_path_with_mouse() -> void:
 		await _click(island.back)
 		await _until_town()
 		_expect(get_tree().current_scene is TownScreen, "mouse: the island leads home, trip %d" % trip)
+		await _heal()
+		await get_tree().create_timer(Screens.WIPE_SECONDS).timeout
 	TownData.start_new()
 
 

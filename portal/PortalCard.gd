@@ -10,6 +10,8 @@ var food: FoodDays
 var enter: KitButton
 ## One button for each size of trip, the shortest first.
 var sizes: Array[KitButton] = []
+## One button for each person on the roster, with room for more than one.
+var people: Array[KitButton] = []
 
 var _picture: TextureRect
 var _name: Label
@@ -20,6 +22,9 @@ var _person: Label
 var _class: Label
 var _die: Label
 var _size_row: HBoxContainer
+var _forecast_row: HBoxContainer
+var _forecasts: Array[Label] = []
+var _people_row: HBoxContainer
 
 
 func _init() -> void:
@@ -40,7 +45,13 @@ func _init() -> void:
 	place.add_child(_about)
 	_size_row = HBoxContainer.new()
 	_size_row.add_theme_constant_override("separation", 8)
-	column.add_child(_size_row)
+	var sizes_and_days := VBoxContainer.new()
+	sizes_and_days.add_theme_constant_override("separation", 4)
+	column.add_child(sizes_and_days)
+	sizes_and_days.add_child(_size_row)
+	_forecast_row = HBoxContainer.new()
+	_forecast_row.add_theme_constant_override("separation", 8)
+	sizes_and_days.add_child(_forecast_row)
 	var supplies := VBoxContainer.new()
 	supplies.add_theme_constant_override("separation", 6)
 	column.add_child(supplies)
@@ -64,6 +75,39 @@ func build_sizes(stages: Array[Stage]) -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_size_row.add_child(button)
 		sizes.append(button)
+		var words := Kit.text("", 0.0, &"PaperLabel")
+		words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		words.size_flags_stretch_ratio = 1.0
+		_forecast_row.add_child(words)
+		_forecasts.append(words)
+
+
+## Makes a button for each of `names`, which PortalScreen then connects.
+func build_people(names: Array[String]) -> void:
+	for person_name in names:
+		var button := KitButton.new()
+		button.kind = KitButton.Kind.SMALL
+		button.text = person_name
+		_people_row.add_child(button)
+		people.append(button)
+	_die.visible = people.is_empty()
+
+
+## Lights the button of who is going.
+func mark_person(index: int) -> void:
+	for place in people.size():
+		people[place].lit = place == index
+
+
+## Shows when a trip of size `index` could be back, or nothing with "".
+func show_forecast(index: int, words: String, color: Color) -> void:
+	_forecasts[index].text = words
+	_forecasts[index].add_theme_color_override("font_color", color)
+
+
+func shown_forecast(index: int) -> String:
+	return _forecasts[index].text
 
 
 ## Lights the button of the size in use.
@@ -121,3 +165,6 @@ func _build_person(parent: Container) -> void:
 	words.add_child(_class)
 	_die = Kit.text("", 0.0, &"PaperLabel")
 	words.add_child(_die)
+	_people_row = HBoxContainer.new()
+	_people_row.add_theme_constant_override("separation", 6)
+	words.add_child(_people_row)

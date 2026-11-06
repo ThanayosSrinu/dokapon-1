@@ -1,15 +1,14 @@
 class_name TripHud
 extends KitPanel
-## The strip along the bottom while a trip plays: the day, health, food, bag and gold.
+## The strip along the bottom while a trip plays: the date, health, food, bag and gold.
 ## Food turns gold once they ask to come home, because that is the lord's cue.
 ## Each part has a tip with the exact numbers (rule U3).
 
 const BAR_WIDTH := 200.0
 const FOOD_WORDS_WIDTH := 96.0
-const DAY_WIDTH := 112.0
 const GAP := 18
 
-var day_label: Label
+var date: DateChip
 var hp_bar: KitBar
 var food_bar: KitBar
 var food_words: Label
@@ -28,9 +27,10 @@ func _init(trip: Expedition, stage: Stage) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", GAP)
 	body.add_child(row)
-	day_label = Kit.text("", DAY_WIDTH, &"Heading")
-	day_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(day_label)
+	date = DateChip.new(true)
+	date.focus_mode = Control.FOCUS_ALL
+	date.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(date)
 	hp_bar = _bar(row, Kit.HEALTH, "heart")
 	food_bar = _bar(row, Kit.SUPPLY, "food")
 	food_words = Kit.text("")
@@ -50,7 +50,8 @@ func _ready() -> void:
 func refresh(slide := true) -> void:
 	var player := _trip.player
 	var max_hp: int = player.get_stat("max_hp")
-	day_label.text = "Day %d" % maxi(_trip.day, 1)
+	var town := TownData.current()
+	date.show_day(town, town.day + _trip.day)
 	hp_bar.set_amount(player.hp, max_hp, slide)
 	food_bar.set_amount(_trip.food_left, _food_full, slide)
 	food_words.text = "No food!" if _trip.food_left == 0 else _days(_trip.food_left)

@@ -22,6 +22,8 @@ extends Resource
 @export var bonus_food := 0
 ## Gold to hire them.
 @export var fee := 100
+## Gold a month while they are on the roster.
+@export var wage := 40
 ## What they say when pointed at, one line at a time.
 @export var lines: Array[String] = []
 ## What they say on being hired.

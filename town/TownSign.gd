@@ -10,6 +10,7 @@ const RISE := 6.0
 const GAP := 10.0
 
 var _job: Label
+var _alert: Label
 var _feet := Vector2.ZERO
 var _tween: Tween
 
@@ -29,6 +30,10 @@ func _init(id := "tavern", feet := Vector2.ZERO) -> void:
 	_job.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_job.hide()
 	column.add_child(_job)
+	_alert = Kit.text("", 0.0, &"PaperTitle")
+	_alert.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_alert.hide()
+	column.add_child(_alert)
 
 
 func _ready() -> void:
@@ -38,6 +43,19 @@ func _ready() -> void:
 ## True while it says what the building does.
 func is_open() -> bool:
 	return _job.visible
+
+
+## Marks the sign with `words`, or clears it with "". `level` is a TownData.Alert.
+func mark(words: String, level: TownData.Alert) -> void:
+	_alert.text = words
+	_alert.visible = words != ""
+	_alert.add_theme_color_override("font_color", Kit.BLOOD if level == TownData.Alert.ALARM else Kit.SOFT_INK)
+	_fit()
+
+
+## What the sign is marked with, or "".
+func shown_mark() -> String:
+	return _alert.text if _alert.visible else ""
 
 
 func show_job(open: bool) -> void:

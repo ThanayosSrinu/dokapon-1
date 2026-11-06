@@ -45,6 +45,8 @@ func _hire(person: Adventurer) -> void:
 	var town := TownData.current()
 	town.gold = 1000
 	town.hire(person)
+	# Bills are test_bank's job. These trips must match the rules, with nobody warning of them.
+	town.months_paid = 1000
 
 
 # A seed that ends as asked after at least one fight, called home on `recall_day`.
@@ -63,6 +65,10 @@ func _open_trip(seed_value: int, speed := 1.0, recall_day := RECALL_DAY) -> Expe
 	ExpeditionScreen.next_seed = seed_value
 	ExpeditionScreen.next_recall_day = recall_day
 	ExpeditionScreen.chosen_speed = speed
+	# Whoever a test sends is fit, whatever the last trip did to them.
+	var town := TownData.current()
+	town.member(town.roster[0].person).ready_on = 0
+	town.rest(0)
 	await Screens.go(SCREEN)
 	await _wait()
 	return get_tree().current_scene
@@ -101,7 +107,7 @@ func _test_same_as_the_rules(person: Adventurer, stage: Stage, wanted: Expeditio
 	_expect(trip.player.level == level, "so is the level, seed %d" % seed_value)
 	_expect(trip.diary == diary, "so is the whole diary, seed %d" % seed_value)
 	_expect(town.gold == town_gold + plain.gold_home(), "the town gets what came home, once")
-	_expect(town.hired == person, "they still work for the town")
+	_expect(town.member(person) != null, "they still work for the town")
 	_expect(Engine.time_scale == 1.0, "the report runs at normal speed")
 	await _back_to_town()
 

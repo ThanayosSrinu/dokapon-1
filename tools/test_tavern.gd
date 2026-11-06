@@ -17,6 +17,8 @@ func _ready() -> void:
 	await _test_controller()
 	await _test_mouse()
 	await _test_cannot_pay()
+	await _test_tabs_and_roster()
+	await _test_roster_room()
 	await _test_hire_with_keys()
 	await _test_tavern_after_hiring()
 	await _test_hire_with_mouse()
@@ -62,21 +64,21 @@ func _test_hiring_rules() -> void:
 	var town := TownData.current()
 	var cheap := _cheap()
 	var costly := _costly()
-	_expect(town.hired == null, "a new town has nobody")
+	_expect(town.going == null, "a new town has nobody")
 	_expect(town.hire_problem(cheap) == "", "the cheapest can be hired")
 	_expect(town.hire_problem(costly).contains(str(costly.fee - town.gold)), "the problem says how much is missing")
 	_expect(not town.hire(costly), "nobody is hired without the gold")
-	_expect(town.gold == TownData.START_GOLD and town.hired == null, "a failed hire changes nothing")
+	_expect(town.gold == TownData.START_GOLD and town.going == null, "a failed hire changes nothing")
 	_expect(town.hire(cheap), "someone can be hired")
 	_expect(town.gold == TownData.START_GOLD - cheap.fee, "the fee is paid")
-	_expect(town.hired == cheap, "the hire is recorded")
+	_expect(town.going == cheap, "the hire is recorded")
 	_expect(town.next_step() == "portal", "the next step is the Portal")
 	var other := Database.adventurers_by_fee()[1]
-	var gold := town.gold
-	_expect(not town.hire(other), "one adventurer at a time")
-	_expect(town.gold == gold and town.hired == cheap, "a second hire changes nothing")
-	town.gold = TownData.START_GOLD
+	town.gold = 1000
 	_expect(town.hire_problem(cheap) != "", "the one you have can't be hired again")
+	_expect(not town.hire(cheap) and town.roster.size() == 1, "hiring them twice changes nothing")
+	_expect(town.hire(other), "a second person can join")
+	_expect(town.roster.size() == 2 and town.going == cheap, "the first still goes next")
 	TownData.start_new()
 	town = TownData.current()
 	town.gold = cheap.fee
@@ -144,8 +146,9 @@ func _test_card_stays_put() -> void:
 	var room_for_words: float = tavern.card.hire.get_parent_control().size.x
 	for person in Database.adventurers_by_fee():
 		TownData.start_new()
+		TownData.current().gold = 1000
 		TownData.current().hire(person)
-		button.text = TownData.current().hire_problem(_cheap())
+		button.text = TownData.current().hire_problem(person)
 		_expect(button.get_combined_minimum_size().x <= room_for_words, "'%s' fits on the button" % button.text)
 	TownData.start_new()
 	button.text = TownData.current().hire_problem(_costly())
@@ -202,7 +205,7 @@ func _test_controller() -> void:
 	await _pad(JOY_BUTTON_B)
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "B goes back to town")
-	_expect(TownData.current().hired == null, "and leaving hires nobody")
+	_expect(TownData.current().going == null, "and leaving hires nobody")
 
 
 func _test_mouse() -> void:
@@ -241,7 +244,7 @@ func _test_cannot_pay() -> void:
 	await _tap("ui_accept")
 	await _wait()
 	_expect(TownData.current().gold == TownData.START_GOLD, "no gold moves")
-	_expect(TownData.current().hired == null, "nobody is hired")
+	_expect(TownData.current().going == null, "nobody is hired")
 	_expect(get_tree().current_scene == tavern, "and the player stays here")
 	await _tap("ui_left")
 	await _tap("ui_right")
@@ -256,6 +259,84 @@ func _until_in_town() -> void:
 	await _until_settled()
 
 
+func _test_tabs_and_roster() -> void:
+	var tavern := await _open_tavern()
+	_expect(tavern.roster_tab.disabled, "with nobody hired, Roster is off")
+	_expect(tavern.recruit_tab.lit and tavern.tab == TavernScreen.Tab.RECRUIT, "the Tavern opens on Recruit")
+	var town := TownData.current()
+	town.gold = 1000
+	var bram := Database.get_adventurer("bram")
+	var wren := Database.get_adventurer("wren")
+	town.hire(bram)
+	town.hire(wren)
+	town.member(wren).ready_on = town.day + 3
+	town.member(bram).trips = 2
+	town.member(bram).trips_home = 1
+	town.member(bram).gold_home = 240
+	tavern = await _open(TAVERN)
+	_expect(tavern.guests.size() == 1, "Recruit shows only strangers")
+	await _tap("ui_up")
+	await _tap("ui_right")
+	await _tap("ui_right")
+	_expect(_focused() == tavern.roster_tab, "the arrows reach the Roster tab")
+	await _tap("ui_accept")
+	await _wait()
+	_expect(tavern.tab == TavernScreen.Tab.ROSTER and tavern.roster_tab.lit, "Enter opens the Roster")
+	_expect(tavern.guests.size() == 2, "the Roster shows your people")
+	_expect(tavern.card.shown_status() == "Ready to go", "the card says who is ready")
+	_expect(tavern.card._facts[1].text.contains(str(bram.wage)), "the card shows the wage")
+	_expect(tavern.card._facts[2].text.contains("240"), "the card shows past trips")
+	_expect(tavern.card._facts[3].text.contains("Short Sword"), "the card shows the gear")
+	_expect(tavern.card.hire.text == "Dismiss Bram", "the button dismisses")
+	_expect(tavern.card.hire.danger, "and is stained red")
+	await _tap("ui_right")
+	_expect(tavern.card.shown_status().contains("3 days"), "the card counts down a time out")
+	await _tap("ui_down")
+	_expect(_focused() == tavern.card.hire, "Dismiss can be reached")
+	await _tap("ui_accept")
+	await _wait()
+	_expect(tavern.dismiss_panel.visible and _focused() == tavern.keep_button, "Dismiss asks first, on the safe answer")
+	_expect(town.roster.size() == 2, "and nobody has gone yet")
+	await _tap("ui_cancel")
+	await _wait()
+	_expect(not tavern.dismiss_panel.visible and town.roster.size() == 2, "Esc keeps them")
+	_expect(get_tree().current_scene == tavern, "and stays in the Tavern")
+	await _tap("ui_accept")
+	await _wait()
+	await _tap("ui_down")
+	_expect(_focused() == tavern.dismiss_button, "down reaches the real answer")
+	var gold := town.gold
+	var bill := town.bill_amount()
+	await _tap("ui_accept")
+	await _wait()
+	_expect(town.member(wren) == null, "they leave the roster")
+	_expect(town.gold == gold, "nothing is paid back")
+	_expect(town.bill_amount() == bill - wren.wage, "the bill shrinks by their wage")
+	_expect(tavern.guests.size() == 1 and tavern.tab == TavernScreen.Tab.ROSTER, "the Roster shows who is left")
+	await _tap("ui_cancel")
+	await _until_settled()
+	TownData.start_new()
+
+
+func _test_roster_room() -> void:
+	TownData.start_new()
+	var town := TownData.current()
+	town.gold = 10000
+	for person in Database.adventurers_by_fee():
+		_expect(town.hire(person), "%s joins" % person.id)
+	_expect(town.roster.size() == TownData.ROSTER_ROOM, "the roster holds three")
+	var tavern: TavernScreen = await _open(TAVERN)
+	_expect(tavern.tab == TavernScreen.Tab.ROSTER, "with nobody left to hire, the Tavern opens on the Roster")
+	_expect(tavern.recruit_tab.disabled, "and Recruit is off")
+	var extra: Adventurer = Database.get_adventurer("bram").duplicate()
+	extra.id = "extra"
+	_expect(town.hire_problem(extra) == "Roster is full", "nobody can join a full roster")
+	_expect(not town.hire(extra), "and it changes nothing")
+	town.dismiss(town.roster[0].person)
+	_expect(town.going == town.roster[0].person, "with who was going dismissed, the next goes")
+	TownData.start_new()
+
+
 func _test_hire_with_keys() -> void:
 	var tavern := await _open_tavern()
 	var person := tavern.guests[0].adventurer
@@ -263,13 +344,12 @@ func _test_hire_with_keys() -> void:
 	_expect(_focused() == tavern.card.hire, "Hire can be reached")
 	await _tap("ui_accept")
 	await _wait()
-	_expect(TownData.current().hired == person, "Enter on Hire takes them on")
+	_expect(TownData.current().going == person, "Enter on Hire takes them on")
 	_expect(TownData.current().gold == TownData.START_GOLD - person.fee, "and pays them")
 	await get_tree().create_timer(KitChip.ROLL_SECONDS).timeout
 	_expect(tavern.gold_chip.amount == TownData.current().gold, "the top bar shows the new gold")
 	_expect(tavern.bubble.shown_words() == person.hired_line, "they answer")
 	_expect(tavern.card.hire.text == "Hired!", "the button says it is done")
-	_expect(tavern.heading.text.contains("Portal"), "the heading says what comes next")
 	await _tap("ui_cancel")
 	_expect(get_tree().current_scene == tavern, "nobody can leave half way through")
 	await _until_in_town()
@@ -282,19 +362,14 @@ func _test_hire_with_keys() -> void:
 
 ## Runs straight after _test_hire_with_keys, with the same town.
 func _test_tavern_after_hiring() -> void:
-	var hired := TownData.current().hired
+	var hired := TownData.current().going
 	var gold := TownData.current().gold
 	var tavern: TavernScreen = await _open(TAVERN)
 	_expect(tavern.guest(hired.id) == null, "the one hired has left the room")
 	_expect(tavern.guests.size() == Database.TAVERN_SIZE - 1, "the others are still here")
 	_expect(tavern.guests[0].position.x > TavernScreen.GUEST_X[0], "the others keep their places")
-	_expect(tavern.card.hire.disabled, "Hire is off")
-	_expect(tavern.card.hire.text.contains(hired.display_name), "the button says who has the job")
-	_expect(tavern.arrow.target == tavern.back, "the arrow points the way out")
-	await _tap("ui_down")
-	await _tap("ui_accept")
-	await _wait()
-	_expect(TownData.current().hired == hired and TownData.current().gold == gold, "a second hire changes nothing")
+	_expect(tavern.card.hire.disabled == (tavern.chosen.adventurer.fee > gold), "Hire depends on the gold")
+	_expect(TownData.current().going == hired and TownData.current().gold == gold, "looking changes nothing")
 	await _tap("ui_cancel")
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "Esc goes back to town")
@@ -308,7 +383,7 @@ func _test_hire_with_mouse() -> void:
 	await _wait()
 	await _click(tavern.card.hire)
 	await _wait()
-	_expect(TownData.current().hired == one.adventurer, "a click on Hire takes them on")
+	_expect(TownData.current().going == one.adventurer, "a click on Hire takes them on")
 	await _until_in_town()
 
 
@@ -319,6 +394,6 @@ func _test_hire_with_controller() -> void:
 	await _wait()
 	await _pad(JOY_BUTTON_A)
 	await _wait()
-	_expect(TownData.current().hired == person, "A twice hires the person in focus")
+	_expect(TownData.current().going == person, "A twice hires the person in focus")
 	await _until_in_town()
 	TownData.start_new()

@@ -10,8 +10,8 @@ const PAGES := [
 		["star", "You are a lord. Build up your town."],
 		["sword", "Hire an adventurer at the Tavern."],
 		["die", "Send them through the Portal, and watch them explore."],
-		["food", "When the food runs low, they must find the way home."],
-		["bag", "What they carry back pays for your next upgrade."],
+		["food", "When the food runs low, call them home. Nobody turns back alone."],
+		["coin", "What they carry back pays the bills. Pay them at the Bank by each due day."],
 	]],
 	["Controls", [
 		["play", "Mouse: point and click."],

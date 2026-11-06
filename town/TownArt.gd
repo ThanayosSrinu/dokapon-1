@@ -10,9 +10,10 @@ extends BoardArt
 const AREA := Rect2i(-40, -26, 80, 52)
 
 ## Where each building stands: the middle of its bottom edge, in pixels.
-const BUILDING_FEET := {"tavern": Vector2(-368, 86), "portal": Vector2(400, 172)}
+const BUILDING_FEET := {"tavern": Vector2(-368, 86), "bank": Vector2(-112, 60), "portal": Vector2(400, 172)}
 ## The room each building takes up on the ground, in vertices.
-const BUILDING_LOTS := {"tavern": Rect2i(-15, -3, 7, 6), "portal": Rect2i(9, -1, 8, 7)}
+const BUILDING_LOTS := {"tavern": Rect2i(-15, -3, 7, 6), "bank": Rect2i(-7, -3, 6, 5),
+		"portal": Rect2i(9, -1, 8, 7)}
 ## Where smoke leaves the Tavern's chimney, relative to its feet.
 const TAVERN_SMOKE := Vector2(52, -158)
 
@@ -31,10 +32,8 @@ const RIVER_PARTS := [[Vector2i(-41, 8), Vector2i(-14, 9)], [Vector2i(-14, 8), V
 		[Vector2i(13, 8), Vector2i(41, 9)]]
 
 const WELL_CELL := Vector2i(3, 0)
-const COTTAGES: Array[Vector2i] = [Vector2i(-7, 1), Vector2i(-5, 1),
-		Vector2i(6, 1), Vector2i(8, 1), Vector2i(-6, -1), Vector2i(-4, -1), Vector2i(-2, -1),
-		Vector2i(5, -1), Vector2i(7, -1), Vector2i(-7, -3), Vector2i(-5, -3),
-		Vector2i(-3, -3), Vector2i(4, -3), Vector2i(6, -3), Vector2i(8, -3),
+const COTTAGES: Array[Vector2i] = [Vector2i(6, 1), Vector2i(8, 1),
+		Vector2i(5, -1), Vector2i(7, -1), Vector2i(4, -3), Vector2i(6, -3), Vector2i(8, -3),
 		Vector2i(-13, 6), Vector2i(-11, 6), Vector2i(-9, 6), Vector2i(-7, 6), Vector2i(-5, 6),
 		Vector2i(4, 6), Vector2i(6, 6)]
 const STALLS: Array[Vector2i] = [Vector2i(-3, 5), Vector2i(-2, 5), Vector2i(3, 5)]

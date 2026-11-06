@@ -10,7 +10,7 @@ func _ready() -> void:
 	_test_data()
 	await _test_opening()
 	await _test_scene_plan()
-	await _test_only_two_can_be_visited()
+	await _test_what_can_be_visited()
 	await _test_keys()
 	await _test_controller()
 	await _test_mouse()
@@ -87,17 +87,19 @@ func _test_scene_plan() -> void:
 	_expect(not art.flag_points.is_empty(), "the keep flies flags")
 
 
-## Rule: the Tavern and the Portal are the only buildings that can be clicked.
-func _test_only_two_can_be_visited() -> void:
+## Rule: the buildings in TownData.BUILDINGS, Rest and Back are all that can be clicked.
+func _test_what_can_be_visited() -> void:
 	var town := await _open_town()
 	var buttons: Array[BaseButton] = []
 	_collect_any_buttons(town, buttons)
-	_expect(buttons.size() == 3, "the town has three things to press")
+	var extras := 2 + town.rest_panel.day_buttons.size() + 1
+	_expect(buttons.size() == TownData.BUILDINGS.size() + extras, "the town has its things to press")
 	for button in buttons:
-		_expect(button is TownBuilding or button == town.back, "%s belongs here" % button.name)
+		_expect(button is TownBuilding or button == town.back or button == town.rest_button
+				or town.rest_panel.is_ancestor_of(button), "%s belongs here" % button.name)
 	var ids: Array = town.buildings.keys()
 	ids.sort()
-	_expect(ids == ["portal", "tavern"], "the Tavern and the Portal can be visited")
+	_expect(ids == ["bank", "portal", "tavern"], "the Tavern, the Bank and the Portal can be visited")
 
 
 func _collect_any_buttons(node: Node, into: Array[BaseButton]) -> void:
@@ -112,16 +114,23 @@ func _test_keys() -> void:
 	var tavern := town.building("tavern")
 	var portal := town.building("portal")
 	await _tap("ui_right")
+	_expect(_focused() == town.building("bank"), "right reaches the Bank")
+	await _tap("ui_right")
 	_expect(_focused() == portal, "right reaches the Portal")
 	_expect(town.signs["portal"].is_open() and not town.signs["tavern"].is_open(), "the signs follow the focus")
 	await _tap("ui_right")
+	_expect(_focused() == town.rest_button, "right reaches Rest")
+	await _tap("ui_right")
 	_expect(_focused() == tavern, "right wraps round to the Tavern")
 	await _tap("ui_left")
-	_expect(_focused() == portal, "left wraps round to the Portal")
+	_expect(_focused() == town.rest_button, "left wraps round to Rest")
+	await _tap("ui_left")
+	_expect(_focused() == portal, "left reaches the Portal")
 	await _tap("ui_up")
 	_expect(_focused() == town.back, "up reaches Back")
 	await _tap("ui_down")
 	_expect(_focused() == tavern, "down leaves Back for the buildings")
+	await _tap("ui_right")
 	await _tap("ui_right")
 	await _tap("ui_accept")
 	await _until_settled()
@@ -136,6 +145,7 @@ func _test_keys() -> void:
 
 func _test_controller() -> void:
 	var town := await _open_town()
+	await _pad(JOY_BUTTON_DPAD_RIGHT)
 	await _pad(JOY_BUTTON_DPAD_RIGHT)
 	_expect(_focused() == town.building("portal"), "the pad reaches the Portal")
 	await _pad(JOY_BUTTON_A)

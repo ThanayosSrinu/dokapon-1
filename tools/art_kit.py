@@ -12,7 +12,8 @@ MENU = OUT / "menu"
 WOOD_DARK, WOOD, WOOD_LIGHT = hexc("#3f2822"), hexc("#6e452b"), hexc("#a4713f")
 PAPER, PAPER_DARK = hexc("#f2e2b8"), hexc("#d9bf8a")
 ICON_NAMES = ["play", "back", "book", "gear", "door", "coin", "food", "heart", "sword", "boot",
-              "wood", "ore", "herb", "die", "bag", "lock", "check", "star", "music", "sound", "cross"]
+              "wood", "ore", "herb", "die", "bag", "lock", "check", "star", "music", "sound", "cross",
+              "spring", "summer", "autumn", "winter", "moon"]
 
 
 def cut_corners(image, amount):
@@ -377,6 +378,59 @@ def ki_cross():
     return with_outline(image)
 
 
+def ki_spring():
+    """A pink blossom."""
+    image, draw = icon_canvas()
+    for x, y in ((6, 1), (2, 5), (10, 5), (3, 10), (9, 10)):
+        draw.ellipse((x, y, x + 5, y + 5), fill=hexc("#f39ac0"))
+    draw.point([(7, 3), (4, 7), (12, 7), (5, 12), (11, 12)], fill=hexc("#ffd6e6"))
+    draw.ellipse((6, 6, 10, 10), fill=hexc("#f2c23e"))
+    return with_outline(image)
+
+
+def ki_summer():
+    """A round sun."""
+    image, draw = icon_canvas()
+    for a, b, c, d in ((7, 0, 8, 2), (7, 13, 8, 15), (0, 7, 2, 8), (13, 7, 15, 8)):
+        draw.rectangle((a, b, c, d), fill=hexc("#f7a838"))
+    for x, y in ((2, 2), (12, 2), (2, 12), (12, 12)):
+        draw.rectangle((x, y, x + 1, y + 1), fill=hexc("#f7a838"))
+    draw.ellipse((3, 3, 12, 12), fill=hexc("#f7c23c"))
+    draw.ellipse((5, 4, 9, 8), fill=hexc("#fff0a0"))
+    return with_outline(image)
+
+
+def ki_autumn():
+    """A red-gold fallen leaf."""
+    image, draw = icon_canvas()
+    draw.polygon([(7, 1), (10, 3), (13, 3), (12, 7), (14, 9), (10, 10), (8, 13), (5, 10),
+                  (2, 9), (4, 7), (3, 3), (5, 3)], fill=hexc("#d8602c"))
+    draw.polygon([(7, 3), (10, 5), (10, 8), (7, 10)], fill=hexc("#f0a03c"))
+    draw.line((8, 3, 8, 15), fill=hexc("#7a3a1e"))
+    return with_outline(image)
+
+
+def ki_winter():
+    """A white snowflake."""
+    image, draw = icon_canvas()
+    white, blue = hexc("#f4f8ff"), hexc("#a9d0f0")
+    draw.line((7, 1, 7, 14), fill=white)
+    draw.line((1, 7, 14, 7), fill=white)
+    draw.line((3, 3, 12, 12), fill=blue)
+    draw.line((12, 3, 3, 12), fill=blue)
+    for x, y in ((5, 2), (9, 2), (5, 13), (9, 13), (2, 5), (2, 9), (13, 5), (13, 9)):
+        draw.point((x, y), fill=white)
+    return with_outline(image)
+
+
+def ki_moon():
+    image, draw = icon_canvas()
+    draw.ellipse((2, 2, 13, 13), fill=hexc("#f2c23e"))
+    draw.ellipse((5, 1, 15, 11), fill=(0, 0, 0, 0))
+    draw.point([(4, 6), (5, 10), (8, 12)], fill=hexc("#fff0a0"))
+    return with_outline(image)
+
+
 def make_kit():
     KIT.mkdir(exist_ok=True)
     x2(panel(hexc("#232447"), hexc("#2a2b54"), WOOD, WOOD_LIGHT, WOOD_DARK)).save(KIT / "panel.png")
@@ -402,6 +456,8 @@ def make_kit():
               "coin": ki_coin, "food": ki_food, "heart": ki_heart, "boot": ki_boot, "wood": ki_wood,
               "ore": ki_ore, "herb": icon_herb, "die": ki_die, "bag": ki_bag, "lock": ki_lock,
               "check": ki_check, "cross": ki_cross, "star": ki_star, "music": ki_music, "sound": ki_sound,
+              "spring": ki_spring, "summer": ki_summer, "autumn": ki_autumn, "winter": ki_winter,
+              "moon": ki_moon,
               "sword": lambda: icon_blade(10, 2, hexc("#d7dce8"), hexc("#f2c23e"), hexc("#a8682f"))}
     sheet = Image.new("RGBA", (ITEM_CELL * len(ICON_NAMES), ITEM_CELL), (0, 0, 0, 0))
     for index, name in enumerate(ICON_NAMES):

@@ -825,6 +825,8 @@ if __name__ == "__main__":
     art_town.make_town()
     import art_tavern
     art_tavern.make_tavern()
+    import art_bank
+    art_bank.make_bank()
     import art_portal
     art_portal.make_portal()
     make_tile_table()

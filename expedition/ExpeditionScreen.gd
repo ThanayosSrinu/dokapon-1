@@ -8,6 +8,7 @@ extends Node2D
 ## Anything that must still answer at ×0, such as the kit's buttons, ignores it.
 
 const TOWN := "res://town/TownScreen.tscn"
+const GAME_OVER := "res://town/GameOverScreen.tscn"
 const BOARD: PackedScene = preload("res://maps/WorldMap.tscn")
 const TOKEN: PackedScene = preload("res://player/Player.tscn")
 
@@ -65,6 +66,12 @@ const WARP_LINE_SECONDS := 1.4
 ## Diary lines the news leaves out, because the die, the fight screen, the bubble or the
 ## Orders button has already shown them.
 const SHOWN_ELSEWHERE: Array[String] = ["roll", "fight", "say", "recall"]
+## What they say as a due day comes close, at each step of TownData.Alert.
+const SAY_DEBT := {TownData.Alert.WARN: "My lord, the %s is due in %s!",
+		TownData.Alert.ALARM: "The %s is due in %s! Call me home!"}
+const SAY_DEBT_TODAY := "The %s is due today, my lord!"
+const SAY_DEBT_MISSED := "My lord... we missed the %s."
+const OUT_WORDS := "%s can't work for %s."
 
 ## The speed to start at, so a player who likes ×3 keeps it from trip to trip.
 static var chosen_speed := 1.0
@@ -120,11 +127,13 @@ var _speech: Array[String] = []
 var _speech_ends := 0
 # The camera's zoom from before the orders opened.
 var _zoom_before := 1
+# The strongest warning about money that they have spoken on this trip.
+var _said_alert := TownData.Alert.NONE
 
 
 func _ready() -> void:
 	var town := TownData.current()
-	trip = Expedition.new(town.hired, town.stage, next_seed)
+	trip = Expedition.new(town.going, town.stage, next_seed)
 	trip.recall_day = next_recall_day
 	trip.said.connect(func(line: String) -> void: _speech.append(line))
 	_build_world(town)
@@ -174,6 +183,7 @@ func _play_day() -> void:
 	var read_from := trip.diary.size()
 	var can_move := trip.start_day()
 	hud.refresh()
+	_warn_of_debts()
 	_refresh_orders()
 	await _show_news(read_from)
 	if can_move:
@@ -259,6 +269,9 @@ func _close_trip() -> void:
 	var gold_before := town.gold
 	town.bring_home(trip)
 	report = TripReport.new(trip)
+	var out: int = town.member(trip.person).days_out(town.day)
+	if out > 0:
+		report.story.append(OUT_WORDS % [trip.person.display_name, TownData.days_words(out)])
 	Sound.play("defeat" if report.failed else "fanfare")
 	_show_report(town, gold_before)
 
@@ -357,6 +370,23 @@ func _update_speech() -> void:
 		_speech_ends = Time.get_ticks_msec() + SPEECH_MS
 
 
+# Each step of the warning is spoken once on a trip, however it began, so a lord who sent
+# them off knowing the date still hears it.
+func _warn_of_debts() -> void:
+	var town := TownData.current()
+	var today := town.day + trip.day
+	var level := town.alert(today)
+	if level <= _said_alert:
+		return
+	_said_alert = level
+	var debt := town.next_debt()
+	var left: int = debt["due"] - today
+	if left > 0:
+		trip.say(SAY_DEBT[level] % [debt["what"], TownData.days_words(left)])
+	else:
+		trip.say((SAY_DEBT_TODAY if left == 0 else SAY_DEBT_MISSED) % debt["what"])
+
+
 # --- Orders -----------------------------------------------------------------
 
 func _toggle_orders() -> void:
@@ -413,7 +443,8 @@ func _refresh_orders() -> void:
 	zone_overlay.target_zone = trip.order_zone["id"] if zone_order else ""
 	if orders.visible:
 		orders.refresh()
-	var waiting := trip.asked_home and trip.order != Expedition.Order.HOME and not orders.visible
+	var called := trip.asked_home or _said_alert != TownData.Alert.NONE
+	var waiting := called and trip.order != Expedition.Order.HOME and not orders.visible
 	if waiting and orders_arrow == null:
 		orders_arrow = KitArrow.new(orders_button, KitArrow.Side.LEFT)
 		_layer.get_parent().add_child(orders_arrow)
@@ -452,7 +483,7 @@ func _set_time(speed: float) -> void:
 
 func _on_back() -> void:
 	if report != null:
-		Screens.go(TOWN)
+		Screens.go(GAME_OVER if not TownData.current().overdue().is_empty() else TOWN)
 	elif orders.visible:
 		_close_orders()
 	elif leave_panel.visible:
@@ -548,14 +579,14 @@ func _build_world(town: TownData) -> void:
 	camera.make_current()
 	token = TOKEN.instantiate()
 	token.board_manager = board
-	token.character_sheet = town.hired.sheet
-	token.player_name = town.hired.display_name
+	token.character_sheet = town.going.sheet
+	token.player_name = town.going.display_name
 	token.token_color = TOKEN_RING
 	token.step_duration = STEP_SECONDS
 	token.hide()
 	token.step_finished.connect(func(_node: BoardNode, _left: int) -> void: Sound.play("step"))
 	add_child(token)
-	hero = CharacterFigure.new(town.hired.sheet)
+	hero = CharacterFigure.new(town.going.sheet)
 	hero.global_position = start
 	hero.z_index = HERO_LAYER
 	hero.hide()
@@ -755,7 +786,7 @@ func _link_focus() -> void:
 	orders_button.focus_neighbor_bottom = orders_button.get_path_to(hud.hp_bar)
 	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
 	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
-	var strip: Array[Control] = [hud.hp_bar, hud.food_bar, hud.bag, hud.gold]
+	var strip: Array[Control] = [hud.date, hud.hp_bar, hud.food_bar, hud.bag, hud.gold]
 	for index in strip.size():
 		var part := strip[index]
 		part.focus_neighbor_top = part.get_path_to(orders_button)
