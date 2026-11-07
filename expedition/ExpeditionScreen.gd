@@ -25,9 +25,6 @@ const EDGE_RIGHT := 24.0
 const EDGE_TOP := 24.0
 const STRIP_FROM_BOTTOM := 12.0
 const STRIP_FROM_LEFT := 28.0
-## Keeps the fight's window clear of the strip and the bag.
-const FIGHT_ROOM_BELOW := 44.0
-const FIGHT_ROOM_RIGHT := 40.0
 const BAG_TOP := 80.0
 const MAP_PANEL_TOP := 80.0
 const NEWS_TOP := 24.0
@@ -459,7 +456,13 @@ func _fight_if_needed() -> void:
 		_close_map(false)
 		map_button.hide()
 		var read_from := trip.diary.size()
+		# The fight fills the window and has its own bars, so the strip and the bag step
+		# aside. The way out stays.
+		hud.hide()
+		bag_panel.hide()
 		trip.finish_fight(await battle_screen.run(trip.fight))
+		hud.show()
+		bag_panel.show()
 		map_button.show()
 		hud.refresh()
 		await _catch_up_token()
@@ -792,6 +795,7 @@ func _warp_home() -> void:
 	leave_panel.hide()
 	trip.warp_home()
 	battle_screen.hide()
+	hud.show()
 	die.hide()
 	bubble.hide()
 	Sound.music("")
@@ -862,8 +866,6 @@ func _build_ui(town: TownData) -> void:
 	fight_layer.layer = FIGHT_LAYER
 	add_child(fight_layer)
 	battle_screen = BattleScreen.new()
-	battle_screen.room_below = FIGHT_ROOM_BELOW
-	battle_screen.room_right = FIGHT_ROOM_RIGHT
 	fight_layer.add_child(battle_screen)
 	bag_prompt = BagPrompt.new()
 	fight_layer.add_child(bag_prompt)
