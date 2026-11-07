@@ -6,7 +6,7 @@ extends Node
 ## big loops. Without it every stage runs. Prints one block per adventurer on each stage,
 ## then how long it all took. `lord` is "listens", which calls them home the day after they
 ## ask, like a player paying attention. "late" waits until the food is gone, and "away"
-## never gives an order.
+## never calls them home.
 
 const OLD_MAP := "res://maps/world_map.json"
 const OLD_FOOD := 21
@@ -105,15 +105,15 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 
 func _play(trip: Expedition) -> void:
 	while not trip.is_over():
-		if trip.order != Expedition.Order.HOME and _lord_calls(trip):
-			trip.give_order(Expedition.Order.HOME)
+		if not trip.heading_home and _lord_calls(trip):
+			trip.head_home()
 		trip.play_day()
 
 
 func _lord_calls(trip: Expedition) -> bool:
 	match _lord:
 		"listens":
-			return trip.asked_home
+			return trip.brain.asked_home
 		"late":
 			return trip.food_left == 0
 	return false

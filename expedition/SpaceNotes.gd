@@ -9,7 +9,7 @@ const WORDS := {
 	BoardNode.NodeType.ITEM: "Holds something useful for the bag, if there is room.",
 	BoardNode.NodeType.BATTLE: "A monster waits here. Beating it pays gold and experience.",
 	BoardNode.NodeType.TRAP: "Spikes, a thief, a snare or a trapdoor. A quick step can dodge it.",
-	BoardNode.NodeType.PORTAL: "The only way home. They must land on it exactly, with the Return order.",
+	BoardNode.NodeType.PORTAL: "The only way home. They must land on it exactly.",
 }
 
 

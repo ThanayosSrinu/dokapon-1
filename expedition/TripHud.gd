@@ -2,17 +2,21 @@ class_name TripHud
 extends KitPanel
 ## The strip along the bottom while a trip plays, in lined-up columns: who is out there
 ## over their gold, health over food, then their stats in two pairs, which turn red while
-## hunger has them weak. Food turns gold once they ask to come home, because that is the
-## lord's cue.
+## hunger has them weak. Food turns gold once it may not last the walk home. Anything that
+## needs the player's eye shows as plain red text above the columns.
 ## Each part has a tip with the exact numbers (rule U3).
 
 const BAR_WIDTH := 160.0
 const WORDS_WIDTH := 96.0
 const WHO_WIDTH := 132.0
 const COLUMNS := 4
+const WARNING := Color(1.0, 0.45, 0.4)
 const GAP := 18
 const ROW_GAP := 6
 const BAR_GAP := 10
+const WARN_FOOD := "Food is running low."
+const WARN_HURT := "Badly hurt."
+const WARN_GAP := "  "
 ## The stats, with what each is called on screen.
 const STATS := [
 	{"stat": "attack", "short": "AT", "name": "Attack", "icon": "sword"},
@@ -27,18 +31,26 @@ var food_bar: KitBar
 var food_words: Label
 var gold: KitChip
 var who: Label
+## The warnings, in red, or nothing while all is well.
+var warning: Label
 ## One per entry of STATS, in the same order.
 var stats: Array[KitStat] = []
 
 var _trip: Expedition
 # The food they set out with, which is a full bar.
 var _food_full := 1
+# What is owed in town and how soon, in words, or "".
+var _debt_words := ""
 
 
 func _init(trip: Expedition, stage: Stage) -> void:
 	super()
 	_trip = trip
 	_food_full = maxi(stage.food_for(trip.person), 1)
+	warning = Kit.text("")
+	warning.modulate = WARNING
+	warning.hide()
+	body.add_child(warning)
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS
 	grid.add_theme_constant_override("h_separation", GAP)
@@ -74,15 +86,42 @@ func refresh(slide := true) -> void:
 	who.text = "%s  Lv %d" % [player.player_name, player.level]
 	for index in STATS.size():
 		_show_stat(stats[index], STATS[index], slide)
+	_show_warnings()
 	Tips.attach(hp_bar, "Health", "%d of %d HP." % [player.hp, max_hp])
 	Tips.attach(food_bar, "Food", _food_tip())
 	Tips.attach(gold, "Gold found", "%d gold. It only counts if they get home." % player.gold)
+
+
+## Puts words about money on the strip, or clears them with "".
+func warn_of_debts(words: String) -> void:
+	_debt_words = words
+	_show_warnings()
 
 
 ## Shows an empty health bar, because a defeat refills HP for the old board game.
 func show_beaten() -> void:
 	hp_bar.set_amount(0.0, 1.0)
 	hp_words.text = "0/%d" % _trip.player.get_stat("max_hp")
+
+
+func _show_warnings() -> void:
+	var lines := PackedStringArray()
+	if _trip.food_left > 0 and _trip.food_is_short():
+		lines.append(WARN_FOOD)
+	if _trip.badly_hurt():
+		lines.append(WARN_HURT)
+	if _debt_words != "":
+		lines.append(_debt_words)
+	var had_words := warning.visible
+	warning.text = WARN_GAP.join(lines)
+	warning.visible = not lines.is_empty()
+	if had_words and not warning.visible:
+		_shrink.call_deferred()
+
+
+# The strip stands on the bottom of the screen, so it gets shorter from the top.
+func _shrink() -> void:
+	offset_top = offset_bottom - get_combined_minimum_size().y
 
 
 func _add_stat(grid: Control, index: int) -> void:
@@ -113,18 +152,14 @@ func _food_words() -> String:
 func _food_color() -> Color:
 	if _trip.food_left == 0:
 		return Kit.DANGER.lightened(0.3)
-	return Kit.GOLD if _trip.asked_home else Color.WHITE
+	return Kit.GOLD if _trip.food_is_short() else Color.WHITE
 
 
 func _food_tip() -> String:
-	var home := "About %s from the Portal." % _days(ceili(_trip.brain.days_home()))
+	var home := "About %s from the Portal." % TownData.days_words(ceili(_trip.days_home()))
 	if _trip.food_left > 0:
 		return "Food for %s. One roll of the die is one turn. %s" % [Expedition.turns_words(_trip.food_left), home]
 	return "No food left. They lose health every day, and grow weak. %s" % home
-
-
-func _days(count: int) -> String:
-	return "1 day" if count == 1 else "%d days" % count
 
 
 # The bar sits in a row of its own, which has room for its words.

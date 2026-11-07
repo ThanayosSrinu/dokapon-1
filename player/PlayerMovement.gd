@@ -202,12 +202,13 @@ func move_steps(steps: int) -> void:
 	_stop_walking()
 
 
-## Walks along `path`, spaces already chosen, so no fork asks anything.
+## Walks along `path`, spaces already chosen, so no fork asks anything. `total_steps` is
+## how many are left to show at the start, if the walk goes on after `path`.
 ## Emits `movement_finished` when done.
-func walk_path(path: Array[BoardNode]) -> void:
+func walk_path(path: Array[BoardNode], total_steps := -1) -> void:
 	is_moving = true
 	z_index = MOVING_Z_INDEX
-	steps_left = path.size()
+	steps_left = path.size() if total_steps < 0 else total_steps
 	for next_node in path:
 		await _slide_to(next_node)
 		_previous_node = current_node

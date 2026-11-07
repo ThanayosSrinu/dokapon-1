@@ -13,13 +13,13 @@ func _ready() -> void:
 	TownData.current().months_paid = 1000
 	TownData.current().hire(Database.get_adventurer("bram"))
 	ExpeditionScreen.next_seed = 4
-	ExpeditionScreen.chosen_speed = 1.0
 	Screens.go("res://expedition/ExpeditionScreen.tscn")
 	while not (get_tree().current_scene is ExpeditionScreen):
 		await get_tree().process_frame
 	var screen: ExpeditionScreen = get_tree().current_scene
 	await _real(1.5)
-	screen._set_speed(0.0)
+	while not screen.roll_button.visible:
+		await get_tree().process_frame
 	var player := screen.trip.player
 	var panel := screen.bag_panel
 	player.inventory.clear()

@@ -478,7 +478,7 @@ func _test_stranded_screens() -> void:
 	town = _town_with(["bram"], 40)
 	town.loan_owed = 120
 	town.loan_due = 40
-	var island := await _open_trip(5, 0)
+	var island := await _open_trip(5)
 	island._warp_home.call_deferred()
 	while island.report == null:
 		await get_tree().process_frame
@@ -574,54 +574,52 @@ func _test_pick_who_goes() -> void:
 	_expect(portal.card.people.is_empty(), "with one person there is nothing to pick")
 
 
-## Plays a trip with the bill nearly due, until `done` says to stop.
-func _open_trip(seed_value: int, recall_day: int) -> ExpeditionScreen:
+## Opens a trip with the bill nearly due.
+func _open_trip(seed_value: int) -> ExpeditionScreen:
 	ExpeditionScreen.next_seed = seed_value
-	ExpeditionScreen.next_recall_day = recall_day
-	ExpeditionScreen.chosen_speed = 1.0
 	var screen: ExpeditionScreen = await _open(TOWN.replace("town/TownScreen", "expedition/ExpeditionScreen"))
 	ExpeditionScreen.next_seed = 0
-	ExpeditionScreen.next_recall_day = 0
-	screen._set_speed(FAST)
+	Engine.time_scale = FAST
 	return screen
+
+
+func _until_first_day(screen: ExpeditionScreen) -> void:
+	while screen.trip.day == 0:
+		await get_tree().process_frame
+	await get_tree().process_frame
 
 
 func _test_warnings_on_a_trip() -> void:
 	var town := _town_with(["bram"])
 	town.day = 47
 	town.stage = Database.get_stage("grass_l")
-	var screen := await _open_trip(3, 0)
-	while not screen.trip.is_over() and screen.trip.day < 7:
-		await get_tree().process_frame
-	_expect(_said(screen.trip, "due in 7 days"), "they speak up at 7 days left")
-	_expect(_said(screen.trip, "due in 3 days") or screen.trip.is_over(), "and again at 3 days left")
-	_expect(screen.orders_arrow != null or screen.trip.is_over(), "the arrow points at Orders")
+	var screen := await _open_trip(3)
+	await _until_first_day(screen)
+	_expect(not screen.hud.warning.visible, "with time in hand the strip says nothing")
+	screen.trip.day = 2
+	screen._warn_of_debts()
+	_expect(screen.hud.warning.text.contains("due in 7 days"), "the strip says so at 7 days left")
+	screen.trip.day = 6
+	screen._warn_of_debts()
+	_expect(screen.hud.warning.text.contains("due in 3 days"), "and again at 3 days left")
 	screen.free()
 	Engine.time_scale = 1.0
 	await _wait()
 	town.day = 54
 	town.stage = Database.get_stage("grass_s")
-	var late := await _open_trip(3, 0)
-	while late.trip.day < 2 and not late.trip.is_over():
-		await get_tree().process_frame
-	_expect(_said(late.trip, "due in 1 day!"), "leaving late, they still say so on the first day")
+	var late := await _open_trip(3)
+	await _until_first_day(late)
+	_expect(late.hud.warning.text.contains("due in 1 day."), "leaving late, it says so on the first day")
 	late.free()
 	Engine.time_scale = 1.0
 	await _wait()
-
-
-func _said(trip: Expedition, words: String) -> bool:
-	for line in trip.diary:
-		if line["kind"] == "say" and line["text"].contains(words):
-			return true
-	return false
 
 
 ## Rule D11: a trip is never stopped, and the game over comes after its report.
 func _test_game_over_after_the_report() -> void:
 	var town := _town_with(["bram"], 5000)
 	town.day = 55
-	var screen := await _open_trip(5, 0)
+	var screen := await _open_trip(5)
 	screen._warp_home.call_deferred()
 	# The Warp Stone ends it at once, so three days of trip are added by hand.
 	while screen.report == null:

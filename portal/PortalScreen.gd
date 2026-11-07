@@ -14,7 +14,7 @@ const CARD_TOP := 34.0
 const FIT_COLORS := {TownData.Forecast.SAFE: Color(0.1, 0.4, 0.16), TownData.Forecast.TIGHT: Color(0.56, 0.36, 0.0),
 		TownData.Forecast.LATE: Kit.BLOOD}
 const FIT_WORDS := {TownData.Forecast.SAFE: "All the food can be used, and they are home in time.",
-		TownData.Forecast.TIGHT: "Only in time if you call them home early.",
+		TownData.Forecast.TIGHT: "Only in time if you head home early.",
 		TownData.Forecast.LATE: "Not even a quick trip gets home in time."}
 ## Speech bubbles stay inside the hilltop's part of the stage.
 const SITE_AREA := Rect2(0, 0, 808, 720)

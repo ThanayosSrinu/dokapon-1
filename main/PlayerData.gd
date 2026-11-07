@@ -71,8 +71,6 @@ var weak := false
 var gold_share := 1.0
 ## How much of their HP and MP a Shrine, a Magic space or a blessing restores.
 var rest_share := 1.0
-## Ids of the items the bot must leave alone, however hurt it is.
-var auto_off: Array[String] = []
 
 
 func _init(new_name := "Player", new_color := Color.WHITE, cpu := false) -> void:

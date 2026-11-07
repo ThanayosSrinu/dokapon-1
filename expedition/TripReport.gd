@@ -4,7 +4,6 @@ extends RefCounted
 ## Expedition.gd recorded, so a test can read every ending without a screen.
 
 ## A trip that lost more days than this to landing says so.
-const LANDING_WORTH_TELLING := 3
 
 ## What the report is headed.
 var title := ""
@@ -46,9 +45,6 @@ func _init(trip: Expedition) -> void:
 		loss = "Lost: " + what if what != "" else ""
 	title = _title_for(trip, who)
 	story.append(_how_it_went(who))
-	var turn := _turning_home(trip, who)
-	if turn != "":
-		story.append(turn)
 	story.append(_how_it_ended(trip, who))
 	if not trip.best_moment.is_empty():
 		best = "Day %d: %s" % [trip.best_moment["day"], trip.best_moment["text"]]
@@ -82,16 +78,6 @@ func _how_it_went(who: String) -> String:
 	if fights == 0:
 		return words + " and met no monsters."
 	return "%s and won %d of %d %s." % [words, fights_won, fights, "fight" if fights == 1 else "fights"]
-
-
-func _turning_home(trip: Expedition, who: String) -> String:
-	for line in trip.diary:
-		if line["kind"] == "recall":
-			var words := "On day %d, you called %s home." % [maxi(line["day"], 1), who]
-			if trip.ending == Expedition.Ending.HOME and trip.landing_days > LANDING_WORTH_TELLING:
-				words += " Landing on the Portal took %d extra days." % trip.landing_days
-			return words
-	return ""
 
 
 func _how_it_ended(trip: Expedition, who: String) -> String:

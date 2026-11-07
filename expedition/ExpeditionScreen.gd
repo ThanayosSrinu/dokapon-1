@@ -1,41 +1,41 @@
 class_name ExpeditionScreen
 extends Node2D
-## One trip on screen, from the far side of the Portal to the report. The rules stay in
-## Expedition.gd: this script runs its steps in order and shows what came back, so the
-## same seed gives the same trip as tools/sim_expedition.tscn.
+## One trip on screen, from the far side of the Portal to the report, played by the person
+## at the keys. The rules stay in Expedition.gd: this script runs the steps of a day in
+## order, asks for each choice, and shows what came back. Every choice waits for the player:
+## the roll, the road at a fork, each move of a fight, and going home at the Portal.
 ##
-## Speed is Engine.time_scale, so the buttons work on everything at once, fights too.
-## Anything that must still answer at ×0, such as the kit's buttons, ignores it.
+## A road is picked by clicking a green space, or with the arrow keys or the controller,
+## because every link on a map runs straight along the grid, so each road has its own
+## direction.
+
+## A road was picked at a fork.
+signal _road_picked(id: int)
+## The Portal's question was answered.
+signal _portal_answered(going_home: bool)
 
 const TOWN := "res://town/TownScreen.tscn"
 const GAME_OVER := "res://town/GameOverScreen.tscn"
 const BOARD: PackedScene = preload("res://maps/WorldMap.tscn")
 const TOKEN: PackedScene = preload("res://player/Player.tscn")
 
-## The speed buttons, in order.
-const SPEEDS: Array[float] = [0.0, 1.0, 3.0]
-const SPEED_WORDS: Array[String] = ["x0", "x1", "x3"]
-const SPEED_FROM_RIGHT := 24.0
-const SPEED_TOP := 24.0
-const SPEED_GAP := 8
+const EDGE_RIGHT := 24.0
+const EDGE_TOP := 24.0
 const STRIP_FROM_BOTTOM := 12.0
 const STRIP_FROM_LEFT := 28.0
 ## Keeps the fight's window clear of the strip and the bag.
 const FIGHT_ROOM_BELOW := 44.0
 const FIGHT_ROOM_RIGHT := 40.0
-const BAG_TOP := 128.0
+const BAG_TOP := 80.0
+const MAP_PANEL_TOP := 80.0
 const NEWS_TOP := 24.0
 const NEWS_WIDTH := 600.0
-const ORDERS_TOP := 80.0
-const ORDERS_PANEL_TOP := 136.0
-## How far right of what matters the camera looks with the orders open, so the panel covers
-## less of it.
-const ORDERS_VIEW_SHIFT := Vector2(240, 0)
-const ORDERS_VIEW_SECONDS := 0.4
-## How long a spoken line stays up, in real time so it can be read at x3.
-const SPEECH_MS := 2200
-## What the Orders button says for each order.
-const ORDER_WORDS := {Expedition.Order.ROAM: "Explore", Expedition.Order.HOME: "Return home"}
+## Where Roll stands: beside the strip, in the gap before the bag, so it hides no road.
+const ROLL_LEFT := 738.0
+## How far right of the adventurer the camera looks with the map open, so the panel covers
+## less of them.
+const MAP_VIEW_SHIFT := Vector2(240, 0)
+const MAP_VIEW_SECONDS := 0.4
 
 ## Waits for the light of the flash to thin out.
 const APPEAR_DELAY := 0.5
@@ -45,7 +45,9 @@ const BURST_REACH := Vector2(140, 90)
 ## How long their first words stay up.
 const LINE_SECONDS := 1.6
 const STEP_SECONDS := 0.45
-## How long something found stays on screen. A quiet space takes a blink.
+## How long the marked spaces show before a walk starts.
+const MARK_SECONDS := 0.5
+## How long something found holds up the next step. A quiet space takes a blink.
 const NEWS_SECONDS := 1.0
 const QUIET_SECONDS := 0.25
 const DISSOLVE_SECONDS := 0.7
@@ -53,45 +55,41 @@ const HERO_LAYER := 10
 const HEAD := Vector2(0, -46)
 ## How far above their head the roll stands.
 const DIE_GAP := 8.0
-## How much of the air over their head the steps left take up, in the map's pixels.
-const STEPS_ROOM := 24.0
-## How fast a speech bubble moves out of the way, in pixels a second.
-const BUBBLE_LIFT_SPEED := 500.0
 const TOKEN_RING := Color(1.0, 0.85, 0.42)
 const FIGHT_LAYER := 1
 const UI_LAYER := 2
 const DIM := Color(0.06, 0.05, 0.12, 0.62)
-const LEAVE_WIDTH := 460.0
+const PANEL_WIDTH := 460.0
 const DEFEAT_DIM := Color(0.3, 0.02, 0.05, 0.6)
 const WARP_NAME := "Emergency Warp"
 const LEAVE_HEADING := "Abandon the trip?"
 const LEAVE_TEXT := "Abandon the trip"
 const LEAVE_WORDS := "The Warp Stone saves %s's life and nothing else. The trip fails, and only walking back to the Portal brings anything home."
 const LEAVE_COST := "You will lose %s."
+const PORTAL_HEADING := "The Portal"
+const PORTAL_WORDS := "Go home with %s, and end the trip here?"
+const PORTAL_NOTHING := "nothing"
+const GO_HOME_TEXT := "Go home"
+const STAY_OUT_TEXT := "Stay out"
+const FORK_WORDS := "Which way?"
 const WARP_LINE := "Warp Stone, take me home!"
 const WARP_CAMERA_SECONDS := 0.4
 const WARP_LOSS_DELAY := 0.5
 const WARP_LINE_SECONDS := 1.4
-## Diary lines the news leaves out, because the die, the fight screen, the bubble or the
-## Orders button has already shown them.
-const SHOWN_ELSEWHERE: Array[String] = ["roll", "fight", "say", "recall"]
-## What they say as a due day comes close, at each step of TownData.Alert.
-const SAY_DEBT := {TownData.Alert.WARN: "My lord, the %s is due in %s!",
-		TownData.Alert.ALARM: "The %s is due in %s! Call me home!"}
-const SAY_DEBT_TODAY := "The %s is due today, my lord!"
-const SAY_DEBT_MISSED := "My lord... we missed the %s."
+## Diary lines the news leaves out, because the die or the fight screen has shown them.
+const SHOWN_ELSEWHERE: Array[String] = ["roll", "fight"]
+## What the strip says while something is owed in town.
+const DEBT_LEFT := "The %s is due in %s."
+const DEBT_TODAY := "The %s is due today."
+const DEBT_MISSED := "The %s was not paid."
 const OUT_WORDS := "%s can't work for %s."
+## The way each key points on the board, for picking a road.
+const ROAD_KEYS := {"ui_left": Vector2.LEFT, "ui_right": Vector2.RIGHT, "ui_up": Vector2.UP, "ui_down": Vector2.DOWN}
+## How close to a key's direction a road must run for that key to take it.
+const ROAD_AIM := 0.7
 
-## The speed to start at, so a player who likes ×3 keeps it from trip to trip.
-static var chosen_speed := 1.0
-## Ids of the items the bot must leave alone, kept from trip to trip.
-static var items_off_auto: Array[String] = []
-## True when the player chooses what is worn. Tests turn it off, to match the rules.
-static var gear_by_hand := true
 ## Above 0, the seed of the next trip. For tests.
 static var next_seed := 0
-## Above 0, the day the next trip is called home. For tests.
-static var next_recall_day := 0
 
 var trip: Expedition
 var board: BoardManager
@@ -105,11 +103,15 @@ var hud: TripHud
 var bag_panel: BagPanel
 var die: RollBlock
 var battle_screen: BattleScreen
+## Asks what to do with something found when the bag is full.
+var bag_prompt: BagPrompt
 var back: KitBackButton
 var arrow: KitArrow
 var bubble: TavernBubble
-## The speed buttons, in the order of SPEEDS.
-var speed_buttons: Array[KitButton] = []
+## The main action of each day.
+var roll_button: KitButton
+## Points at Roll on the first day.
+var roll_arrow: KitArrow
 ## What just happened, in a line.
 var news: KitPanel
 var report: TripReport
@@ -122,42 +124,37 @@ var stay_button: KitButton
 var leave_button: KitButton
 ## What giving up would cost, right now.
 var leave_cost: Label
-## Opens the orders, and says which one is in force.
-var orders_button: KitButton
-var orders: OrdersPanel
-var zone_overlay: ZoneOverlay
-## Points at the Orders button once they ask to come home.
-var orders_arrow: KitArrow
+## Asks whether to go home, on landing on the Portal.
+var portal_panel: KitPanel
+var portal_words: Label
+var home_button: KitButton
+var stay_out_button: KitButton
+## Opens the map of the island.
+var map_button: KitButton
+var map_panel: MapPanel
+## The ids of the spaces offered at the fork being asked about, or empty.
+var road_choices: Array[int] = []
 
 var _motes: PortalMotes
 var _layer: Control
 var _dim: ColorRect
 var _news_words: Label
-var _speed_row: HBoxContainer
-# The speed in use, kept while the leave panel holds time still.
-var _speed := 1.0
-# The lines waiting to be spoken.
-var _speech: Array[String] = []
-# How far above their head the bubble stands now, to clear the roll or the steps left.
-var _bubble_lift := 0.0
-# When the line being spoken ends, in real milliseconds.
-var _speech_ends := 0
-# The camera's zoom from before the orders opened.
+# The spaces marked as where this roll can end.
+var _marked: Array[BoardNode] = []
+# The time scale kept while the leave panel holds time still.
+var _time_before := 1.0
+# What had focus before the leave panel took it.
+var _focus_before: Control
+# The camera's zoom from before the map opened.
 var _zoom_before := 1
-# The strongest warning about money that they have spoken on this trip.
-var _said_alert := TownData.Alert.NONE
 
 
 func _ready() -> void:
 	var town := TownData.current()
-	trip = Expedition.new(town.going, town.stage, next_seed)
-	trip.recall_day = next_recall_day
-	trip.by_hand = gear_by_hand
-	trip.player.auto_off = items_off_auto
-	trip.said.connect(func(line: String) -> void: _speech.append(line))
+	trip = Expedition.new(town.going, town.stage, next_seed, true)
 	_build_world(town)
 	_build_ui(town)
-	_set_speed(chosen_speed if chosen_speed > 0.0 else 1.0)
+	EventBus.space_clicked.connect(_on_space_clicked)
 	Sound.music("board")
 	if not Screens.busy and get_tree().current_scene == self:
 		Screens.reveal()
@@ -168,14 +165,50 @@ func _exit_tree() -> void:
 	Engine.time_scale = 1.0
 
 
-func _process(delta: float) -> void:
-	_update_speech(delta)
+func _process(_delta: float) -> void:
+	_place_die()
 	_update_bag_panel()
+
+
+func _input(event: InputEvent) -> void:
+	if leave_panel.visible:
+		return
+	# The stone is out of the way here, so Esc has to be caught before it is missed.
+	if portal_panel.visible and event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		_portal_answered.emit(false)
+		return
+	if roll_button.visible and get_viewport().gui_get_focus_owner() == null and event.is_action_pressed("ui_accept"):
+		roll_button.grab_focus()
+	if road_choices.is_empty() or map_panel.visible:
+		return
+	for action: String in ROAD_KEYS:
+		if event.is_action_pressed(action):
+			get_viewport().set_input_as_handled()
+			var id := _road_toward(ROAD_KEYS[action])
+			if id >= 0:
+				_road_picked.emit(id)
+			return
+
+
+# The road that leaves in direction `way`, or -1 if none does.
+func _road_toward(way: Vector2) -> int:
+	var here := token.current_node.global_position
+	for id in road_choices:
+		var road := here.direction_to(board.get_board_node(id).global_position)
+		if road.dot(way) >= ROAD_AIM:
+			return id
+	return -1
+
+
+func _on_space_clicked(node: BoardNode) -> void:
+	if road_choices.has(node.node_id):
+		_road_picked.emit(node.node_id)
 
 
 # Keeps the bag shut during fights, and points its box at the space under the mouse.
 func _update_bag_panel() -> void:
-	bag_panel.locked = battle_screen.visible or trip.is_over()
+	bag_panel.locked = battle_screen.visible or bag_prompt.visible or trip.is_over()
 	var space := board.get_node_at(get_global_mouse_position())
 	if get_viewport().gui_get_hovered_control() != null or space == null:
 		bag_panel.point_at_space(trip.space_id)
@@ -212,44 +245,137 @@ func _appear() -> void:
 func _play_day() -> void:
 	var read_from := trip.diary.size()
 	var can_move := trip.start_day()
-	hud.refresh()
 	_warn_of_debts()
-	_refresh_orders()
+	hud.refresh()
+	_refresh_map()
 	await _show_news(read_from)
 	if can_move:
+		await _wait_for_roll()
 		read_from = trip.diary.size()
 		await _walk()
 		var before := _purse()
 		trip.land()
 		_play_landing_sound(before)
 		hud.refresh()
-		_refresh_orders()
 		await _catch_up_token()
 		await _show_news(read_from)
 		await _fight_if_needed()
+		await _settle_found_item()
+		await _ask_about_portal()
 	trip.end_day()
+
+
+func _wait_for_roll() -> void:
+	roll_button.show()
+	roll_button.grab_focus()
+	if trip.day == 1:
+		roll_arrow = KitArrow.new(roll_button, KitArrow.Side.ABOVE)
+		_layer.get_parent().add_child(roll_arrow)
+	await roll_button.pressed
+	roll_button.hide()
+	_drop_roll_arrow()
+	_close_map(false)
+	_set_news("")
+
+
+func _drop_roll_arrow() -> void:
+	if roll_arrow != null:
+		roll_arrow.queue_free()
+		roll_arrow = null
 
 
 func _walk() -> void:
 	var steps := trip.roll()
 	await die.throw(steps, trip.person.die_top)
-	var path: Array[BoardNode] = []
-	for id in trip.walk(steps):
-		path.append(board.get_board_node(id))
+	if not trip.begin_walk(steps):
+		return
 	_watch_token()
-	if not path.is_empty():
-		await token.walk_path(path)
+	_mark_landings()
+	await _pause(MARK_SECONDS)
+	while trip.steps_left > 0:
+		var options := trip.next_spaces()
+		var next: int = options[0] if options.size() == 1 else await _pick_road(options)
+		var left := trip.steps_left
+		trip.step_to(next)
+		await token.walk_path([board.get_board_node(next)], left)
+		_mark_landings()
+		_refresh_map()
+	_mark_nothing()
+
+
+# Rings every space this walk can still end on.
+func _mark_landings() -> void:
+	_mark_nothing()
+	for id in trip.landing_spaces():
+		var node := board.get_board_node(id)
+		node.is_landing_spot = true
+		_marked.append(node)
+
+
+func _mark_nothing() -> void:
+	for node in _marked:
+		node.is_landing_spot = false
+	_marked.clear()
+
+
+# Waits for the player to take one of the roads in `options`.
+func _pick_road(options: Array[int]) -> int:
+	road_choices = options
+	for id in options:
+		board.get_board_node(id).is_path_choice = true
+	_set_news(FORK_WORDS)
+	var picked: int = await _road_picked
+	_clear_road_choices()
+	_set_news("")
+	return picked
+
+
+func _clear_road_choices() -> void:
+	for id in road_choices:
+		board.get_board_node(id).is_path_choice = false
+	road_choices = []
 
 
 func _fight_if_needed() -> void:
 	while trip.fight != null:
 		_set_news("")
+		_close_map(false)
+		map_button.hide()
 		var read_from := trip.diary.size()
 		trip.finish_fight(await battle_screen.run(trip.fight))
+		map_button.show()
 		hud.refresh()
 		await _catch_up_token()
 		# A chest opened after beating its guardian has news of its own.
 		await _show_news(read_from)
+
+
+# Something was found with the bag full, so the player says what stays.
+func _settle_found_item() -> void:
+	if trip.found_item == "" or trip.is_over():
+		return
+	await bag_prompt.ask(trip.player, trip.found_item)
+	trip.found_item = ""
+	hud.refresh()
+
+
+func _ask_about_portal() -> void:
+	if not trip.may_go_home():
+		return
+	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size())
+	portal_words.text = PORTAL_WORDS % (what if what != "" else PORTAL_NOTHING)
+	_close_map(false)
+	_dim.show()
+	back.hide()
+	portal_panel.show()
+	portal_panel.play_open()
+	home_button.grab_focus()
+	var going_home: bool = await _portal_answered
+	portal_panel.hide()
+	_dim.hide()
+	back.show()
+	if going_home:
+		trip.go_home()
 
 
 # What they hold now, to tell how a space treated them.
@@ -282,7 +408,7 @@ func _catch_up_token() -> void:
 
 
 func _finish() -> void:
-	_set_time(1.0)
+	Engine.time_scale = 1.0
 	await _close_trip()
 
 
@@ -312,14 +438,16 @@ func _close_trip() -> void:
 
 
 func _clear_for_ending() -> void:
-	_close_orders(false)
+	_close_map(false)
 	bag_panel.hide()
-	orders_button.hide()
-	_drop_orders_arrow()
-	zone_overlay.target_zone = ""
-	_speech.clear()
+	map_button.hide()
+	roll_button.hide()
+	portal_panel.hide()
+	bag_prompt.hide()
+	_drop_roll_arrow()
+	_clear_road_choices()
+	_mark_nothing()
 	bubble.hide()
-	_speed_row.hide()
 	back.hide()
 	_set_news("")
 
@@ -343,10 +471,10 @@ func _show_report(town: TownData, gold_before: int) -> void:
 	_layer.add_child(town_gold)
 	town_gold.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
 	town_gold.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	town_gold.offset_left -= SPEED_FROM_RIGHT
-	town_gold.offset_right -= SPEED_FROM_RIGHT
-	town_gold.offset_top += SPEED_TOP
-	town_gold.offset_bottom += SPEED_TOP
+	town_gold.offset_left -= EDGE_RIGHT
+	town_gold.offset_right -= EDGE_RIGHT
+	town_gold.offset_top += EDGE_TOP
+	town_gold.offset_bottom += EDGE_TOP
 	town_gold.set_amount(town.gold)
 	Tips.attach(town_gold, "Town gold", "%d gold in the town." % town.gold)
 	back.text = "Back to Town"
@@ -368,14 +496,16 @@ func _pause(seconds: float) -> void:
 
 # --- News -------------------------------------------------------------------
 
-# Shows what the diary has gained since line `read_from`, if it is worth showing.
+# Shows what the diary has gained since line `read_from`, if it is worth showing. With
+# nothing new, the last news stays up, to be read until the next roll.
 func _show_news(read_from: int) -> void:
 	var lines := PackedStringArray()
 	for index in range(read_from, trip.diary.size()):
 		var line := trip.diary[index]
 		if not SHOWN_ELSEWHERE.has(line["kind"]):
 			lines.append(line["text"])
-	_set_news(" ".join(lines))
+	if not lines.is_empty():
+		_set_news(" ".join(lines))
 	await _pause(NEWS_SECONDS if not lines.is_empty() else QUIET_SECONDS)
 
 
@@ -387,147 +517,89 @@ func _set_news(words: String) -> void:
 		news.play_open()
 
 
-# --- Speech -----------------------------------------------------------------
-
-# One line at a time, over their head, and none on top of a fight.
-func _update_speech(delta: float) -> void:
-	if not token.visible or report != null:
-		return
-	if battle_screen.visible:
-		bubble.hide()
-		return
-	var head := get_viewport().get_canvas_transform() * (token.global_position + HEAD)
-	die.position = (head - Vector2(die.size.x * 0.5, die.size.y + DIE_GAP)).round()
-	var lift := _lift_wanted()
-	if bubble.visible and Time.get_ticks_msec() >= _speech_ends:
-		bubble.hide()
-	if bubble.visible:
-		_bubble_lift = move_toward(_bubble_lift, lift, BUBBLE_LIFT_SPEED * delta)
-		bubble.keep_above(head + Vector2.UP * _bubble_lift, get_viewport_rect())
-	elif not _speech.is_empty() and not die.visible:
-		_bubble_lift = lift
-		bubble.say(_speech.pop_front(), head + Vector2.UP * lift, get_viewport_rect())
-		_speech_ends = Time.get_ticks_msec() + SPEECH_MS
+# The roll stands over their head, wherever the camera has gone.
+func _place_die() -> void:
+	if token.visible and report == null:
+		var head := get_viewport().get_canvas_transform() * (token.global_position + HEAD)
+		die.position = (head - Vector2(die.size.x * 0.5, die.size.y + DIE_GAP)).round()
 
 
-# How far up a bubble must stand to clear what is over their head right now.
-func _lift_wanted() -> float:
-	if die.visible:
-		return die.size.y + DIE_GAP
-	if token.steps_left > 0:
-		return STEPS_ROOM * get_viewport().get_canvas_transform().get_scale().y
-	return 0.0
-
-
-# Each step of the warning is spoken once on a trip, however it began, so a lord who sent
-# them off knowing the date still hears it.
+# Puts what is owed in town on the strip, while it is close enough to matter. The trip is
+# never stopped for it: see D11 in EXPEDITION_PLAN.md.
 func _warn_of_debts() -> void:
 	var town := TownData.current()
 	var today := town.day + trip.day
-	var level := town.alert(today)
-	if level <= _said_alert:
+	if town.show_alert(today) == TownData.Alert.NONE:
+		hud.warn_of_debts("")
 		return
-	_said_alert = level
 	var debt := town.next_debt()
 	var left: int = debt["due"] - today
 	if left > 0:
-		trip.say(SAY_DEBT[level] % [debt["what"], TownData.days_words(left)])
+		hud.warn_of_debts(DEBT_LEFT % [debt["what"], TownData.days_words(left)])
 	else:
-		trip.say((SAY_DEBT_TODAY if left == 0 else SAY_DEBT_MISSED) % debt["what"])
+		hud.warn_of_debts((DEBT_TODAY if left == 0 else DEBT_MISSED) % debt["what"])
 
 
-# --- Orders -----------------------------------------------------------------
+# --- The map ----------------------------------------------------------------
 
-func _toggle_orders() -> void:
-	if orders.visible:
-		_close_orders()
+func _toggle_map() -> void:
+	if map_panel.visible:
+		_close_map()
 	else:
-		_open_orders()
+		_open_map()
 
 
-# The view pulls back with the zones on it. The trip keeps running.
-func _open_orders() -> void:
-	orders.refresh()
+# The view pulls back and the camera is free, so the arrow keys look around. The bag gives
+# up its place to the panel.
+func _open_map() -> void:
+	map_panel.refresh()
 	bag_panel.hide()
-	orders.show()
-	orders.play_open()
-	zone_overlay.open = true
+	map_panel.show()
+	map_panel.play_open()
 	_zoom_before = camera.zoom_index()
-	camera.set_zoom_index(0, ORDERS_VIEW_SECONDS)
-	camera.focus_on(token.global_position + ORDERS_VIEW_SHIFT, ORDERS_VIEW_SECONDS)
-	orders.home_button.grab_focus()
-	_refresh_orders()
+	camera.set_zoom_index(0, MAP_VIEW_SECONDS)
+	camera.focus_on(token.global_position + MAP_VIEW_SHIFT, MAP_VIEW_SECONDS)
+	camera.arrows_pan = true
+	map_button.lit = true
+	map_button.grab_focus()
+	_link(map_button, map_button, map_button, map_button, map_button)
 
 
-func _close_orders(take_focus := true) -> void:
-	if not orders.visible:
+func _close_map(take_focus := true) -> void:
+	if not map_panel.visible:
 		return
-	orders.hide()
+	map_panel.hide()
 	bag_panel.show()
-	zone_overlay.open = false
-	camera.set_zoom_index(_zoom_before, ORDERS_VIEW_SECONDS)
+	camera.set_zoom_index(_zoom_before, MAP_VIEW_SECONDS)
 	camera.follow(token)
+	camera.arrows_pan = false
+	map_button.lit = false
+	_link_focus()
 	if take_focus:
-		orders_button.grab_focus()
-	_refresh_orders()
+		_focus_on_day()
 
 
-# Lights a zone, and brings it into view if it was pointed at from the panel.
-func _point_at_zone(id: String) -> void:
-	zone_overlay.lit_zone = id
-	orders.island.lit_zone = id
-	if id != "":
-		camera.focus_on(zone_overlay.middle_of(id) + ORDERS_VIEW_SHIFT, ORDERS_VIEW_SECONDS)
+func _refresh_map() -> void:
+	if map_panel.visible:
+		map_panel.refresh()
 
 
-func _give_order(order: Expedition.Order, zone_id: String) -> void:
-	trip.give_order(order, zone_id)
-	hud.refresh()
-	_close_orders()
-	_refresh_orders()
-
-
-func _refresh_orders() -> void:
-	var zone_order := trip.order == Expedition.Order.ZONE
-	var words: String = trip.order_zone["name"] if zone_order else ORDER_WORDS[trip.order]
-	orders_button.text = "Orders: %s" % words
-	zone_overlay.target_zone = trip.order_zone["id"] if zone_order else ""
-	if orders.visible:
-		orders.refresh()
-	var called := trip.asked_home or _said_alert != TownData.Alert.NONE
-	var waiting := called and trip.order != Expedition.Order.HOME and not orders.visible
-	if waiting and orders_arrow == null:
-		orders_arrow = KitArrow.new(orders_button, KitArrow.Side.LEFT)
-		_layer.get_parent().add_child(orders_arrow)
-	elif not waiting:
-		_drop_orders_arrow()
-
-
-func _drop_orders_arrow() -> void:
-	if orders_arrow != null:
-		orders_arrow.queue_free()
-		orders_arrow = null
+func _look_at_space(id: int) -> void:
+	camera.focus_on(board.get_board_node(id).global_position + MAP_VIEW_SHIFT, MAP_VIEW_SECONDS)
 
 
 # The camera goes back to them, unless the whole island is being looked at.
 func _watch_token() -> void:
-	if not orders.visible:
+	if not map_panel.visible:
 		camera.follow(token)
 
 
-# --- Speed ------------------------------------------------------------------
-
-## Sets the speed of the whole trip, fights included. Any number works, for tests.
-func _set_speed(speed: float) -> void:
-	_speed = speed
-	chosen_speed = speed
-	_set_time(speed)
-	for index in speed_buttons.size():
-		speed_buttons[index].lit = SPEEDS[index] == speed
-
-
-func _set_time(speed: float) -> void:
-	Engine.time_scale = speed
+# Puts focus on whatever the day is waiting for.
+func _focus_on_day() -> void:
+	if roll_button.visible:
+		roll_button.grab_focus()
+	elif map_button.visible:
+		map_button.grab_focus()
 
 
 # --- Leaving ----------------------------------------------------------------
@@ -535,8 +607,10 @@ func _set_time(speed: float) -> void:
 func _on_back() -> void:
 	if report != null:
 		Screens.go(GAME_OVER if TownData.current().lost() else TOWN)
-	elif orders.visible:
-		_close_orders()
+	elif bag_prompt.visible:
+		return
+	elif map_panel.visible:
+		_close_map()
 	elif leave_panel.visible:
 		_close_leave_panel()
 	else:
@@ -544,7 +618,9 @@ func _on_back() -> void:
 
 
 func _open_leave_panel() -> void:
-	_set_time(0.0)
+	_time_before = Engine.time_scale
+	_focus_before = get_viewport().gui_get_focus_owner()
+	Engine.time_scale = 0.0
 	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size())
 	leave_cost.text = LEAVE_COST % what if what != "" else ""
 	leave_cost.visible = what != ""
@@ -557,15 +633,18 @@ func _open_leave_panel() -> void:
 func _close_leave_panel() -> void:
 	leave_panel.hide()
 	_dim.hide()
-	_set_time(_speed)
-	speed_buttons[SPEEDS.find(_speed) if SPEEDS.has(_speed) else 1].grab_focus()
+	Engine.time_scale = _time_before
+	if is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+		_focus_before.grab_focus()
+	else:
+		_focus_on_day()
 
 
 # Time stays stopped from the question to the report, so that whatever was under way,
 # a walk or a fight, never finishes. Nobody dies here: no red, and they stay whole until
 # the light takes them.
 func _warp_home() -> void:
-	# They may have just reached the Portal, or fallen. Then it is too late to give up.
+	# They may have just fallen. Then it is too late to give up.
 	if trip.is_over():
 		_close_leave_panel()
 		return
@@ -604,14 +683,7 @@ func _build_world(town: TownData) -> void:
 	board = BOARD.instantiate()
 	board.map_file = town.stage.map_file
 	board.print_on_ready = false
-	board.clickable = false
 	add_child(board)
-	zone_overlay = ZoneOverlay.new(trip.map, board)
-	zone_overlay.zone_clicked.connect(func(id: String) -> void: _give_order(Expedition.Order.ZONE, id))
-	zone_overlay.zone_pointed.connect(func(id: String) -> void:
-			zone_overlay.lit_zone = id
-			orders.island.lit_zone = id)
-	add_child(zone_overlay)
 	var start := board.get_starting_node().global_position
 	camera = BoardCamera.new()
 	camera.world_limit = board.get_world_rect()
@@ -649,6 +721,8 @@ func _build_ui(town: TownData) -> void:
 	battle_screen.room_below = FIGHT_ROOM_BELOW
 	battle_screen.room_right = FIGHT_ROOM_RIGHT
 	fight_layer.add_child(battle_screen)
+	bag_prompt = BagPrompt.new()
+	fight_layer.add_child(bag_prompt)
 	var ui := CanvasLayer.new()
 	ui.layer = UI_LAYER
 	add_child(ui)
@@ -662,10 +736,11 @@ func _build_ui(town: TownData) -> void:
 	_build_strip(town)
 	_build_bag_panel()
 	_build_news()
-	_build_speed_row()
-	_build_orders()
+	_build_roll_button()
+	_build_map()
 	_build_cover()
 	_build_leave_panel()
+	_build_portal_panel()
 	back = KitBackButton.new()
 	back.text = WARP_NAME
 	back.icon = Kit.icon("cross")
@@ -673,7 +748,6 @@ func _build_ui(town: TownData) -> void:
 	back.pressed.connect(_on_back)
 	_layer.add_child(back)
 	_link_focus()
-	speed_buttons[SPEEDS.find(1.0)].grab_focus()
 
 
 func _build_die() -> void:
@@ -713,51 +787,45 @@ func _build_news() -> void:
 	news.hide()
 
 
-func _build_speed_row() -> void:
-	_speed_row = HBoxContainer.new()
-	_speed_row.add_theme_constant_override("separation", SPEED_GAP)
-	for index in SPEEDS.size():
-		var button := KitButton.new()
-		button.kind = KitButton.Kind.SMALL
-		button.text = SPEED_WORDS[index]
-		var speed := SPEEDS[index]
-		button.pressed.connect(func() -> void: _set_speed(speed))
-		_speed_row.add_child(button)
-		speed_buttons.append(button)
-	_layer.add_child(_speed_row)
-	_speed_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_speed_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
-	_speed_row.offset_left -= SPEED_FROM_RIGHT
-	_speed_row.offset_right -= SPEED_FROM_RIGHT
-	_speed_row.offset_top += SPEED_TOP
-	_speed_row.offset_bottom += SPEED_TOP
+func _build_roll_button() -> void:
+	roll_button = KitButton.new()
+	roll_button.kind = KitButton.Kind.PRIMARY
+	roll_button.text = "Roll"
+	roll_button.icon = Kit.icon("die")
+	_layer.add_child(roll_button)
+	roll_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	roll_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE)
+	roll_button.offset_top -= STRIP_FROM_BOTTOM
+	roll_button.offset_bottom -= STRIP_FROM_BOTTOM
+	roll_button.offset_left += ROLL_LEFT
+	roll_button.offset_right += ROLL_LEFT
+	roll_button.hide()
 
 
-func _build_orders() -> void:
-	orders_button = KitButton.new()
-	orders_button.kind = KitButton.Kind.SMALL
-	orders_button.icon = Kit.icon("book")
-	orders_button.text = "Orders: %s" % ORDER_WORDS[trip.order]
-	orders_button.pressed.connect(_toggle_orders)
-	_at_top_right(orders_button, ORDERS_TOP)
-	orders = OrdersPanel.new(trip, zone_overlay)
-	orders.chosen.connect(_give_order)
-	orders.zone_pointed.connect(_point_at_zone)
-	_at_top_right(orders, ORDERS_PANEL_TOP)
-	orders.hide()
+func _build_map() -> void:
+	map_button = KitButton.new()
+	map_button.kind = KitButton.Kind.SMALL
+	map_button.icon = Kit.icon("book")
+	map_button.text = "Map"
+	map_button.pressed.connect(_toggle_map)
+	_at_top_right(map_button, EDGE_TOP)
+	map_panel = MapPanel.new(trip, board)
+	map_panel.island.space_clicked.connect(_look_at_space)
+	_at_top_right(map_panel, MAP_PANEL_TOP)
+	map_panel.hide()
 
 
 func _at_top_right(part: Control, top: float) -> void:
 	_layer.add_child(part)
 	part.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	part.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
-	part.offset_left -= SPEED_FROM_RIGHT
-	part.offset_right -= SPEED_FROM_RIGHT
+	part.offset_left -= EDGE_RIGHT
+	part.offset_right -= EDGE_RIGHT
 	part.offset_top += top
 	part.offset_bottom += top
 
 
-# Darkens the island under the report and the leave panel, and keeps clicks off the rest.
+# Darkens the island under the report and the panels, and keeps clicks off the rest.
 func _build_cover() -> void:
 	_dim = ColorRect.new()
 	_dim.color = DIM
@@ -769,11 +837,11 @@ func _build_cover() -> void:
 func _build_leave_panel() -> void:
 	leave_panel = KitPanel.new(LEAVE_HEADING, true)
 	leave_panel.title.add_theme_color_override("font_color", Kit.BLOOD)
-	leave_panel.custom_minimum_size.x = LEAVE_WIDTH
-	var words := Kit.text(LEAVE_WORDS % trip.person.display_name, LEAVE_WIDTH, &"PaperLabel")
+	leave_panel.custom_minimum_size.x = PANEL_WIDTH
+	var words := Kit.text(LEAVE_WORDS % trip.person.display_name, PANEL_WIDTH, &"PaperLabel")
 	words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	leave_panel.body.add_child(words)
-	leave_cost = Kit.text("", LEAVE_WIDTH, &"PaperLabel")
+	leave_cost = Kit.text("", PANEL_WIDTH, &"PaperLabel")
 	leave_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	leave_cost.add_theme_color_override("font_color", Kit.BLOOD)
 	leave_panel.body.add_child(leave_cost)
@@ -789,6 +857,27 @@ func _build_leave_panel() -> void:
 	leave_panel.body.add_child(leave_button)
 	_centered(leave_panel)
 	leave_panel.hide()
+
+
+func _build_portal_panel() -> void:
+	portal_panel = KitPanel.new(PORTAL_HEADING, true)
+	portal_panel.custom_minimum_size.x = PANEL_WIDTH
+	portal_words = Kit.text("", PANEL_WIDTH, &"PaperLabel")
+	portal_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	portal_panel.body.add_child(portal_words)
+	home_button = KitButton.new()
+	home_button.text = GO_HOME_TEXT
+	home_button.kind = KitButton.Kind.PRIMARY
+	home_button.icon = Kit.icon("door")
+	home_button.pressed.connect(func() -> void: _portal_answered.emit(true))
+	portal_panel.body.add_child(home_button)
+	stay_out_button = KitButton.new()
+	stay_out_button.text = STAY_OUT_TEXT
+	stay_out_button.kind = KitButton.Kind.SMALL
+	stay_out_button.pressed.connect(func() -> void: _portal_answered.emit(false))
+	portal_panel.body.add_child(stay_out_button)
+	_centered(portal_panel)
+	portal_panel.hide()
 
 
 func _centered(panel: KitPanel) -> void:
@@ -821,14 +910,16 @@ func _link_report_focus() -> void:
 func _link_strip() -> void:
 	var stats := hud.stats
 	var slot: Control = bag_panel.slots[0]
-	_link(hud.hp_bar, orders_button, hud.food_bar, hud.hp_bar, stats[0])
+	_link(hud.hp_bar, roll_button, hud.food_bar, hud.hp_bar, stats[0])
 	_link(hud.gold, hud.hp_bar, hud.gold, hud.gold, hud.food_bar)
 	_link(hud.food_bar, hud.hp_bar, hud.food_bar, hud.gold, stats[2])
-	_link(stats[0], orders_button, stats[2], hud.hp_bar, stats[1])
-	_link(stats[1], orders_button, stats[3], stats[0], slot)
+	_link(stats[0], roll_button, stats[2], hud.hp_bar, stats[1])
+	_link(stats[1], roll_button, stats[3], stats[0], slot)
 	_link(stats[2], stats[0], stats[2], hud.food_bar, stats[3])
 	_link(stats[3], stats[1], stats[3], stats[2], slot)
 	slot.focus_neighbor_left = slot.get_path_to(stats[1])
+	for gear_slot: Control in bag_panel.slots:
+		gear_slot.focus_neighbor_top = gear_slot.get_path_to(map_button)
 
 
 func _link(part: Control, up: Control, down: Control, left: Control, right: Control) -> void:
@@ -838,26 +929,14 @@ func _link(part: Control, up: Control, down: Control, left: Control, right: Cont
 	part.focus_neighbor_right = part.get_path_to(right)
 
 
-## Left and right walk the top row, down reads the strip, and the panel keeps focus
-## to itself while it is open.
+## Roll sits in the middle of everything, and each panel keeps focus to itself while open.
 func _link_focus() -> void:
-	var top: Array[Control] = [back]
-	top.append_array(speed_buttons)
-	for index in top.size():
-		var part := top[index]
-		part.focus_neighbor_top = part.get_path_to(part)
-		part.focus_neighbor_left = part.get_path_to(top[maxi(index - 1, 0)])
-		part.focus_neighbor_right = part.get_path_to(top[mini(index + 1, top.size() - 1)])
-		part.focus_neighbor_bottom = part.get_path_to(orders_button)
-	orders_button.focus_neighbor_top = orders_button.get_path_to(speed_buttons[1])
-	orders_button.focus_neighbor_bottom = orders_button.get_path_to(hud.hp_bar)
-	orders_button.focus_neighbor_left = orders_button.get_path_to(orders_button)
-	orders_button.focus_neighbor_right = orders_button.get_path_to(orders_button)
+	var slot: Control = bag_panel.slots[0]
+	_link(back, back, roll_button, back, map_button)
+	_link(map_button, map_button, slot, back, map_button)
+	_link(roll_button, back, hud.hp_bar, roll_button, slot)
 	_link_strip()
-	for part: Control in [stay_button, leave_button]:
-		for way: StringName in [&"focus_neighbor_left", &"focus_neighbor_right"]:
-			part.set(way, part.get_path_to(part))
-	stay_button.focus_neighbor_top = stay_button.get_path_to(stay_button)
-	stay_button.focus_neighbor_bottom = stay_button.get_path_to(leave_button)
-	leave_button.focus_neighbor_top = leave_button.get_path_to(stay_button)
-	leave_button.focus_neighbor_bottom = leave_button.get_path_to(leave_button)
+	_link(stay_button, stay_button, leave_button, stay_button, stay_button)
+	_link(leave_button, stay_button, leave_button, leave_button, leave_button)
+	_link(home_button, home_button, stay_out_button, home_button, home_button)
+	_link(stay_out_button, home_button, stay_out_button, stay_out_button, stay_out_button)

@@ -32,6 +32,8 @@ func _ready() -> void:
 	_test_hunger()
 	_test_exact_landing()
 	_test_rolling_zero()
+	_test_by_hand()
+	_test_warnings()
 	_test_dead_ends()
 	_test_roll_block()
 	_test_turning_for_home()
@@ -157,7 +159,7 @@ func _test_hunger() -> void:
 
 func _test_exact_landing() -> void:
 	var trip := _trip_on_line()
-	trip.order = Expedition.Order.HOME
+	trip.heading_home = true
 	trip.space_id = 1
 	trip.player.gold = 70
 	trip.brain.plan_day()
@@ -172,7 +174,7 @@ func _test_exact_landing() -> void:
 		{"id": 1, "type": "NORMAL"},
 		{"id": 2, "type": "NORMAL"},
 	]}))
-	trip.order = Expedition.Order.HOME
+	trip.heading_home = true
 	trip.space_id = 1
 	trip.brain.plan_day()
 	var path := trip.walk(2)
@@ -202,7 +204,7 @@ func _test_rolling_zero() -> void:
 
 	# Told to go home on the first turn, a 0 on the Portal still doesn't count.
 	trip = _trip_on_line()
-	trip.order = Expedition.Order.HOME
+	trip.heading_home = true
 	trip.day = 1
 	trip.walk(0)
 	trip.land()
@@ -218,6 +220,71 @@ func _test_rolling_zero() -> void:
 	trip.walk(0)
 	trip.land()
 	_expect(trip.player.gold > 0, "only the Portal is spared on the first turn")
+
+
+func _test_by_hand() -> void:
+	var trip := Expedition.new(_bram, _grass, 1, true)
+	_expect(trip.brain == null and not trip.player.is_cpu, "by hand, nobody else decides")
+	var hand_map := IslandMap.new(LINE)
+	trip.map = hand_map
+	trip.space_id = hand_map.portal
+	trip._depth = hand_map.steps_from(hand_map.portal)
+	trip.day = 1
+	_expect(trip.begin_walk(0) and trip.steps_left == 0, "a 0 is a walk of nothing")
+	trip.land()
+	_expect(not trip.may_go_home(), "and a 0 on the first turn offers no way home")
+	trip.day = 2
+	trip.begin_walk(0)
+	trip.land()
+	_expect(trip.may_go_home(), "a 0 on the Portal later on does")
+	_expect(trip.ending == Expedition.Ending.NONE, "and only asks")
+	trip.begin_walk(9)
+	_expect(not trip.may_go_home(), "a void walk on the Portal does not ask")
+	trip.begin_walk(2)
+	_expect(trip.next_spaces() == hand_map.ways(trip.space_id, -1, 2), "the first step may go any way that fits")
+	var ends := trip.landing_spaces()
+	_expect(ends == hand_map.landings(trip.space_id, -1, 2), "the walk knows where it can end")
+	trip.step_to(1)
+	_expect(trip.came_from == 0 and trip.steps_left == 1, "a step uses a step")
+	_expect(not trip.next_spaces().has(0), "and there is no turning back")
+	_expect(trip.next_spaces().size() == 2, "a fork offers both roads")
+	trip.step_to(4)
+	_expect(trip.steps_left == 0 and trip.player.space_id == 4, "the walk ends where it was told")
+	_expect(trip.furthest == 2, "and counts how far they went")
+	trip.go_home()
+	_expect(trip.ending == Expedition.Ending.NONE, "only the Portal goes home")
+	trip.space_id = hand_map.portal
+	trip.go_home()
+	_expect(trip.ending == Expedition.Ending.HOME, "an exact landing goes home when asked")
+
+	# The bot's morning stays out of it.
+	trip = Expedition.new(_bram, _grass, 1, true)
+	trip.player.hp = 1
+	var herbs := trip.player.inventory.size()
+	trip.start_day()
+	_expect(trip.player.inventory.size() == herbs and trip.player.hp == 1, "nothing is used for them")
+	var chest := Expedition.new(_bram, _grass, 1, true)
+	var spot := _space_of(chest, BoardNode.NodeType.TREASURE)
+	chest.player.hp = 1
+	_land_on(chest, spot)
+	_expect(not SpaceEffects.chest_is_full(spot) or chest.fight != null, "a player always opens a chest")
+
+
+func _test_warnings() -> void:
+	var trip := _trip_on_line()
+	trip.space_id = 3
+	trip.day = 1
+	trip.food_left = 1
+	_expect(not trip.food_is_short(), "nothing is short on the first day")
+	trip.day = 2
+	_expect(trip.food_is_short(), "one day of food is short at the end of a road")
+	trip.food_left = 99
+	_expect(not trip.food_is_short(), "plenty is not")
+	trip.player.inventory.clear()
+	trip.player.hp = 1
+	_expect(trip.badly_hurt(), "a bad wound with nothing to heal it counts")
+	trip.player.inventory.append("herb")
+	_expect(not trip.badly_hurt(), "with a cure in the bag it does not")
 
 
 func _test_dead_ends() -> void:
@@ -263,15 +330,14 @@ func _test_turning_for_home() -> void:
 	trip.day = 1
 	trip.food_left = 1
 	trip.brain.plan_day()
-	_expect(not trip.asked_home, "nobody asks on the first day")
+	_expect(not trip.brain.asked_home, "nobody asks on the first day")
 	trip.day = 2
 	trip.food_left = 99
 	trip.brain.plan_day()
-	_expect(not trip.asked_home, "plenty of food means no hurry")
-	trip.food_left = int(trip.brain.days_home() * ExpeditionBrain.HOME_CAUTION)
+	_expect(not trip.brain.asked_home, "plenty of food means no hurry")
+	trip.food_left = int(trip.days_home() * Expedition.FOOD_CAUTION)
 	trip.brain.plan_day()
-	_expect(trip.asked_home, "food running short makes them ask to come home")
-	_expect(trip.order == Expedition.Order.ROAM, "only the lord can send them")
+	_expect(trip.brain.asked_home, "food running short makes them ask to come home")
 
 	trip = _trip_on_line()
 	trip.space_id = 3
@@ -280,7 +346,7 @@ func _test_turning_for_home() -> void:
 	trip.player.inventory.clear()
 	trip.player.hp = 1
 	trip.brain.plan_day()
-	_expect(trip.asked_home, "badly hurt with nothing to heal with, they ask too")
+	_expect(trip.brain.asked_home, "badly hurt with nothing to heal with, they ask too")
 
 
 func _test_forks() -> void:
@@ -314,7 +380,7 @@ func _test_forks() -> void:
 		{"id": 3, "type": "NORMAL"},
 	]})
 	trip = _trip_on_map(home)
-	trip.order = Expedition.Order.HOME
+	trip.heading_home = true
 	trip.space_id = 1
 	trip.brain.plan_day()
 	_expect(trip.brain.choose_path([0, 2], 1, 1) == 0, "heading home, it takes the exact landing")
@@ -350,7 +416,7 @@ func _test_spaces() -> void:
 
 	var fall := Expedition.new(_bram, _grass, 1)
 	fall.space_id = gold
-	fall.order = Expedition.Order.HOME
+	fall.heading_home = true
 	var trapdoor := SpaceEffects.Result.new("A trapdoor!")
 	trapdoor.to_castle = true
 	fall._take(trapdoor)

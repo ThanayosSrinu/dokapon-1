@@ -19,8 +19,6 @@ const SLOTS := [ItemData.Kind.WEAPON, ItemData.Kind.ARMOR, ItemData.Kind.ACCESSO
 const SLOT_WORDS := {ItemData.Kind.WEAPON: "Weapon", ItemData.Kind.ARMOR: "Armor",
 		ItemData.Kind.ACCESSORY: "Accessory"}
 const FULL_HINT := "They don't need this yet."
-const AUTO_ON_HINT := "Auto is on: they use this when hurt."
-const AUTO_OFF_HINT := "Auto is off: only you can use this."
 const FIGHT_HINT := "Not during a fight."
 
 ## One per entry of SLOTS.
@@ -33,8 +31,6 @@ var detail_words: Label
 var detail_hint: Label
 ## Uses or wears the item in the box.
 var action: KitButton
-## Lets the bot use the item in the box by itself.
-var auto: KitButton
 ## True while nothing can be changed, such as in a fight.
 var locked := false:
 	set(value):
@@ -186,9 +182,6 @@ func _build_detail() -> void:
 	detail.body.add_child(buttons)
 	action = _detail_button(_on_action)
 	buttons.add_child(action)
-	auto = _detail_button(_on_auto)
-	auto.text = "Auto"
-	buttons.add_child(auto)
 
 
 func _detail_button(press: Callable) -> KitButton:
@@ -227,7 +220,7 @@ func _pick_tile(index: int) -> void:
 		tiles[index].lit = true
 
 
-# The bot may have used the item in the box, or moved it along the bag.
+# A space or a fight may have taken the item in the box, or moved it along the bag.
 func _keep_shown_real() -> void:
 	var player := _trip.player
 	if _pointed != "" and not player.inventory.has(_pointed) and not player.equipment.values().has(_pointed):
@@ -270,18 +263,6 @@ func _on_action() -> void:
 		slots[0].grab_focus()
 
 
-func _on_auto() -> void:
-	var item_id := _shown()
-	if item_id == "":
-		return
-	var off := _trip.player.auto_off
-	if off.has(item_id):
-		off.erase(item_id)
-	else:
-		off.append(item_id)
-	_show_detail()
-
-
 # Pointing away from an item leaves it in the box, so its buttons can be reached.
 func _on_pointed(item_id: String) -> void:
 	if item_id != "" or _picked != "":
@@ -320,19 +301,12 @@ func _show_item(item: ItemData) -> void:
 		action.disabled = false
 		action.visible = not locked
 		return
-	var auto_on := not player.auto_off.has(item.id)
 	var can_use := player.can_use_item(item.id)
-	var hint: String = AUTO_ON_HINT if auto_on else AUTO_OFF_HINT
-	if locked:
-		hint = FIGHT_HINT
-	elif not can_use:
-		hint = "%s %s" % [FULL_HINT, hint]
+	var hint := FIGHT_HINT if locked else ("" if can_use else FULL_HINT)
 	_show_words(item.display_name, "\n".join(lines), hint)
 	action.text = "Use"
 	action.disabled = not can_use
 	action.visible = not locked
-	auto.lit = auto_on
-	auto.visible = true
 
 
 func _worn(item: ItemData) -> bool:
@@ -357,4 +331,3 @@ func _show_words(title: String, words: String, hint: String) -> void:
 	detail_hint.text = hint
 	detail_hint.visible = hint != ""
 	action.visible = false
-	auto.visible = false

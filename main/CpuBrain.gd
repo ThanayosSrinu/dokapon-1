@@ -880,7 +880,7 @@ static func _fitting_item(player: PlayerData, property: String, gap: int) -> Str
 	var best_power := 0
 	for id in player.inventory:
 		var power: int = Database.get_item(id).get(property)
-		if power <= 0 or player.auto_off.has(id):
+		if power <= 0:
 			continue
 		var better := power > best_power if best_power <= gap else power < best_power and power >= gap
 		if best == "" or better:

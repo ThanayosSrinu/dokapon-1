@@ -277,11 +277,24 @@ func _ask(options: Array[Dictionary]) -> Variant:
 		_choices.add_child(button)
 		if first_enabled == null and not option["disabled"]:
 			first_enabled = button
+	_keep_focus_on_row()
 	first_enabled.grab_focus()
 	var picked: Variant = await _option_picked
 	_clear_choices()
 	_hint.text = ""
 	return picked
+
+
+# Focus stays on the row, so a stray key can't wander off to what stands around the fight.
+func _keep_focus_on_row() -> void:
+	var buttons := _choices.get_children()
+	for button: Button in buttons:
+		button.focus_neighbor_top = button.get_path_to(button)
+		button.focus_neighbor_bottom = button.get_path_to(button)
+	var first: Button = buttons[0]
+	var last: Button = buttons[-1]
+	first.focus_neighbor_left = first.get_path_to(first)
+	last.focus_neighbor_right = last.get_path_to(last)
 
 
 func _clear_choices() -> void:

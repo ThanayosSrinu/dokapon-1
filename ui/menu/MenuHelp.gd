@@ -9,8 +9,8 @@ const PAGES := [
 	["How It Works", [
 		["star", "You are a lord. Build up your town."],
 		["sword", "Hire an adventurer at the Tavern."],
-		["die", "Send them through the Portal, and watch them explore."],
-		["food", "When the food runs low, call them home. Nobody turns back alone."],
+		["die", "Send them through the Portal, then roll, pick your road and fight."],
+		["food", "Food runs out. Land exactly on the Portal to go home."],
 		["coin", "What they carry back pays the bills. Pay them at the Bank by each due day."],
 	]],
 	["Controls", [
