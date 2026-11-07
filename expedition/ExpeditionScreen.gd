@@ -172,6 +172,7 @@ var _zoom_before := 1
 func _ready() -> void:
 	var town := TownData.current()
 	trip = Expedition.new(town.going, town.stage, next_seed, true, town.food, town.member(town.going))
+	trip.beacon = town.has_beacon()
 	_build_world(town)
 	_build_ui(town)
 	EventBus.space_clicked.connect(_on_space_clicked)
@@ -378,7 +379,7 @@ func _walk() -> void:
 	_mark_nothing()
 	board.get_board_node(landing).is_landing_spot = true
 	_marked.append(board.get_board_node(landing))
-	for next in trip.path_to(landing):
+	for next in trip.choose_landing(landing):
 		var left := trip.steps_left
 		trip.step_to(next)
 		await token.walk_path([board.get_board_node(next)], left)
@@ -563,6 +564,7 @@ func _close_trip() -> void:
 	var town := TownData.current()
 	var gold_before := town.gold
 	town.bring_home(trip)
+	town.save()
 	report = TripReport.new(trip)
 	var out: int = town.member(trip.person).days_out(town.day)
 	if out > 0:

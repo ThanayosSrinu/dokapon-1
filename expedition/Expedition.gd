@@ -21,7 +21,8 @@ extends RefCounted
 ## walk() and play_day() are its shortcuts. The bot never runs in the game.
 ##
 ## The way home is the Portal, and only an exact landing counts. Walking across it does
-## nothing. A roll starts from 0, and a 0 lands on the space they stand on, except on the
+## nothing, unless the town has the Portal Beacon (`beacon`): then the Portal is one of
+## the landings of any roll that can walk across it, and a walk that picks it stops there. A roll starts from 0, and a 0 lands on the space they stand on, except on the
 ## Portal on the first turn, so that nobody goes home by accident.
 ##
 ## A roll must be walked in full, and a walk can't turn back. A dead end takes the exact
@@ -83,6 +84,8 @@ var food_taken := 0
 var food_left := 0
 ## True when the player makes every choice, and false when the brain does.
 var by_hand := false
+## True with the Portal Beacon. See the top of this file.
+var beacon := false
 var ending := Ending.NONE
 var space_id := -1
 ## The space stepped off last, or -1. It only matters during a walk.
@@ -135,6 +138,8 @@ var _level_before_fight := 1
 var _prize: SpaceEffects.Result
 # Space id -> the fewest steps from the Portal.
 var _depth := {}
+# Where the walk under way was chosen to end, or -1.
+var _aim := -1
 
 
 ## Starts a trip by `new_person` to `stage`. A `seed_value` of 0 picks a new random seed.
@@ -296,6 +301,7 @@ func roll() -> int:
 ## void: they stay put and the turn is lost.
 func begin_walk(steps: int) -> bool:
 	came_from = -1
+	_aim = -1
 	steps_left = steps
 	_lands = steps > 0 or day > 1 or space_id != map.portal
 	if map.landings(space_id, -1, steps).is_empty():
@@ -316,9 +322,24 @@ func landing_spaces() -> Array[int]:
 	return landings_from(space_id, came_from, steps_left)
 
 
-## Every space a walk of `steps` from `id` can end on, as the board stands now.
+## Every space a walk of `steps` from `id` can end on, as the board stands now. With the
+## Beacon, that is also the Portal if the walk can cross it.
 func landings_from(id: int, from: int, steps: int) -> Array[int]:
-	return map.landings(id, from, steps)
+	var found := map.landings(id, from, steps)
+	if beacon and not found.has(map.portal) and _steps_to_portal(id, from, steps) > 0:
+		# The map keeps its answers, so this adds to a copy.
+		found = found.duplicate()
+		found.append(map.portal)
+	return found
+
+
+# The fewest steps, under `steps`, in which a walk from `id` can cross the Portal, or 0
+# if none can.
+func _steps_to_portal(id: int, from: int, steps: int) -> int:
+	for count in range(1, steps):
+		if map.landings(id, from, count).has(map.portal):
+			return count
+	return 0
 
 
 ## The spaces the walk under way steps on to end on `landing`, which must be one of
@@ -328,6 +349,8 @@ func path_to(landing: int) -> Array[int]:
 	var here := space_id
 	var from := came_from
 	var left := steps_left
+	if landing == map.portal and beacon and not map.landings(here, from, left).has(landing):
+		left = _steps_to_portal(here, from, left)
 	while left > 0:
 		var found := -1
 		for next in map.exits(here, from):
@@ -343,14 +366,24 @@ func path_to(landing: int) -> Array[int]:
 	return path
 
 
-## Takes one step of the walk, onto one of next_spaces().
+## Takes one step of the walk, onto one of next_spaces(). With the Beacon, a step onto
+## the Portal ends the walk if the walk was chosen to end there with choose_landing().
 func step_to(next: int) -> void:
 	came_from = space_id
 	space_id = next
 	steps_left -= 1
+	if beacon and _aim == map.portal and space_id == map.portal:
+		steps_left = 0
 	if steps_left == 0:
 		player.space_id = space_id
 		furthest = maxi(furthest, depth_of(space_id))
+
+
+## Settles where the walk under way ends, out of landing_spaces(), and returns the spaces
+## it steps on, as path_to() does. Call this before walking them.
+func choose_landing(landing: int) -> Array[int]:
+	_aim = landing
+	return path_to(landing)
 
 
 ## Walks `steps` spaces to where the brain chooses to land, and returns the ids stepped on
@@ -359,7 +392,7 @@ func walk(steps: int) -> Array[int]:
 	var path: Array[int] = []
 	if not begin_walk(steps):
 		return path
-	for next in path_to(brain.choose_landing(landing_spaces())):
+	for next in choose_landing(brain.choose_landing(landing_spaces())):
 		step_to(next)
 		path.append(next)
 	return path
@@ -506,7 +539,7 @@ func _step_through() -> void:
 
 func _can_reach_portal() -> bool:
 	for steps in range(1, person.die_top + 1):
-		if map.landings(space_id, -1, steps).has(map.portal):
+		if landings_from(space_id, -1, steps).has(map.portal):
 			return true
 	return false
 

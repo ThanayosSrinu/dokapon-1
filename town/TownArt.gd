@@ -9,12 +9,22 @@ extends BoardArt
 ## Wider than any screen, so that a wide window shows more town, never an edge.
 const AREA := Rect2i(-40, -26, 80, 52)
 
-## Where each building stands: the middle of its bottom edge, in pixels.
+## Where each building stands: the middle of its bottom edge, in pixels. The Castle's is
+## the foot of its walls, which the keep's tiles draw.
 const BUILDING_FEET := {"tavern": Vector2(-368, 86), "bank": Vector2(-112, 60), "portal": Vector2(400, 172),
-		"shop": Vector2(208, 86)}
-## The room each building takes up on the ground, in vertices.
+		"shop": Vector2(208, 86), "castle": Vector2(16, -128), "academy": Vector2(-272, -136),
+		"storehouse": Vector2(256, -136), "smithy": Vector2(480, -144)}
+## The room each building takes up on the ground, in vertices. The Castle has none: its
+## tiles are the keep.
 const BUILDING_LOTS := {"tavern": Rect2i(-15, -3, 7, 6), "bank": Rect2i(-7, -3, 6, 5),
-		"portal": Rect2i(9, -1, 8, 7), "shop": Rect2i(4, -3, 5, 6)}
+		"portal": Rect2i(9, -1, 8, 7), "shop": Rect2i(4, -3, 5, 6), "academy": Rect2i(-12, -10, 7, 7),
+		"storehouse": Rect2i(5, -10, 7, 7), "smithy": Rect2i(12, -10, 6, 7)}
+## The buildings in the two rows the arrows walk, west to east. Up and down move between
+## the rows.
+const NORTH_ROW: Array[String] = ["academy", "castle", "storehouse", "smithy"]
+const SOUTH_ROW: Array[String] = ["tavern", "bank", "shop", "portal"]
+## Where smoke leaves the Smithy's chimney, relative to its feet, by its level.
+const SMITHY_SMOKE := {1: Vector2(42, -140), 2: Vector2(42, -160)}
 ## Where smoke leaves the Tavern's chimney, relative to its feet.
 const TAVERN_SMOKE := Vector2(52, -158)
 
@@ -37,7 +47,7 @@ const COTTAGES: Array[Vector2i] = [Vector2i(-13, 6), Vector2i(-11, 6), Vector2i(
 		Vector2i(4, 6), Vector2i(6, 6)]
 const STALLS: Array[Vector2i] = [Vector2i(-3, 5), Vector2i(-2, 5), Vector2i(3, 5)]
 const STALL_TILES: Array[Vector2i] = [Vector2i(7, 31), Vector2i(8, 31), Vector2i(9, 31)]
-const FIELDS: Array[Rect2i] = [Rect2i(-13, -8, 6, 3), Rect2i(8, -8, 6, 3)]
+const FIELDS: Array[Rect2i] = [Rect2i(-19, -7, 6, 3)]
 
 ## How far from the middle the forest may begin.
 const FOREST_X := 18
@@ -54,11 +64,13 @@ const FOLK_PATHS := [
 ]
 
 
-## Replaces the town on `canvas` and returns the result.
-static func paint_town(canvas: Node2D) -> TownArt:
+## Replaces the town on `canvas` and returns the result. `smoke` is more chimneys, from
+## buildings that change with their level.
+static func paint_town(canvas: Node2D, smoke: Array[Vector2] = []) -> TownArt:
 	var art := TownArt.new()
 	art._rng.seed = SCENERY_SEED
 	art._plan_town()
+	art.smoke_points.append_array(smoke)
 	art._build_layers(canvas)
 	return art
 

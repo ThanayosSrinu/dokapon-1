@@ -280,7 +280,7 @@ func _fill_shelves(town: TownData) -> void:
 		tile.queue_free()
 	tiles.clear()
 	if tab == Tab.BUY:
-		for id in TownData.shop_goods():
+		for id in town.on_sale():
 			_add_tile(ShopTile.new(id))
 	else:
 		for id in town.stock_ids():

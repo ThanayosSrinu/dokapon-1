@@ -901,4 +901,6 @@ if __name__ == "__main__":
     art_shop.make_shop()
     import art_portal
     art_portal.make_portal()
+    import art_upgrades
+    art_upgrades.make_upgrades()
     make_tile_table()

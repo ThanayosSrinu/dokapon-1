@@ -134,8 +134,11 @@ func show_stage(stage: Stage) -> void:
 
 ## Shows the food: how much is bought, what that costs of what the town has, and how much
 ## could be. A `warning` shows in red, and "" clears it.
-func show_food(amount: int, carry: int, afford: int, cost: int, gold: int, warning: String) -> void:
+## `kept` is how much of the food comes from the Storehouse, for free.
+func show_food(amount: int, carry: int, afford: int, cost: int, gold: int, warning: String, kept := 0) -> void:
 	_food_words.text = "Food for %s" % Expedition.turns_words(amount)
+	if kept > 0:
+		_food_words.text += ", %d kept" % kept
 	_food_cost.text = "%d of your %d gold" % [cost, gold]
 	_food_warning.text = warning
 	food.show_food(amount, carry, afford)

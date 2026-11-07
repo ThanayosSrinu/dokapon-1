@@ -1,7 +1,7 @@
 class_name MainMenu
 extends Control
-## The first screen. Play is the one main action. There is no Continue yet, because
-## nothing is saved until Section E20.
+## The first screen. With a saved town, Continue is the one main action and New Town
+## asks before it throws the saved town away. With none, Play starts a town.
 
 const TOWN := "res://town/TownScreen.tscn"
 const GALLERY := "res://ui/kit/KitGallery.tscn"
@@ -15,7 +15,15 @@ const SLIDE := 60.0
 const SLIDE_SECONDS := 0.32
 const SLIDE_STAGGER := 0.06
 
+## Play, or New Town while a town is saved.
 var play_button: KitButton
+## Only while a town is saved.
+var continue_button: KitButton
+## Asks before New Town throws the saved town away.
+var confirm_panel: KitPanel
+var confirm_button: KitButton
+## The safe answer, which has the focus when the question opens.
+var keep_button: KitButton
 var help_button: KitButton
 var options_button: KitButton
 var quit_button: KitButton
@@ -42,7 +50,11 @@ func _ready() -> void:
 	_column.custom_minimum_size.x = COLUMN_WIDTH
 	_column.add_theme_constant_override("separation", GAP)
 	add_child(_column)
-	play_button = _add_button("Play", "play", KitButton.Kind.PRIMARY, _on_play)
+	var saved := TownData.has_save()
+	if saved:
+		continue_button = _add_button("Continue", "play", KitButton.Kind.PRIMARY, _on_continue)
+	play_button = _add_button("New Town" if saved else "Play", "play" if not saved else "star",
+			KitButton.Kind.NORMAL if saved else KitButton.Kind.PRIMARY, _on_play)
 	help_button = _add_button("How to Play", "book", KitButton.Kind.NORMAL, _open_page.bind(0))
 	options_button = _add_button("Options", "gear", KitButton.Kind.NORMAL, _open_page.bind(1))
 	quit_button = _add_button("Quit", "door", KitButton.Kind.NORMAL, Screens.quit)
@@ -57,15 +69,22 @@ func _ready() -> void:
 	_options.closed.connect(_on_page_closed.bind(options_button))
 	add_child(_options)
 
+	_build_confirm()
 	Sound.music("title")
-	play_button.grab_focus()
+	(continue_button if saved else play_button).grab_focus()
 	if not Screens.busy:
 		Screens.reveal()
 	_play_entrance()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if Screens.busy or not _column.visible:
+	if Screens.busy:
+		return
+	if confirm_panel.visible and event.is_action_pressed("ui_cancel"):
+		_close_confirm()
+		get_viewport().set_input_as_handled()
+		return
+	if not _column.visible:
 		return
 	# There is nothing to go back to here, so Back finds the way out.
 	if event.is_action_pressed("ui_cancel"):
@@ -96,8 +115,56 @@ func _add_button(words: String, icon_name: String, kind: KitButton.Kind, action:
 	return button
 
 
+func _on_continue() -> void:
+	if TownData.load_saved():
+		Screens.go(TOWN)
+	else:
+		continue_button.deny()
+		continue_button.block("The saved town can't be read.")
+
+
 func _on_play() -> void:
+	if TownData.has_save():
+		_column.hide()
+		confirm_panel.show()
+		confirm_panel.play_open()
+		keep_button.grab_focus()
+		return
+	_start_new_town()
+
+
+func _start_new_town() -> void:
+	TownData.delete_save()
+	TownData.start_new()
 	Screens.go(TOWN)
+
+
+func _build_confirm() -> void:
+	confirm_panel = KitPanel.new("Start a new town?")
+	confirm_panel.position = COLUMN_SPOT
+	confirm_panel.custom_minimum_size.x = COLUMN_WIDTH + 80.0
+	confirm_panel.body.add_child(Kit.text("Your saved town will be lost for good.", COLUMN_WIDTH + 40.0))
+	confirm_button = KitButton.new()
+	confirm_button.kind = KitButton.Kind.NORMAL
+	confirm_button.text = "Start a new town"
+	confirm_button.pressed.connect(_start_new_town)
+	confirm_panel.body.add_child(confirm_button)
+	var keep := KitButton.new()
+	keep_button = keep
+	keep.kind = KitButton.Kind.PRIMARY
+	keep.text = "Keep my town"
+	keep.pressed.connect(_close_confirm)
+	confirm_panel.body.add_child(keep)
+	confirm_button.focus_neighbor_bottom = confirm_button.get_path_to(keep)
+	keep.focus_neighbor_top = keep.get_path_to(confirm_button)
+	confirm_panel.hide()
+	add_child(confirm_panel)
+
+
+func _close_confirm() -> void:
+	confirm_panel.hide()
+	_column.show()
+	play_button.grab_focus()
 
 
 func _open_page(index: int) -> void:

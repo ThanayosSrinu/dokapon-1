@@ -160,7 +160,8 @@ func _show_trip(town: TownData) -> void:
 func _show_food(town: TownData) -> void:
 	var carry := 0 if town.going == null else town.stage.most_food(town.going)
 	var afford := 0 if town.going == null else town.food_limit(town.stage, town.going)
-	card.show_food(town.food, carry, afford, town.food * TownData.FOOD_PRICE, town.gold, _food_warning(town))
+	card.show_food(town.food, carry, afford, town.food_cost(), town.gold, _food_warning(town),
+			mini(town.food, town.food_store))
 	Tips.attach(card.food, "Food", _food_tip(town))
 	_show_forecasts(town)
 
@@ -219,7 +220,12 @@ func _choose_food(amount: int) -> void:
 
 ## Says where the food comes from, because that is what the player can change.
 func _food_tip(town: TownData) -> String:
-	var words := "One roll of the die is one turn, and a day at camp too. Each costs a day of food, at %d gold a day. Leftover food is lost." % TownData.FOOD_PRICE
+	var words := "One roll of the die is one turn, and a day at camp too. Each costs a day of food, at %d gold a day." % TownData.FOOD_PRICE
+	if town.store_room() == 0:
+		words += " Leftover food is lost."
+	else:
+		words += " The Storehouse keeps %s, eaten before any is bought, and keeps what comes home, up to %d days." % [
+				TownData.days_words(town.food_store), town.store_room()]
 	if town.going != null:
 		words += " %s can carry %d on a %s trip." % [town.going.display_name, town.stage.most_food(town.going), town.stage.size_name.to_lower()]
 	return words

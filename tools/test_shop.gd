@@ -31,6 +31,8 @@ func _town(gold := 1000) -> TownData:
 	town.gold = 10000
 	town.hire(Database.get_adventurer("bram"))
 	town.gold = gold
+	# A full Smithy, so that every piece of gear is on sale. test_upgrades.gd tests less.
+	town.buildings["smithy"] = 2
 	return town
 
 
@@ -198,7 +200,7 @@ func _test_shop_screen() -> void:
 	town.hire(Database.get_adventurer("wren"))
 	town.add_stock("herb", 2)
 	var shop: TownShop = await _open(SHOP)
-	_expect(shop.tab == TownShop.Tab.BUY and shop.tiles.size() == TownData.shop_goods().size(), "the Shop opens on what it sells")
+	_expect(shop.tab == TownShop.Tab.BUY and shop.tiles.size() == TownData.current().on_sale().size(), "the Shop opens on what it sells")
 	_expect(shop.arrow.target == shop.sell_tab, "the arrow shows there is something to sell")
 	shop.pick_on_shelf("iron_sword")
 	_expect(shop.action.text.contains("300"), "the card shows the price")

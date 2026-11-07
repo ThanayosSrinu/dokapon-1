@@ -2,7 +2,7 @@ class_name GameOverScreen
 extends Control
 ## The town is lost, because something went past its due day unpaid (D11), or nobody can
 ## go and nobody can be hired. It tells how that came about, and one button starts a new town. The old town is thrown away as this
-## opens, so nothing can bring it back, and E20's save file must go the same way.
+## opens, so nothing can bring it back, and its save file goes with it.
 
 const TOWN := "res://town/TownScreen.tscn"
 const WIDTH := 640.0
@@ -24,6 +24,7 @@ func _ready() -> void:
 	for line in TownData.current().final_story(STORY_LINES):
 		story.append("%s: %s" % [Calendar.date(line["day"]), line["text"]])
 	TownData.start_new()
+	TownData.delete_save()
 	var cover := ColorRect.new()
 	cover.color = BACKGROUND
 	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

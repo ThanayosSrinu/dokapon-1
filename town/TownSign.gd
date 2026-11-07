@@ -15,8 +15,9 @@ var _feet := Vector2.ZERO
 var _tween: Tween
 
 
-## `feet` is the middle of the building's bottom edge. The sign hangs just below it.
-func _init(id := "tavern", feet := Vector2.ZERO) -> void:
+## `feet` is the middle of the building's bottom edge. The sign hangs just below it. `job`
+## is what it says the building does, or its usual words if "".
+func _init(id := "tavern", feet := Vector2.ZERO, job := "") -> void:
 	theme_type_variation = &"PaperPanel"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_feet = feet
@@ -26,7 +27,7 @@ func _init(id := "tavern", feet := Vector2.ZERO) -> void:
 	var title := Kit.text(TownData.BUILDINGS[id]["name"], 0.0, &"PaperTitle")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
-	_job = Kit.text(TownData.BUILDINGS[id]["job"], WIDTH, &"PaperLabel")
+	_job = Kit.text(job if job != "" else TownData.BUILDINGS[id]["job"], WIDTH, &"PaperLabel")
 	_job.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_job.hide()
 	column.add_child(_job)

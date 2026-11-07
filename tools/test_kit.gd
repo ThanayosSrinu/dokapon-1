@@ -197,6 +197,13 @@ func _test_arrow() -> void:
 
 # --- The menu ---------------------------------------------------------------
 
+## The menu as a player with no saved town sees it. Showing the town saves it, so a test
+## that has been to town would otherwise find Continue first.
+func _open_fresh_menu() -> MainMenu:
+	TownData.delete_save()
+	return await _open(MENU)
+
+
 func _open(path: String) -> Node:
 	await Screens.go(path)
 	await _wait()
@@ -204,7 +211,7 @@ func _open(path: String) -> Node:
 
 
 func _test_menu_with_keys() -> void:
-	var menu: MainMenu = await _open(MENU)
+	var menu: MainMenu = await _open_fresh_menu()
 	_expect(get_viewport().gui_get_focus_owner() == menu.play_button, "Play has focus at the start")
 	_expect(menu.play_button.kind == KitButton.Kind.PRIMARY, "Play is the main action")
 	_expect(Sound.current_tune() == "title", "the menu has its music")
@@ -243,7 +250,7 @@ func _test_menu_with_keys() -> void:
 
 
 func _test_menu_with_controller() -> void:
-	var menu: MainMenu = await _open(MENU)
+	var menu: MainMenu = await _open_fresh_menu()
 	await _pad(JOY_BUTTON_DPAD_DOWN)
 	_expect(_focused() == menu.help_button, "the pad moves down")
 	await _pad(JOY_BUTTON_A)
@@ -261,7 +268,7 @@ func _test_menu_with_controller() -> void:
 
 
 func _test_menu_with_mouse() -> void:
-	var menu: MainMenu = await _open(MENU)
+	var menu: MainMenu = await _open_fresh_menu()
 	await get_tree().create_timer(1.0).timeout
 	menu.options_button._on_mouse_entered()
 	await _wait()
@@ -277,7 +284,7 @@ func _test_menu_with_mouse() -> void:
 
 
 func _test_pages() -> void:
-	var menu: MainMenu = await _open(MENU)
+	var menu: MainMenu = await _open_fresh_menu()
 	menu.help_button.pressed.emit()
 	await _wait()
 	var help := menu.help_page()

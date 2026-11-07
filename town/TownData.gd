@@ -1,7 +1,8 @@
 class_name TownData
 extends RefCounted
 ## The town of the current game: its gold, buildings, date, roster and debts. It has no
-## UI. A game lasts until the program closes, until E20 adds saving.
+## UI. It saves itself to one file whenever the town is shown and after each trip, and
+## the file is deleted when the town is lost (D11).
 ##     TownData.current().gold
 ##
 ## Time stands still in town. It moves only when a trip ends. A bill or a loan can be paid
@@ -36,20 +37,34 @@ const SHOP_ORDER: Array[ItemData.Kind] = [ItemData.Kind.WEAPON, ItemData.Kind.AR
 		ItemData.Kind.ACCESSORY, ItemData.Kind.CONSUMABLE, ItemData.Kind.TOME]
 
 ## What a building is called and what it does, in words for its sign. Every building
-## here can be visited, so a new one in E17 needs an entry and a place in TownArt.
+## here can be pointed at and visited, so a new one needs an entry, a place in TownArt and
+## a picture for each level. "start" is its level in a new town, and 0 means not built.
+## "built" is what its sign says once it stands, if that differs from "job".
 const BUILDINGS := {
-	"tavern": {"name": "Tavern", "job": "Hire adventurers and look after your roster."},
-	"bank": {"name": "Bank", "job": "Pay the month's bills, and borrow gold."},
-	"shop": {"name": "Shop", "job": "Buy gear for your people, and sell what trips bring home."},
-	"portal": {"name": "Portal", "job": "Send your adventurer off to explore, and bring them home."},
+	"castle": {"name": "Castle", "job": "Your home. Read the King's letter, and buy upgrades from the Town Plans.", "start": 1},
+	"academy": {"name": "Academy", "job": "Not built yet. Its plans come in a Royal Letter.",
+		"built": "Teaches Magic and Special moves, for gold.", "start": 0},
+	"storehouse": {"name": "Storehouse", "job": "Not built yet. Build it from the Town Plans at the Castle.",
+		"built": "Keeps the food left over from a trip.", "start": 0},
+	"smithy": {"name": "Smithy", "job": "Not built yet. Build it from the Town Plans at the Castle.",
+		"built": "Forges better gear for the Shop to sell.", "start": 0},
+	"tavern": {"name": "Tavern", "job": "Hire adventurers and look after your roster.", "start": 1},
+	"bank": {"name": "Bank", "job": "Pay the month's bills, and borrow gold.", "start": 1},
+	"shop": {"name": "Shop", "job": "Buy gear for your people, and sell what trips bring home.", "start": 1},
+	"portal": {"name": "Portal", "job": "Send your adventurer off to explore, and bring them home.", "start": 1},
 }
+## The file the town is kept in, in SaveGame.folder().
+const SAVE_FILE := "town.save"
+## Raise this when what a town saves changes. Older files are then refused.
+const SAVE_VERSION := 1
 
 static var _current: TownData
 
 var gold := START_GOLD
 ## Today. See Calendar.
 var day := 1
-## Building id -> its level. Levels start at 1, and E17 raises them.
+## Building id -> its level. See BUILDINGS for where each starts, and TownPlans for what
+## raises it.
 var buildings := {}
 ## The people on the books, in the order they joined.
 var roster: Array[Member] = []
@@ -74,11 +89,19 @@ var warned := {}
 var stock := {}
 ## Materials brought home: material id -> how many.
 var materials := {}
+## Days of food the Storehouse keeps from earlier trips. It is eaten before any is bought.
+var food_store := 0
+## The King's letter now open, as a place in TownPlans.LETTERS.
+var letter_index := 0
+## How far the open letter's goal has come.
+var letter_progress := 0
+## The buildings whose plans letters have opened, besides those built from the start.
+var opened: Array[String] = []
 
 
 func _init() -> void:
 	for id: String in BUILDINGS:
-		buildings[id] = 1
+		buildings[id] = BUILDINGS[id]["start"]
 
 
 ## The town of the current game.
@@ -98,6 +121,8 @@ static func start_new() -> void:
 func next_step() -> String:
 	if alert() != Alert.NONE:
 		return "bank"
+	if letter_done():
+		return "castle"
 	if going != null:
 		return "portal"
 	return "tavern" if cheapest_fee() <= gold else "bank"
@@ -253,6 +278,9 @@ func bring_home(trip: Expedition) -> void:
 			add_stock(id)
 		for id in trip.materials:
 			materials[id] = materials.get(id, 0) + 1
+		_count_toward_letter("materials", trip.materials.size())
+		_count_toward_letter("starstone", trip.materials.count("starstone"))
+		food_store = mini(food_store + trip.food_left, store_room())
 		one.trips_home += 1
 		one.gold_home += trip.gold_home()
 		remember("%s came home with %d gold." % [trip.person.display_name, trip.gold_home()])
@@ -264,10 +292,21 @@ func bring_home(trip: Expedition) -> void:
 	_pick_going()
 
 
-## The most days of food `person` can take to `trip_stage`, by what they carry and what
-## the town can pay.
+## The most days of food `person` can take to `trip_stage`, by what they carry, what the
+## Storehouse keeps, and what the town can pay for.
 func food_limit(trip_stage: Stage, person: Adventurer) -> int:
-	return mini(trip_stage.most_food(person), gold / FOOD_PRICE)
+	return mini(trip_stage.most_food(person), food_store + gold / FOOD_PRICE)
+
+
+## What `amount` days of food cost, after what the Storehouse keeps is used. -1 is the food
+## chosen for the next trip.
+func food_cost(amount := -1) -> int:
+	return maxi((food if amount < 0 else amount) - food_store, 0) * FOOD_PRICE
+
+
+## The most days of food the Storehouse keeps, by its level.
+func store_room() -> int:
+	return TownPlans.STOREHOUSE_FOOD[level("storehouse")]
 
 
 ## Sets the food to all that the trip can take.
@@ -280,9 +319,11 @@ func choose_food(amount: int) -> void:
 	food = 0 if going == null else clampi(amount, 0, food_limit(stage, going))
 
 
-## Pays for the food. Leftovers are lost, so this is never paid back.
+## Pays for the food, using what the Storehouse keeps first. Leftovers are lost unless the
+## Storehouse keeps them, so this is never paid back.
 func buy_food() -> void:
-	gold -= food * FOOD_PRICE
+	gold -= food_cost()
+	food_store -= mini(food, food_store)
 
 
 ## Notes that the adventurer has left, for the game over screen.
@@ -301,13 +342,13 @@ static func days_words(count: int) -> String:
 
 # --- The Shop ---------------------------------------------------------------
 
-## What the Shop sells: gear and things to use, by kind and then by price. Tomes are taught
-## in town later, so they are only bought, never sold.
-static func shop_goods() -> Array[String]:
+## What the Shop could sell: gear up to `dearest` gold, and every thing to use, by kind and
+## then by price. Tomes are taught at the Academy, so the Shop only buys them.
+static func shop_goods(dearest := 1 << 30) -> Array[String]:
 	var goods: Array[String] = []
 	for id in Database.sorted_ids(Database.items):
 		var item := Database.get_item(id)
-		if item.is_gear() or item.kind == ItemData.Kind.CONSUMABLE:
+		if (item.is_gear() and item.price <= dearest) or item.kind == ItemData.Kind.CONSUMABLE:
 			goods.append(id)
 	goods.sort_custom(func(a: String, b: String) -> bool:
 			var first := Database.get_item(a)
@@ -318,6 +359,11 @@ static func shop_goods() -> Array[String]:
 				return first.price < second.price
 			return a < b)
 	return goods
+
+
+## What the Shop sells now. The Smithy's level says how dear its gear may be.
+func on_sale() -> Array[String]:
+	return shop_goods(TownPlans.SMITHY_GEAR[level("smithy")])
 
 
 ## What the Shop pays for one `item_id`.
@@ -365,6 +411,8 @@ func stock_ids() -> Array[String]:
 ## Gear is worn at once, and anything else goes in their pack.
 func buy_problem(item_id: String, one: Member) -> String:
 	var item := Database.get_item(item_id)
+	if not on_sale().has(item_id):
+		return "Not for sale"
 	if not item.is_gear() and not one.pack_has_room():
 		return "Pack is full"
 	if item.price > gold:
@@ -437,6 +485,266 @@ func _hand_over(item_id: String, one: Member) -> void:
 			add_stock(old)
 	else:
 		one.pack.append(item_id)
+
+
+# --- Buildings and the Town Plans ---------------------------------------------
+
+func level(id: String) -> int:
+	return buildings.get(id, 0)
+
+
+## True once `id` stands, so that it can be used for what it does.
+func is_built(id: String) -> bool:
+	return level(id) > 0
+
+
+## True with the Portal Beacon: walking past the Portal counts as landing on it.
+func has_beacon() -> bool:
+	return level("portal") >= 2
+
+
+## What the sign of `id` says it does, as it stands now.
+func job_words(id: String) -> String:
+	var about: Dictionary = BUILDINGS[id]
+	return about.get("built", about["job"]) if is_built(id) else about["job"]
+
+
+## True if a letter has opened the plans of `id`, or it stood from the start.
+func is_opened(id: String) -> bool:
+	return BUILDINGS[id]["start"] > 0 or opened.has(id)
+
+
+## The plan that raises `id` next, or {} if there is none.
+func next_plan(id: String) -> Dictionary:
+	return TownPlans.plan(id, level(id))
+
+
+## The buildings the Castle shows plans for, in the order shown: every one with a plan
+## left, opened or not.
+func plan_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for id: String in TownPlans.PLANS:
+		if not next_plan(id).is_empty():
+			ids.append(id)
+	return ids
+
+
+## Why the next plan for `id` can't be built, in a few words for a button, or "" if it can.
+func plan_problem(id: String) -> String:
+	var found := next_plan(id)
+	if found.is_empty():
+		return "Fully built"
+	if not is_opened(id):
+		return "Plans come in a Royal Letter"
+	if found["gold"] > gold:
+		return "Need %d more gold" % (found["gold"] - gold)
+	for material_id: String in found["materials"]:
+		var short: int = found["materials"][material_id] - materials.get(material_id, 0)
+		if short > 0:
+			return "Need %d more %s" % [short, Database.get_material(material_id).display_name]
+	return ""
+
+
+## Builds the next plan for `id`. Returns false, changing nothing, if that can't be done.
+func build(id: String) -> bool:
+	if plan_problem(id) != "":
+		return false
+	var found := next_plan(id)
+	gold -= found["gold"]
+	for material_id: String in found["materials"]:
+		materials[material_id] -= found["materials"][material_id]
+		if materials[material_id] == 0:
+			materials.erase(material_id)
+	buildings[id] = level(id) + 1
+	var name: String = BUILDINGS[id]["name"]
+	remember("Built the %s." % name if level(id) == 1 else "Raised the %s to level %d." % [name, level(id)])
+	_count_toward_letter("built", 1)
+	return true
+
+
+# --- The King's letters -------------------------------------------------------
+
+## The letter now open, or {} once the King has written all he means to.
+func letter() -> Dictionary:
+	return TownPlans.letter(letter_index)
+
+
+## True when the open letter's goal is met and its reward waits at the Castle.
+func letter_done() -> bool:
+	var found := letter()
+	return not found.is_empty() and letter_progress >= found["count"]
+
+
+## Takes the reward of a finished letter, opens its plans, and opens the next letter.
+## Returns false, changing nothing, if the goal is not met yet.
+func claim_letter() -> bool:
+	if not letter_done():
+		return false
+	var found := letter()
+	gold += found["gold"]
+	for id: String in found["opens"]:
+		if not opened.has(id):
+			opened.append(id)
+	remember("Did what the King asked in \"%s\", for %d gold." % [found["title"], found["gold"]])
+	letter_index += 1
+	letter_progress = 0
+	return true
+
+
+func _count_toward_letter(goal: String, amount: int) -> void:
+	var found := letter()
+	if not found.is_empty() and found["goal"] == goal:
+		letter_progress = mini(letter_progress + amount, found["count"])
+
+
+# --- The Academy --------------------------------------------------------------
+
+## The tomes whose moves the Academy teaches now, cheapest first. A move costs what its
+## tome costs.
+func teachable() -> Array[String]:
+	var ids: Array[String] = []
+	var dearest: int = TownPlans.ACADEMY_MOVES[level("academy")]
+	for id in Database.sorted_ids(Database.items):
+		var item := Database.get_item(id)
+		if item.kind == ItemData.Kind.TOME and item.price <= dearest:
+			ids.append(id)
+	ids.sort_custom(func(a: String, b: String) -> bool:
+			var first := Database.get_item(a).price
+			var second := Database.get_item(b).price
+			return first < second if first != second else a < b)
+	return ids
+
+
+## Why `one` can't be taught the move of `tome_id`, in a few words, or "" if they can.
+## With both slots full, `forgotten` must name a move they know.
+func teach_problem(tome_id: String, one: Member, forgotten := "") -> String:
+	var item := Database.get_item(tome_id)
+	if not teachable().has(tome_id):
+		return "Not taught here"
+	if one.learned.has(item.teaches):
+		return "Knows it already"
+	if item.price > gold:
+		return "Need %d more gold" % (item.price - gold)
+	if one.learned.size() >= MoveData.MOST_LEARNED and not one.learned.has(forgotten):
+		return "Choose a move to forget"
+	return ""
+
+
+## Teaches `one` the move of `tome_id`, forgetting `forgotten` if both slots are full.
+func teach(tome_id: String, one: Member, forgotten := "") -> bool:
+	if teach_problem(tome_id, one, forgotten) != "":
+		return false
+	var item := Database.get_item(tome_id)
+	gold -= item.price
+	if one.learned.size() >= MoveData.MOST_LEARNED:
+		one.learned.erase(forgotten)
+	one.learned.append(item.teaches)
+	remember("%s learned %s." % [one.person.display_name, Database.get_move(item.teaches).display_name])
+	return true
+
+
+# --- Saving -------------------------------------------------------------------
+
+static func save_path() -> String:
+	return SaveGame.folder().path_join(SAVE_FILE)
+
+
+static func has_save() -> bool:
+	return FileAccess.file_exists(save_path())
+
+
+static func delete_save() -> void:
+	if has_save():
+		DirAccess.remove_absolute(save_path())
+
+
+## Writes the town to its file. A lost town is never kept: its file is deleted instead.
+func save() -> void:
+	if lost():
+		delete_save()
+		return
+	var file := FileAccess.open(save_path(), FileAccess.WRITE)
+	if file != null:
+		file.store_var(to_save())
+
+
+## Makes the saved town the current one. Returns false, changing nothing, if there is no
+## save or it can't be read.
+static func load_saved() -> bool:
+	if not has_save():
+		return false
+	var file := FileAccess.open(save_path(), FileAccess.READ)
+	if file == null:
+		return false
+	var saved: Variant = file.get_var(false)
+	if not saved is Dictionary or saved.get("version", 0) != SAVE_VERSION:
+		return false
+	var town := from_save(saved)
+	if town == null:
+		return false
+	_current = town
+	return true
+
+
+## The town as plain values, which hold no objects and so can't run code when read.
+func to_save() -> Dictionary:
+	var people := []
+	for one in roster:
+		people.append({
+			"person": one.person.id, "ready_on": one.ready_on, "trips": one.trips,
+			"trips_home": one.trips_home, "gold_home": one.gold_home, "level": one.level,
+			"experience": one.experience, "equipment": one.equipment.duplicate(),
+			"learned": one.learned.duplicate(), "pack": one.pack.duplicate(),
+		})
+	return {
+		"version": SAVE_VERSION, "gold": gold, "day": day, "buildings": buildings.duplicate(),
+		"roster": people, "going": "" if going == null else going.id, "stage": stage.id,
+		"food": food, "months_paid": months_paid, "loan_owed": loan_owed, "loan_due": loan_due,
+		"history": history.duplicate(true), "warned": warned.duplicate(), "stock": stock.duplicate(),
+		"materials": materials.duplicate(), "food_store": food_store, "letter_index": letter_index,
+		"letter_progress": letter_progress, "opened": opened.duplicate(),
+	}
+
+
+## A town made from what to_save() wrote, or null if it names someone who is gone.
+static func from_save(saved: Dictionary) -> TownData:
+	var town := TownData.new()
+	town.gold = saved["gold"]
+	town.day = saved["day"]
+	for id: String in saved["buildings"]:
+		if BUILDINGS.has(id):
+			town.buildings[id] = saved["buildings"][id]
+	for kept: Dictionary in saved["roster"]:
+		var person := Database.get_adventurer(kept["person"])
+		if person == null:
+			return null
+		var one := Member.new(person)
+		for key: String in ["ready_on", "trips", "trips_home", "gold_home", "level", "experience"]:
+			one.set(key, kept[key])
+		one.equipment = kept["equipment"].duplicate()
+		one.learned.assign(kept["learned"])
+		one.pack.assign(kept["pack"])
+		town.roster.append(one)
+	var found_stage := Database.get_stage(saved["stage"])
+	if found_stage != null:
+		town.stage = found_stage
+	town.food = saved["food"]
+	town.months_paid = saved["months_paid"]
+	town.loan_owed = saved["loan_owed"]
+	town.loan_due = saved["loan_due"]
+	town.history.assign(saved["history"])
+	town.warned = saved["warned"].duplicate()
+	town.stock = saved["stock"].duplicate()
+	town.materials = saved["materials"].duplicate()
+	town.food_store = saved["food_store"]
+	town.letter_index = saved["letter_index"]
+	town.letter_progress = saved["letter_progress"]
+	town.opened.assign(saved["opened"])
+	for one in town.roster:
+		if one.person.id == saved["going"]:
+			town.going = one.person
+	town._pick_going()
+	return town
 
 
 # --- Bills ------------------------------------------------------------------
