@@ -3,3 +3,12 @@
 /android/
 _archive/source-art/
 _work/
+
+# Working notes and AI helper setup stay on this computer
+/CLAUDE.md
+/EXPEDITION_*.md
+/SECTION_*_GUIDE.md
+/_archive/GAME_CONTROLLER_GUIDE.md
+/tools/delegate.sh
+/tools/save.sh
+.claude/
