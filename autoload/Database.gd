@@ -338,20 +338,18 @@ func _check_adventurer(person: Adventurer, problems: PackedStringArray) -> void:
 
 
 func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
-	if not FileAccess.file_exists(stage.map_file):
-		problems.append("stage %s has no map at '%s'" % [stage.id, stage.map_file])
+	if stage.spaces < 20:
+		problems.append("stage %s needs islands of at least 20 spaces" % stage.id)
 	if stage.picture == null:
 		problems.append("stage %s needs a picture" % stage.id)
 	if stage.days <= 0:
 		problems.append("stage %s needs days above 0" % stage.id)
 	if stage.usual_food <= 0:
 		problems.append("stage %s needs a usual food above 0" % stage.id)
-	if FileAccess.file_exists(stage.map_file):
-		var map := IslandMap.open(stage.map_file)
-		if stage.monsters < 0 or stage.chests < map.fixed_chests():
-			problems.append("stage %s has fewer chests than its map fixes in place" % stage.id)
-		if stage.monsters + stage.chests >= map.spaces().size():
-			problems.append("stage %s has more monsters and chests than its map has room for" % stage.id)
+	if stage.monsters < 0 or stage.chests < 3:
+		problems.append("stage %s needs at least 3 chests: islands put one at the end of each spur" % stage.id)
+	if stage.monsters + stage.chests >= stage.spaces / 2:
+		problems.append("stage %s has more monsters and chests than its islands have room for" % stage.id)
 	if stage.place == "" or stage.size_name == "":
 		problems.append("stage %s needs a place and a size name" % stage.id)
 

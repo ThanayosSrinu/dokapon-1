@@ -160,6 +160,18 @@ def make_icons():
     sheet.save(OUT / "space_icons.png")
 
 
+def make_guarded_icon():
+    """A chest with crossed swords behind it: a chest that a monster guards. Made from the
+    Battle and Treasure icons on space_icons.png, so the two always match."""
+    sheet = Image.open(OUT / "space_icons.png")
+    swords = sheet.crop((8 * ICON_CELL, 0, 9 * ICON_CELL, ICON_CELL))
+    chest = sheet.crop((9 * ICON_CELL, 0, 10 * ICON_CELL, ICON_CELL))
+    icon = Image.new("RGBA", (ICON_CELL, ICON_CELL), (0, 0, 0, 0))
+    icon.alpha_composite(swords, (0, -3))
+    icon.alpha_composite(chest, (0, 4))
+    icon.save(OUT / "guarded_chest_icon.png")
+
+
 # --- The die ----------------------------------------------------------------
 
 DIE_CELL = 72
@@ -886,6 +898,7 @@ if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     make_spaces()
     make_icons()
+    make_guarded_icon()
     make_die()
     make_fx()
     make_crown()

@@ -9,20 +9,22 @@ const WORDS := {
 	BoardNode.NodeType.BATTLE: "A monster. Landing exactly on it starts a fight, and walking past does nothing.",
 	BoardNode.NodeType.PORTAL: "The only way home. They must land on it exactly.",
 }
+const GUARDED_TITLE := "Guarded Treasure"
 
 
 ## The name and the words for space `id`, as they stand right now.
 static func of(trip: Expedition, id: int) -> Dictionary:
 	var type := trip.type_at(id)
-	return {"title": BoardNode.TYPE_INFO[type]["name"], "text": _words(trip, type)}
-
-
-static func _words(trip: Expedition, type: BoardNode.NodeType) -> String:
 	if type == BoardNode.NodeType.TREASURE:
-		return _chest_words(trip.player)
-	return WORDS.get(type, "")
+		var guarded := trip.is_guarded(id)
+		return {"title": GUARDED_TITLE if guarded else BoardNode.TYPE_INFO[type]["name"],
+				"text": _chest_words(trip.player, guarded)}
+	return {"title": BoardNode.TYPE_INFO[type]["name"], "text": WORDS.get(type, "")}
 
 
-static func _chest_words(player: PlayerData) -> String:
+static func _chest_words(player: PlayerData, guarded: bool) -> String:
 	var usual := SpaceEffects.CHEST_GOLD_BASE + SpaceEffects.CHEST_GOLD_PER_LEVEL * player.level
-	return "About %d gold or a good item. A monster may guard it. It takes an exact landing." % player.found_gold(usual)
+	var words := "About %d gold or a good item. It takes an exact landing." % player.found_gold(usual)
+	if guarded:
+		words += " A monster guards it: win the fight and the chest opens at once."
+	return words

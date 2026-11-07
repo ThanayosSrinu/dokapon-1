@@ -25,9 +25,9 @@ func _ready() -> void:
 	_lord = args[5] if args.size() > 5 else "listens"
 	var started := Time.get_ticks_msec()
 	for stage in stages:
-		var report := MapReport.new(IslandMap.open(stage.map_file))
-		print("=== %s, a roll can end on %.1f spaces (0-6) or %.1f (0-10)"
-				% [stage.map_file, report.landing_choices(6), report.landing_choices(10)])
+		var report := MapReport.new(stage.sample_map())
+		print("=== %s, a roll can end on %.1f spaces (0-6) or %.1f (0-10) on the island of seed 1"
+				% [stage.id, report.landing_choices(6), report.landing_choices(10)])
 		for id in people:
 			_run(Database.get_adventurer(id), stage, trips, first_seed, food, report)
 	var seconds := (Time.get_ticks_msec() - started) / 1000.0
@@ -37,11 +37,7 @@ func _ready() -> void:
 
 func _stages(id: String) -> Array[Stage]:
 	var found: Array[Stage] = []
-	if id == "old":
-		var old := Stage.new()
-		old.map_file = OLD_MAP
-		found.append(old)
-	elif id != "":
+	if id != "":
 		found.append(Database.get_stage(id))
 	else:
 		found = Database.sizes_of(Database.get_stage(TownData.FIRST_STAGE).place)

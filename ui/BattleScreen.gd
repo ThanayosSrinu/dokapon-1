@@ -55,7 +55,7 @@ const ATK_MENU := "atk"
 const ATK_HINT := "Pick a move. Its icons say how it can be answered."
 const OFFENSE_WORDS := "What will %s do?"
 const DEF_WORDS := "%s attacks! How will %s answer?"
-const ROUND_WORDS := "Round %d/%d"
+const ROUND_WORDS := "Round %d"
 const FLEE_HINT := "Run from the fight. Speed decides if you get away."
 const BOOST_COLOR := Color(1.0, 0.8, 0.35)
 const STATUS_COLOR := Color(0.76, 0.48, 0.96)
@@ -217,7 +217,7 @@ func _clear_fighters() -> void:
 
 
 func _show_round() -> void:
-	_round_label.text = ROUND_WORDS % [mini(_battle.round_number, Battle.MAX_ROUNDS), Battle.MAX_ROUNDS]
+	_round_label.text = ROUND_WORDS % _battle.round_number
 	var chip: Control = _round_label.get_parent()
 	chip.reset_size()
 	chip.position = Vector2(roundf((STAGE_SIZE.x - chip.size.x) / 2.0), EDGE)

@@ -239,19 +239,23 @@ func _test_real_maps() -> void:
 	_expect(sizes.size() == 3, "grass has three sizes")
 	var last := 0
 	for stage in sizes:
-		var map := IslandMap.open(stage.map_file)
-		var report := MapReport.new(map)
-		_expect(report.problems().is_empty(), "%s follows the principle: %s" % [stage.id, report.problems()])
-		_expect(map.spaces().size() > last, "%s is larger than the size before it" % stage.id)
-		last = map.spaces().size()
-		await _test_same_as_board(stage, map)
+		_expect(stage.spaces > last, "%s is larger than the size before it" % stage.id)
+		last = stage.spaces
+		for seed_value in range(1, 4):
+			var data := stage.make_map(seed_value)
+			var map := IslandMap.new(data)
+			var report := MapReport.new(map)
+			_expect(report.problems().is_empty(), "%s seed %d follows the principle: %s" % [stage.id, seed_value, report.problems()])
+			_expect(JSON.stringify(stage.make_map(seed_value)) == JSON.stringify(data), "a seed makes the same island again")
+			await _test_same_as_board(stage, data, map)
+	_expect(JSON.stringify(sizes[0].make_map(1)) != JSON.stringify(sizes[0].make_map(2)), "another seed makes another island")
 
 
 # IslandMap must walk exactly as the board does, or the screen and the rules would differ.
-func _test_same_as_board(stage: Stage, map: IslandMap) -> void:
+func _test_same_as_board(stage: Stage, data: Dictionary, map: IslandMap) -> void:
 	var board: BoardManager = load("res://maps/WorldMap.tscn").instantiate()
 	board.print_on_ready = false
-	board.map_file = stage.map_file
+	board.map_data = data
 	add_child(board)
 	await get_tree().process_frame
 	_expect(board.validate().is_empty(), "%s has no mistakes: %s" % [stage.id, board.validate()])
@@ -272,8 +276,11 @@ func _test_same_as_board(stage: Stage, map: IslandMap) -> void:
 
 func _test_loops_give_more_choice() -> void:
 	var old := MapReport.new(IslandMap.open(OLD_MAP))
+	# Islands differ, so this is the average of several.
 	for stage in Database.sizes_of(Database.get_stage(TownData.FIRST_STAGE).place):
-		var report := MapReport.new(IslandMap.open(stage.map_file))
 		for die_top in DICE:
-			_expect(report.landing_choices(die_top) > old.landing_choices(die_top),
+			var total := 0.0
+			for seed_value in range(1, 6):
+				total += MapReport.new(IslandMap.new(stage.make_map(seed_value))).landing_choices(die_top)
+			_expect(total / 5.0 > old.landing_choices(die_top),
 					"%s leaves more choices than the old map on a 0-%d die" % [stage.id, die_top])

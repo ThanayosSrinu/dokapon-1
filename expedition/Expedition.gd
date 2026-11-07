@@ -124,6 +124,9 @@ var best_moment := {}
 ## die on the way home, not counting the day they landed.
 var landing_days := 0
 
+## The island this trip is on, in the same shape as a map file. Made new for each trip.
+var map_data := {}
+
 # False if today's roll doesn't count as landing anywhere.
 var _lands := true
 # True once the Portal has been in reach of the die while heading home.
@@ -138,6 +141,11 @@ var _monsters := {}
 var _level_before_fight := 1
 # What a chest holds while its guardian is fought.
 var _prize: SpaceEffects.Result
+# The chests a monster guards, as keys. Chosen with the board, so the player sees them.
+var _guarded := {}
+# Space id -> what a chest holds, once it has been tried. A guardian that wasn't beaten
+# stays, and so does what it guards.
+var _chests := {}
 # Space id -> the fewest steps from the Portal.
 var _depth := {}
 # Where the walk under way was chosen to end, or -1.
@@ -151,7 +159,10 @@ var _aim := -1
 func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false, food := -1, kept: Member = null) -> void:
 	person = new_person
 	by_hand = hand
-	map = IslandMap.open(stage.map_file)
+	# The seed makes the island as well as the trip, so the same seed gives the same trip.
+	var trip_seed := seed_value if seed_value != 0 else randi_range(1, 2147483647)
+	map_data = stage.make_map(trip_seed)
+	map = IslandMap.new(map_data)
 	trip_days = stage.days
 	player = make_player(person, hand, kept)
 	level_at_start = player.level
@@ -160,7 +171,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	space_id = map.portal
 	player.space_id = space_id
 	_depth = map.steps_from(map.portal)
-	GameState.start_expedition(player, seed_value, map.portal)
+	GameState.start_expedition(player, trip_seed, map.portal)
 	_set_up_board(stage)
 	if not by_hand:
 		brain = ExpeditionBrain.new(self)
@@ -173,6 +184,11 @@ func is_over() -> bool:
 ## What stands on space `id` on this trip, as a BoardNode.NodeType.
 func type_at(id: int) -> BoardNode.NodeType:
 	return _board[id]
+
+
+## True if a monster guards the chest on space `id`.
+func is_guarded(id: int) -> bool:
+	return _guarded.has(id)
 
 
 ## True if a day at camp would do something, and today's food was there to pay for it.
@@ -443,6 +459,8 @@ func finish_fight(lines: PackedStringArray) -> void:
 			_gain_material(_common_material())
 		if _prize != null:
 			_prize.guardian = null
+			_chests.erase(space_id)
+			_guarded.erase(space_id)
 			_take(_prize)
 	elif lost:
 		ending = Ending.BEATEN
@@ -481,6 +499,9 @@ func _set_up_board(stage: Stage) -> void:
 	_shuffle(road)
 	for index in stage.chests - map.fixed_chests():
 		_board[road.pop_back()] = BoardNode.NodeType.TREASURE
+	for id in map.spaces():
+		if _board[id] == BoardNode.NodeType.TREASURE and GameState.rng.randf() < SpaceEffects.CHEST_GUARDIAN_CHANCE:
+			_guarded[id] = true
 	for index in stage.monsters - _monsters.size():
 		var id: int = road.pop_back()
 		_board[id] = BoardNode.NodeType.BATTLE
@@ -499,6 +520,7 @@ func _shuffle(list: Array[int]) -> void:
 func _clear_space(id: int) -> void:
 	_board[id] = BoardNode.NodeType.NORMAL
 	_monsters.erase(id)
+	_guarded.erase(id)
 	space_emptied.emit(id)
 
 
@@ -550,12 +572,17 @@ func _can_reach_portal() -> bool:
 func _open_chest() -> void:
 	if not by_hand and not CpuBrain.will_open_chest(player):
 		return
-	var chest := SpaceEffects.roll_chest(player)
+	if not _chests.has(space_id):
+		var rolled := SpaceEffects.roll_chest(player)
+		rolled.guardian = SpaceEffects.roll_guardian(player) if is_guarded(space_id) else null
+		_chests[space_id] = rolled
+	var chest: SpaceEffects.Result = _chests[space_id]
 	if chest.guardian != null:
 		note("find", chest.text)
 		_prize = chest
 		_meet(chest.guardian)
 	else:
+		_chests.erase(space_id)
 		_clear_space(space_id)
 		_take(chest)
 

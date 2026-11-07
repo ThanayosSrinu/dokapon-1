@@ -51,8 +51,6 @@ const HEAL_WORTH := 0.6
 ## win_odds(): the edge of acting first, and how sharply a lead becomes a sure win.
 const SPEED_EDGE := 1.1
 const ODDS_SHARPNESS := 3.0
-## win_odds(): the chance that is left if the fight would run out of rounds.
-const DRAW_ODDS := 0.25
 ## Rounds counted before a fight is called hopeless.
 const ROUND_LIMIT := 30
 ## The richer a player is, the more a knockout costs. This much gold adds 0.1 to
@@ -128,8 +126,6 @@ static func win_odds(me: Fighter, foe: Fighter) -> float:
 		edge /= SPEED_EDGE
 	var sharp := pow(edge, ODDS_SHARPNESS)
 	var odds := sharp / (1.0 + sharp)
-	if mine > Battle.MAX_ROUNDS:
-		odds *= DRAW_ODDS
 	return clampf(odds, 0.01, 0.99)
 
 

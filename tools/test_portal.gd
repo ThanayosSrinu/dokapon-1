@@ -39,7 +39,7 @@ func _hired_town(id := "bram") -> void:
 func _test_data() -> void:
 	var stage := Database.get_stage(TownData.FIRST_STAGE)
 	_expect(stage != null, "the first stage exists")
-	_expect(FileAccess.file_exists(stage.map_file), "the first stage has its map")
+	_expect(stage.sample_map().spaces().size() > 0, "the first stage makes islands")
 	TownData.start_new()
 	var town := TownData.current()
 	_expect(town.stage == stage, "a new town's Portal leads to the first stage")
@@ -246,7 +246,7 @@ func _test_sizes() -> void:
 	_expect(portal.card.sizes[2].lit, "the Portal remembers the size")
 	var trip := Expedition.new(town.going, town.stage, 1)
 	_expect(trip.food_left == town.max_food(town.going), "and the trip carries their food")
-	_expect(trip.map == IslandMap.open(sizes[2].map_file), "on its island")
+	_expect(JSON.stringify(trip.map_data) == JSON.stringify(sizes[2].make_map(1)), "on an island of its size")
 
 
 func _test_keys() -> void:
@@ -337,7 +337,7 @@ func _test_arrival() -> void:
 	var town := TownData.current()
 	await get_tree().create_timer(APPEARED).timeout
 	var start := island.board.get_starting_node().global_position
-	_expect(island.board.map_file == town.stage.map_file, "the island is the stage's own map")
+	_expect(island.board.map_data == island.trip.map_data, "the island is the trip's own")
 	_expect(island.hero.visible and island.hero.global_position == start, "the adventurer stands on the first space")
 	_expect(island.hero.material == null, "and has fully appeared")
 	_expect(island.bubble.shown_words() == town.going.arrive_line, "they say their line")

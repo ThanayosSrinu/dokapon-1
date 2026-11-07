@@ -174,7 +174,7 @@ func _food_warning(town: TownData) -> String:
 		return ""
 	if town.food == 0:
 		return NO_FOOD
-	var map := IslandMap.open(town.stage.map_file)
+	var map := town.stage.sample_map()
 	return LOW_FOOD if town.food < ceili(map.days_around(map.portal, town.going.die_top)) else ""
 
 
@@ -182,8 +182,7 @@ func _food_warning(town: TownData) -> String:
 func _show_forecasts(town: TownData) -> void:
 	for index in _sizes.size():
 		var stage := _sizes[index]
-		var spaces := IslandMap.open(stage.map_file).spaces().size()
-		var words := "%d spaces, %d monsters and %d chests." % [spaces, stage.monsters, stage.chests]
+		var words := "A new island each trip, about %d spaces, %d monsters and %d chests." % [stage.spaces, stage.monsters, stage.chests]
 		if town.going == null:
 			card.show_forecast(index, "", Kit.SOFT_INK)
 		else:

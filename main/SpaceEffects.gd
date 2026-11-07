@@ -173,10 +173,15 @@ static func roll_chest(player: PlayerData) -> Result:
 		result.gold = player.found_gold(_spread(CHEST_GOLD_BASE + CHEST_GOLD_PER_LEVEL * player.level))
 		result.text = "The chest holds %d gold!" % result.gold
 	if GameState.rng.randf() < CHEST_GUARDIAN_CHANCE:
-		var level := mini(player.level + GUARDIAN_LEVELS_AHEAD, PlayerData.MAX_LEVEL)
-		var ids := Database.monster_ids_for_level(level)
-		result.guardian = Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)])
+		result.guardian = roll_guardian(player)
 	return result
+
+
+## A monster to guard a chest, a little stronger than `player`.
+static func roll_guardian(player: PlayerData) -> MonsterData:
+	var level := mini(player.level + GUARDIAN_LEVELS_AHEAD, PlayerData.MAX_LEVEL)
+	var ids := Database.monster_ids_for_level(level)
+	return Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)])
 
 
 ## Picks an item priced from `min_value` up to `max_value`.

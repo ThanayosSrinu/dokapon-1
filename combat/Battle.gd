@@ -24,12 +24,10 @@ extends RefCounted
 
 enum Offense { ATTACK, SMASH, MAGIC, SPECIAL, ITEM, FLEE }
 enum Defense { NONE, GUARD, COUNTER, WARD }
-enum Ending { NONE, KNOCKOUT, FLED, DRAW }
+enum Ending { NONE, KNOCKOUT, FLED }
 ## How a move can be answered, from its keywords. SELF needs no answer.
 enum Kind { PLAIN, HEAVY, MAGIC, STATUS, SELF }
 
-## The fight stops as a draw after this many rounds.
-const MAX_ROUNDS := 8
 ## How much of the defender's Defense is taken off each hit.
 const DEFENSE_FACTOR := 0.5
 ## Damage varies by this share either way.
@@ -341,8 +339,6 @@ func conclude() -> PackedStringArray:
 	match ending:
 		Ending.FLED:
 			lines.append("%s got away." % fled_fighter.display_name)
-		Ending.DRAW:
-			lines.append("Neither side gives way. The fight is a draw.")
 		Ending.KNOCKOUT:
 			lines.append("%s wins!" % winner.display_name)
 			if winner.player != null:
@@ -540,8 +536,6 @@ func _pass_play() -> void:
 	if _actions_this_round == 2:
 		_actions_this_round = 0
 		round_number += 1
-		if round_number > MAX_ROUNDS:
-			ending = Ending.DRAW
 
 
 # Spreads a number by VARIANCE. Every hit does at least 1, so fights can end.

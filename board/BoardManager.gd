@@ -25,6 +25,9 @@ const LONGEST_LINK := 2
 
 ## The map to play. The editor reloads it whenever the file changes.
 @export_file("*.json") var map_file := "res://maps/world_map.json"
+## A map made in the game, in the same shape as a map file. When set, it is used instead
+## of `map_file`: trips make a new island each time (see IslandMaker.gd).
+var map_data := {}
 
 @export_group("Input")
 ## When on, left-clicking a space emits EventBus.space_clicked.
@@ -299,6 +302,8 @@ func _collect_reachable(start: BoardNode) -> Dictionary:
 
 
 func _read_map() -> Dictionary:
+	if not map_data.is_empty():
+		return map_data
 	_map_time = FileAccess.get_modified_time(map_file)
 	var text := FileAccess.get_file_as_string(map_file)
 	if text == "":

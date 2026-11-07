@@ -156,12 +156,12 @@ func _test_board_is_made_each_trip() -> void:
 		var kinds := [BoardNode.NodeType.PORTAL, BoardNode.NodeType.NORMAL, BoardNode.NodeType.BATTLE, BoardNode.NodeType.TREASURE]
 		for space in trip.map.spaces():
 			_expect(kinds.has(trip.type_at(space)), "%s: space %d is one of the kinds trips have" % [id, space])
-		for spur in MapReport.new(trip.map).spurs:
-			if spur["depth"] >= 2:
-				for space: int in spur["spaces"]:
-					if trip.map.neighbors(space).size() == 1:
-						for seed_value in 20:
-							var other := Expedition.new(_bram, stage, seed_value + 1)
+		for seed_value in range(1, 11):
+			var other := Expedition.new(_bram, stage, seed_value)
+			for spur in MapReport.new(other.map).spurs:
+				if spur["depth"] >= 2:
+					for space: int in spur["spaces"]:
+						if other.map.neighbors(space).size() == 1:
 							_expect(other.type_at(space) == BoardNode.NodeType.TREASURE, "%s: a deep spur always ends in a chest" % id)
 
 
@@ -187,10 +187,9 @@ func _test_used_spaces_turn_empty() -> void:
 	trip.finish_fight(PackedStringArray(["A draw."]))
 	_expect(trip.type_at(spot) == BoardNode.NodeType.BATTLE and not trip.is_over(), "a monster stays after a draw")
 
-	var chest_trip := Expedition.new(_bram, _grass, 1, true)
-	var chest := _space_of(chest_trip, BoardNode.NodeType.TREASURE)
 	for seed_value in range(1, 40):
-		chest_trip = Expedition.new(_bram, _grass, seed_value, true)
+		var chest_trip := Expedition.new(_bram, _grass, seed_value, true)
+		var chest := _space_of(chest_trip, BoardNode.NodeType.TREASURE)
 		_land_on(chest_trip, chest)
 		if chest_trip.fight == null:
 			_expect(chest_trip.type_at(chest) == BoardNode.NodeType.NORMAL, "an opened chest leaves an empty space")
@@ -626,6 +625,37 @@ func _test_chest_guardian() -> void:
 	trip.auto_fight()
 	_expect(trip.gold_home() == 0, "losing to the guardian pays nothing")
 	_expect(trip.type_at(chest) == BoardNode.NodeType.TREASURE, "the chest stays full")
+	_test_guard_shown_before()
+
+
+# A guarded chest is marked from the start, and a guard that wasn't beaten stays with the
+# same prize, so walking back is only ever to win that fight.
+func _test_guard_shown_before() -> void:
+	var guarded_seen := 0
+	var plain_seen := 0
+	for seed_value in range(1, 60):
+		var trip := Expedition.new(_bram, _grass, seed_value, true)
+		for id in trip.map.spaces():
+			if trip.type_at(id) != BoardNode.NodeType.TREASURE:
+				continue
+			var marked := trip.is_guarded(id)
+			_land_on(trip, id)
+			_expect((trip.fight != null) == marked, "a chest fights only if it was marked guarded, seed %d" % seed_value)
+			if marked:
+				guarded_seen += 1
+				var guard := trip.fight.opponent.monster
+				var prize: SpaceEffects.Result = trip._chests[id]
+				trip.finish_fight(PackedStringArray(["They ran."]))
+				_expect(trip.is_guarded(id) and trip.type_at(id) == BoardNode.NodeType.TREASURE, "after running, the guard is still there")
+				_land_on(trip, id)
+				_expect(trip.fight != null and trip.fight.opponent.monster == guard, "the same monster guards it")
+				_expect(trip._chests[id] == prize, "and the same prize")
+				_win(trip)
+				_expect(trip.type_at(id) == BoardNode.NodeType.NORMAL and not trip.is_guarded(id), "winning opens it at once")
+			else:
+				plain_seen += 1
+			break
+	_expect(guarded_seen > 0 and plain_seen > 0, "both kinds of chest were tried")
 
 
 func _test_defeat() -> void:
@@ -633,8 +663,13 @@ func _test_defeat() -> void:
 	trip.player.gold = 900
 	trip.player.hp = 1
 	trip.player.inventory.clear()
-	trip._meet(Database.get_monster("cursed_knight"))
-	trip.auto_fight()
+	# Someone at 1 HP may still run away, so they meet it until it beats them.
+	for attempt in 20:
+		trip.player.hp = 1
+		trip._meet(Database.get_monster("cursed_knight"))
+		trip.auto_fight()
+		if trip.is_over():
+			break
 	_expect(trip.ending == Expedition.Ending.BEATEN, "losing a fight ends the trip")
 	_expect(trip.gold_home() == 0, "the gold is lost")
 
@@ -691,9 +726,15 @@ func _count(trip: Expedition, type: BoardNode.NodeType) -> int:
 
 
 # Ends the fight as a win, however strong the monster is.
+# Wins the fight under way. A guardian is stronger than the hero and might win even at
+# 1 HP, so the fight is settled as a win instead of played.
 func _win(trip: Expedition) -> void:
-	trip.fight.opponent.hp = 1
-	trip.auto_fight()
+	if trip.fight == null:
+		return
+	trip.fight.opponent.hp = 0
+	trip.fight.winner = trip.fight.challenger
+	trip.fight.loser = trip.fight.opponent
+	trip.finish_fight(PackedStringArray(["They won."]))
 
 
 func _test_report() -> void:

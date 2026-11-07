@@ -173,9 +173,8 @@ func _test_turn_order_and_rounds() -> void:
 	while not long_fight.is_over():
 		long_fight.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD)
 		actions += 1
-	_expect(long_fight.ending == Battle.Ending.DRAW, "a fight that drags on is a draw")
-	_expect(actions == Battle.MAX_ROUNDS * 2, "a draw takes MAX_ROUNDS rounds")
-	_expect(long_fight.conclude().size() == 1, "a draw gives nothing")
+	_expect(long_fight.ending == Battle.Ending.KNOCKOUT, "a long fight has no round limit and ends in a knockout")
+	_expect(actions > 16, "it ran on past the old limit of 8 rounds")
 
 
 func _test_magic_and_items() -> void:
@@ -490,6 +489,7 @@ func _test_learning() -> void:
 # Thousands of fights, across everyone and everything, must all end with no error.
 func _test_many_fights() -> void:
 	var fights := 0
+	var longest := 0
 	for class_id in Database.sorted_ids(Database.classes):
 		for monster_id in Database.sorted_ids(Database.monsters):
 			var monster := Database.get_monster(monster_id)
@@ -498,16 +498,16 @@ func _test_many_fights() -> void:
 				hero.difficulty = CpuBrain.Level.HARD if index % 2 == 0 else CpuBrain.Level.EASY
 				var battle := Battle.new(Fighter.from_player(hero), Fighter.from_monster(monster))
 				var turns := 0
-				while not battle.is_over() and turns < 40:
+				while not battle.is_over() and turns < 2000:
 					var choice := battle.cpu_offense()
 					var defense := battle.cpu_defense() if battle.needs_defense(choice) else Battle.Defense.NONE
 					battle.resolve(choice, defense)
 					turns += 1
 				_expect(battle.is_over(), "a fight always ends")
-				_expect(battle.round_number <= Battle.MAX_ROUNDS + 1, "within the round limit")
+				longest = maxi(longest, battle.round_number)
 				battle.conclude()
 				fights += 1
-	print("Fought %d fights." % fights)
+	print("Fought %d fights, the longest %d rounds." % [fights, longest])
 	_expect(fights >= 2000, "thousands of fights were played")
 
 

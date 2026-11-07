@@ -238,6 +238,7 @@ func landing_toward(way: Vector2) -> int:
 func _on_space_emptied(id: int) -> void:
 	var node := board.get_board_node(id)
 	node.node_type = trip.type_at(id)
+	node.guarded = trip.is_guarded(id)
 	node.bump()
 	_refresh_map()
 
@@ -827,11 +828,12 @@ func _real_pause(seconds: float) -> void:
 
 func _build_world(town: TownData) -> void:
 	board = BOARD.instantiate()
-	board.map_file = town.stage.map_file
+	board.map_data = trip.map_data
 	board.print_on_ready = false
 	add_child(board)
 	for id in trip.map.spaces():
 		board.get_board_node(id).node_type = trip.type_at(id)
+		board.get_board_node(id).guarded = trip.is_guarded(id)
 	trip.space_emptied.connect(_on_space_emptied)
 	var start := board.get_starting_node().global_position
 	camera = BoardCamera.new()
