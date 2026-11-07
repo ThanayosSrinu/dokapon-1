@@ -35,6 +35,24 @@ func _ready() -> void:
 	_timer.wait_time = DELAY
 	_timer.timeout.connect(_open)
 	add_child(_timer)
+	PadInput.keys_in_use_changed.connect(_on_keys_in_use_changed)
+
+
+# A control that moves, hides or is covered may never say the mouse left it, so an
+# open or waiting tip checks each frame that it is still pointed at.
+func _process(_delta: float) -> void:
+	if _owner == null:
+		return
+	if not is_instance_valid(_owner) or not _owner.is_visible_in_tree():
+		close()
+	elif not PadInput.shows_focus(_owner) and not (_pointed_at(_owner) and _hovered(_owner)):
+		close()
+
+
+# The mouse is over `control` itself, not something drawn on top of it.
+func _hovered(control: Control) -> bool:
+	var top := control.get_viewport().gui_get_hovered_control()
+	return top == control or top != null and control.is_ancestor_of(top)
 
 
 func _exit_tree() -> void:
@@ -66,8 +84,8 @@ func attach(control: Control, title: String, body: String) -> void:
 		_fill()
 	if known:
 		return
-	control.mouse_entered.connect(_begin.bind(control))
-	control.focus_entered.connect(_begin.bind(control))
+	control.mouse_entered.connect(_begin.bind(control, false))
+	control.focus_entered.connect(_begin.bind(control, true))
 	control.mouse_exited.connect(_end.bind(control))
 	control.focus_exited.connect(_end.bind(control))
 	control.tree_exiting.connect(_close_if_owned_by.bind(control))
@@ -97,8 +115,9 @@ func shown_text() -> String:
 	return _body.text
 
 
-func _begin(control: Control) -> void:
-	if control.get_meta(META).is_empty():
+func _begin(control: Control, by_focus: bool) -> void:
+	# A mouse hover hands focus over too, but focus alone opens a tip only for keys.
+	if control.get_meta(META).is_empty() or by_focus and not PadInput.keys_in_use:
 		return
 	_owner = control
 	_timer.start()
@@ -108,10 +127,19 @@ func _end(control: Control) -> void:
 	# Still pointed at or still focused means the tip stays.
 	if control != _owner:
 		return
-	if control.is_inside_tree() and (control.has_focus()
-			or control.get_global_rect().has_point(control.get_global_mouse_position())):
+	if control.is_inside_tree() and (PadInput.shows_focus(control) or _pointed_at(control)):
 		return
 	close()
+
+
+func _pointed_at(control: Control) -> bool:
+	return control.get_global_rect().has_point(control.get_global_mouse_position())
+
+
+# The mouse took over from the keys: a tip that only focus kept open goes.
+func _on_keys_in_use_changed() -> void:
+	if is_instance_valid(_owner) and not PadInput.keys_in_use:
+		_end(_owner)
 
 
 func _close_if_owned_by(control: Control) -> void:

@@ -73,12 +73,6 @@ const PORTAL_NOTHING := "nothing"
 const GO_HOME_TEXT := "Go home"
 const STAY_OUT_TEXT := "Stay out"
 const PICK_WORDS := "Where to? Pick a ringed space."
-## Room kept around the spaces on offer when the camera frames them, in world pixels.
-const PICK_MARGIN := 100.0
-## What the news bar, the strip and the bag cover, in screen pixels, so framing keeps clear.
-const COVERED_TOP := 90.0
-const COVERED_BELOW := 140.0
-const COVERED_RIGHT := 300.0
 const CAMP_TEXT := "Camp"
 const CAMP_WORDS := "Spend this turn's food to rest, and get back %d%% of HP and MP."
 const CAMP_FULL := "They are fully rested."
@@ -204,15 +198,21 @@ func _input(event: InputEvent) -> void:
 		var hovered := board.get_node_at(get_global_mouse_position())
 		if hovered != null and landing_choices.has(hovered.node_id):
 			_select_landing(hovered.node_id)
+		elif event.relative.length() > 1.0:
+			_select_landing(-1)
 		return
 	if event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
-		_landing_picked.emit(selected_landing)
+		# Nothing lit yet: the first press lights a space, the next one takes it.
+		if selected_landing < 0:
+			_select_landing(landing_choices[0])
+		else:
+			_landing_picked.emit(selected_landing)
 		return
 	for action: String in ROAD_KEYS:
 		if event.is_action_pressed(action):
 			get_viewport().set_input_as_handled()
-			var id := landing_toward(ROAD_KEYS[action])
+			var id := landing_choices[0] if selected_landing < 0 else landing_toward(ROAD_KEYS[action])
 			if id >= 0:
 				_select_landing(id)
 			return
@@ -401,47 +401,25 @@ func _mark_nothing() -> void:
 
 
 # Waits for the player to pick where the roll lands, out of `options`, which are ringed.
-# The one selected is lit: click any, or move with the arrow keys and press Accept.
+# One is lit only while the mouse points at it, or once the arrow keys pick it: click any,
+# or move with the arrow keys and press Accept. The camera stays as the player left it.
 func _pick_landing(options: Array[int]) -> int:
 	landing_choices = options
-	_select_landing(options[0])
 	_set_news(PICK_WORDS)
-	var zoom_before := camera.zoom_index()
-	_frame_spaces(options)
 	var picked: int = await _landing_picked
 	_clear_landing_choices()
 	_set_news("")
-	camera.set_zoom_index(zoom_before)
 	_watch_token()
 	return picked
 
 
-# Moves the camera, and zooms out if it must, so the token and every space in `ids` show in
-# the part of the screen the strip and the bag leave clear.
-func _frame_spaces(ids: Array[int]) -> void:
-	var box := Rect2(token.global_position, Vector2.ZERO)
-	for id in ids:
-		box = box.expand(board.get_board_node(id).global_position)
-	box = box.grow(PICK_MARGIN)
-	var screen_size := get_viewport_rect().size
-	var clear := screen_size - Vector2(COVERED_RIGHT, COVERED_TOP + COVERED_BELOW)
-	var index := camera.zoom_index()
-	while index > 0 and (box.size.x * BoardCamera.ZOOM_LEVELS[index] > clear.x
-			or box.size.y * BoardCamera.ZOOM_LEVELS[index] > clear.y):
-		index -= 1
-	if index != camera.zoom_index():
-		camera.set_zoom_index(index, 0.4)
-	# The clear part of the screen is off its middle, so the camera aims to one side.
-	var clear_middle := Vector2(clear.x * 0.5, COVERED_TOP + clear.y * 0.5)
-	var shift := (screen_size * 0.5 - clear_middle) / BoardCamera.ZOOM_LEVELS[index]
-	camera.focus_on(box.get_center() + shift)
-
-
+# Lights space `id` out of the choices, or none for -1.
 func _select_landing(id: int) -> void:
 	if selected_landing >= 0:
 		board.get_board_node(selected_landing).is_path_choice = false
 	selected_landing = id
-	board.get_board_node(id).is_path_choice = true
+	if id >= 0:
+		board.get_board_node(id).is_path_choice = true
 
 
 func _clear_landing_choices() -> void:

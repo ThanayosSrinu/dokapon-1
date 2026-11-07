@@ -77,6 +77,8 @@ func _test_button_states() -> void:
 	_expect(button._chosen_look() == KitButton.Look.REST, "a button looks at rest at first")
 	var home := button.position
 	button.grab_focus()
+	_expect(button._chosen_look() == KitButton.Look.REST, "focus alone does not light a button for the mouse")
+	PadInput._use_keys(true)
 	await _wait()
 	_expect(button.shown_offset == KitButton.LIFT, "focus lifts a button")
 	_expect(button.position == home, "lifting leaves the clickable area alone")
@@ -107,6 +109,7 @@ func _test_blocked_button() -> void:
 	var clicks := [0]
 	button.pressed.connect(func() -> void: clicks[0] += 1)
 	_expect(button.disabled, "a blocked button is off")
+	PadInput._use_keys(true)
 	button.grab_focus()
 	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
 	_expect(Tips.showing() and Tips.shown_text() == "You need 120 more gold.",
@@ -164,6 +167,7 @@ func _test_tips_follow_focus() -> void:
 	first.position = Vector2(400, 300)
 	second.position = Vector2(400, 500)
 	Tips.attach(first, "One", "The first tip")
+	PadInput._use_keys(true)
 	first.grab_focus()
 	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
 	_expect(Tips.showing(), "a tip opens on focus")
@@ -175,7 +179,25 @@ func _test_tips_follow_focus() -> void:
 	first.free()
 	await _wait()
 	_expect(not Tips.showing(), "a tip closes when its control goes away")
+	# The mouse: hovering hands over focus too, but leaving must still close the tip.
+	Tips.attach(second, "Two", "The second tip")
+	await _move_mouse(second.get_global_rect().get_center())
+	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
+	_expect(Tips.showing() and second.has_focus(), "a tip opens on hover")
+	await _move_mouse(Vector2(40, 40))
+	await _wait()
+	_expect(not Tips.showing(), "and closes when the mouse leaves, though focus stayed")
+	_expect(second._chosen_look() == KitButton.Look.REST, "and the button is no longer lit")
 	second.queue_free()
+
+
+func _move_mouse(spot: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = spot
+	motion.global_position = spot
+	motion.relative = Vector2(30, 30)
+	Input.warp_mouse(spot)
+	await _send(motion)
 
 
 func _test_arrow() -> void:

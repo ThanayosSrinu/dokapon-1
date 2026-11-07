@@ -214,11 +214,18 @@ func screen_focus() -> Control:
 # there first, if it isn't selected already.
 func _pick_space(screen: ExpeditionScreen, id: int, hand: Hand) -> void:
 	if hand == Hand.MOUSE:
-		# The camera moves to show every choice, in real time.
+		# The camera stays put, so the player looks at the space first.
+		screen.camera.focus_on(screen.board.get_board_node(id).global_position)
 		await get_tree().create_timer(0.7, true, false, true).timeout
 		await _click_at(_on_screen(screen, screen.board.get_board_node(id)))
 		return
 	var tries := 0
+	if screen.selected_landing < 0:
+		# The first key lights a space.
+		if hand == Hand.PAD:
+			await _pad(JOY_BUTTON_A)
+		else:
+			await _tap("ui_accept")
 	while screen.selected_landing != id and tries < 20:
 		var here := screen.board.get_board_node(screen.selected_landing).global_position
 		var way := here.direction_to(screen.board.get_board_node(id).global_position)
@@ -350,7 +357,10 @@ func _test_forks() -> void:
 	_expect(screen._news_words.text == ExpeditionScreen.PICK_WORDS, "and it asks where to")
 	for id in screen.landing_choices:
 		_expect(screen.board.get_board_node(id).is_landing_spot, "each is ringed")
-	_expect(screen.board.get_board_node(screen.selected_landing).is_path_choice, "the selected one is lit")
+	_expect(screen.selected_landing < 0, "none is lit before the player points")
+	await _tap("ui_accept")
+	_expect(screen.selected_landing >= 0 and screen.board.get_board_node(screen.selected_landing).is_path_choice,
+			"the first key lights one")
 	var steps := trip.steps_left
 	var here := trip.space_id
 	await get_tree().create_timer(0.3).timeout

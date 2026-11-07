@@ -4,6 +4,15 @@ extends Node
 ## has focus. A mouse click on empty space, or a window that forgot to choose a button,
 ## leaves none, and then a controller can do nothing. So if a direction or Accept
 ## arrives with nothing focused, this focuses the top button on screen.
+##
+## It also knows whether keys or a controller are in use. Focus is only drawn then:
+## with the mouse, only what the mouse points at lights up.
+
+## Sent when the player moves from the mouse to keys or a controller, or back.
+signal keys_in_use_changed
+
+## True after a key or controller press, false again once the mouse moves or clicks.
+var keys_in_use := false
 
 
 func _ready() -> void:
@@ -11,13 +20,36 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton or event is InputEventMouseMotion and event.relative.length() > 1.0:
+		_use_keys(false)
 	if event is InputEventMouse:
 		return
+	var pressed := (event is InputEventKey or event is InputEventJoypadButton
+			or event is InputEventAction) and event.is_pressed()
+	if pressed or event is InputEventJoypadMotion and absf(event.axis_value) > 0.5:
+		_use_keys(true)
 	for action: String in ["ui_accept", "ui_up", "ui_down", "ui_left", "ui_right"]:
 		if event.is_action_pressed(action):
 			if get_viewport().gui_get_focus_owner() == null and rescue_focus():
 				get_viewport().set_input_as_handled()
 			return
+
+
+## True if `control` has focus and it should be drawn.
+func shows_focus(control: Control) -> bool:
+	return keys_in_use and control.has_focus()
+
+
+func _use_keys(on: bool) -> void:
+	if keys_in_use == on:
+		return
+	keys_in_use = on
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus != null:
+		focus.queue_redraw()
+		if focus.has_method("_refresh"):
+			focus.call("_refresh")
+	keys_in_use_changed.emit()
 
 
 ## Focuses the top button on screen. Returns false if there is none.

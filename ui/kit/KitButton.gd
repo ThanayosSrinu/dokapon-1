@@ -118,7 +118,7 @@ func _draw() -> void:
 	var art := _face_art(look)
 	draw_style_box(Kit.danger_box(art, EDGE) if danger and look != Look.OFF else Kit.box(art, EDGE), face)
 	_draw_contents(face, look)
-	if look != Look.OFF and (look == Look.FOCUS or forced_look == Look.LIVE and has_focus()):
+	if look != Look.OFF and (look == Look.FOCUS or forced_look == Look.LIVE and PadInput.shows_focus(self)):
 		draw_style_box(Kit.box("focus", 12.0), face.grow(FOCUS_GROWTH))
 
 
@@ -149,7 +149,7 @@ func _chosen_look() -> Look:
 		return Look.OFF
 	if _held:
 		return Look.DOWN
-	if _mouse_inside or has_focus():
+	if _mouse_inside or PadInput.shows_focus(self):
 		return Look.HOT
 	return Look.REST
 

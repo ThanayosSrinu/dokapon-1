@@ -61,7 +61,7 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if chosen:
 		GameArt.draw_ground_ring(self, FEET, RING_RADIUS, RING_COLOR, 4.0, 0.5)
-	if has_focus():
+	if PadInput.shows_focus(self):
 		draw_style_box(Kit.box("focus", 12.0), Rect2(Vector2.ZERO, size))
 	if _down:
 		_draw_sleep()

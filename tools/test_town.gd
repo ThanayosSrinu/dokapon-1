@@ -41,6 +41,8 @@ func _test_data() -> void:
 func _test_opening() -> void:
 	var town := await _open_town()
 	_expect(_focused() == town.building("tavern"), "the Tavern has focus at the start")
+	_expect(not town.building("tavern").is_lit(), "but it is not lit until a key is used")
+	PadInput._use_keys(true)
 	_expect(town.building("tavern").is_lit(), "the Tavern lights up")
 	_expect(town.signs["tavern"].is_open(), "its sign says what it does")
 	_expect(not town.signs["portal"].is_open(), "the Portal's sign shows only its name")
@@ -194,6 +196,7 @@ func _test_mouse() -> void:
 func _test_press() -> void:
 	var town := await _open_town()
 	var tavern := town.building("tavern")
+	PadInput._use_keys(true)
 	await _wait()
 	tavern._on_held(true)
 	await _wait()

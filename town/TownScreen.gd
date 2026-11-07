@@ -94,8 +94,11 @@ func _build_world(town: TownData) -> void:
 		place.pressed.connect(_visit.bind(place))
 		place.focus_entered.connect(_refresh_signs)
 		place.focus_exited.connect(_refresh_signs)
+		place.mouse_entered.connect(_refresh_signs, CONNECT_DEFERRED)
+		place.mouse_exited.connect(_refresh_signs, CONNECT_DEFERRED)
 		stage.add_child(place)
 		buildings[id] = place
+	PadInput.keys_in_use_changed.connect(_refresh_signs)
 	var folk_paths: Array = TownArt.FOLK_PATHS
 	_world.add_child(TownFolk.new(folk_paths))
 	var ambience := WorldAmbience.new()
@@ -193,7 +196,7 @@ func _nearest(place: Control, places: Array) -> Control:
 
 func _refresh_signs() -> void:
 	for id: String in buildings:
-		signs[id].show_job(buildings[id].has_focus())
+		signs[id].show_job(buildings[id].is_lit())
 
 
 func _visit(place: TownBuilding) -> void:

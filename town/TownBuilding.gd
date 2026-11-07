@@ -60,7 +60,7 @@ func _draw() -> void:
 		draw_texture(_glow, spot)
 	var picture := Rect2(Vector2(_frame * size.x, 0.0), size)
 	draw_texture_rect_region(_art, Rect2(spot, size), picture)
-	if look == Look.FOCUS or has_focus():
+	if look == Look.FOCUS or PadInput.shows_focus(self):
 		draw_style_box(Kit.box("focus", 12.0), Rect2(Vector2.ZERO, size).grow(FOCUS_GROWTH))
 
 

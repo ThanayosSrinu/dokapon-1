@@ -85,7 +85,7 @@ static func snap_point(point: Vector2) -> Vector2:
 
 ## Draws the focus ring around `control`, if it has focus (rule U9).
 static func draw_focus(control: Control) -> void:
-	if control.has_focus():
+	if PadInput.shows_focus(control):
 		control.draw_style_box(box("focus", 12.0), Rect2(Vector2.ZERO, control.size).grow(4.0))
 
 
