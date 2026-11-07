@@ -672,7 +672,8 @@ func _place_die() -> void:
 # never stopped for it: see D11 in EXPEDITION_PLAN.md.
 func _warn_of_debts() -> void:
 	var town := TownData.current()
-	var today := town.day + trip.day
+	# The day they will be home, as a trip's days are fixed.
+	var today := town.day + trip.trip_days
 	if town.show_alert(today) == TownData.Alert.NONE:
 		hud.warn_of_debts("")
 		return

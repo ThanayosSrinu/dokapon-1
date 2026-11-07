@@ -709,7 +709,7 @@ func _test_report() -> void:
 			_expect(not line["text"].contains("castle"), "the diary never says castle: " + line["text"])
 		_expect(report.title.contains(_bram.display_name), "the report names them")
 		_expect(report.story.size() >= 2, "the report tells a story")
-		_expect(report.days == trip.day, "it counts the days")
+		_expect(report.days == trip.trip_days, "it counts the days the trip takes")
 		_expect(report.gold_home == trip.gold_home(), "it counts the gold")
 		if not trip.best_moment.is_empty():
 			_expect(report.best.begins_with("Day %d:" % trip.best_moment["day"]), "the best moment has its day")

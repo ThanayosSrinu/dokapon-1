@@ -11,11 +11,9 @@ const STAGE := Vector2(1280, 720)
 const CARD_LEFT := 816.0
 const CARD_TOP := 34.0
 ## What the forecast's colors mean, readable on paper.
-const FIT_COLORS := {TownData.Forecast.SAFE: Color(0.1, 0.4, 0.16), TownData.Forecast.TIGHT: Color(0.56, 0.36, 0.0),
-		TownData.Forecast.LATE: Kit.BLOOD}
-const FIT_WORDS := {TownData.Forecast.SAFE: "All the food can be used, and they are home in time.",
-		TownData.Forecast.TIGHT: "Only in time if you head home early.",
-		TownData.Forecast.LATE: "Not even a quick trip gets home in time."}
+const FIT_COLORS := {TownData.Forecast.SAFE: Color(0.1, 0.4, 0.16), TownData.Forecast.LATE: Kit.BLOOD}
+const FIT_WORDS := {TownData.Forecast.SAFE: "Home in time to pay what is owed.",
+		TownData.Forecast.LATE: "Home after the next due day: pay at the Bank first."}
 ## Speech bubbles stay inside the hilltop's part of the stage.
 const SITE_AREA := Rect2(0, 0, 808, 720)
 const HEADING_SPOT := Vector2(200, 30)
@@ -189,10 +187,10 @@ func _show_forecasts(town: TownData) -> void:
 		if town.going == null:
 			card.show_forecast(index, "", Kit.SOFT_INK)
 		else:
-			var plan := town.forecast(stage, town.going, town.food if stage == town.stage else -1)
-			card.show_forecast(index, "Home %s" % Calendar.date(plan["whole"]), FIT_COLORS[plan["fit"]])
-			words += " Home about %s at the soonest, or %s if all the food is used. %s" % [
-					Calendar.date(plan["home"]), Calendar.date(plan["whole"]), FIT_WORDS[plan["fit"]]]
+			var plan := town.forecast(stage)
+			card.show_forecast(index, "Home %s" % Calendar.date(plan["home"]), FIT_COLORS[plan["fit"]])
+			words += " It takes %s, even if it is cut short, so they are home %s. %s" % [
+					TownData.days_words(stage.days), Calendar.date(plan["home"]), FIT_WORDS[plan["fit"]]]
 		Tips.attach(card.sizes[index], "%s trip" % stage.size_name, words)
 
 
@@ -336,7 +334,7 @@ func _on_enter() -> void:
 	if town.send_problem() != "" or _leaving:
 		card.enter.deny()
 		return
-	var plan := town.forecast(town.stage, town.going, town.food)
+	var plan := town.forecast(town.stage)
 	if plan["fit"] == TownData.Forecast.SAFE:
 		_depart(town)
 	else:

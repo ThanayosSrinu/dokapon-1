@@ -35,7 +35,7 @@ var loss := ""
 
 func _init(trip: Expedition) -> void:
 	var who := trip.player.player_name
-	days = trip.day
+	days = trip.trip_days
 	furthest = trip.furthest
 	fights = trip.fights
 	fights_won = trip.fights_won

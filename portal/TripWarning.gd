@@ -8,8 +8,7 @@ signal to_bank
 
 const WIDTH := 520.0
 const HEADING := "Home in time?"
-const SOON := "%s can be home about %s if called back early, or %s if all the food is used."
-const TOO_LATE := "%s can't be home before about %s, or %s if all the food is used."
+const TOO_LATE := "This trip takes %s, so %s is home %s."
 const LOST := "If it is not paid by then, it is GAME OVER."
 
 var go_button: KitButton
@@ -71,8 +70,7 @@ func show_trip(town: TownData, person: Adventurer, plan: Dictionary) -> void:
 	var left: int = debt["due"] - town.day
 	var when := "today" if left == 0 else "in %s" % TownData.days_words(left)
 	_owed.text = "The %s of %d gold is due on %s, %s." % [debt["what"], debt["amount"], Calendar.date(debt["due"]), when]
-	var words := TOO_LATE if plan["fit"] == TownData.Forecast.LATE else SOON
-	_home.text = words % [person.display_name, Calendar.date(plan["home"]), Calendar.date(plan["whole"])]
+	_home.text = TOO_LATE % [TownData.days_words(plan["home"] - town.day), person.display_name, Calendar.date(plan["home"])]
 
 
 func shown_words() -> String:

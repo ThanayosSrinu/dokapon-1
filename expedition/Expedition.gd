@@ -80,6 +80,8 @@ var day := 0
 var level_at_start := 1
 ## Days of food they set out with.
 var food_taken := 0
+## Days on the town's calendar this trip takes, whatever happens on it. See Stage.days.
+var trip_days := 0
 ## Days of food still in the pack.
 var food_left := 0
 ## True when the player makes every choice, and false when the brain does.
@@ -150,6 +152,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	person = new_person
 	by_hand = hand
 	map = IslandMap.open(stage.map_file)
+	trip_days = stage.days
 	player = make_player(person, hand, kept)
 	level_at_start = player.level
 	food_taken = person.food_at(0 if kept == null else kept.level) if food < 0 else food

@@ -26,6 +26,6 @@ func _init(trip: Expedition, board: BoardManager) -> void:
 
 ## Shows how the trip stands.
 func refresh() -> void:
-	var home := TownData.days_words(ceili(_trip.days_home()))
+	var home := Expedition.turns_words(ceili(_trip.days_home()))
 	facts.text = NO_FOOD % home if _trip.food_left == 0 else FACTS % [Expedition.turns_words(_trip.food_left), home]
 	island.queue_redraw()

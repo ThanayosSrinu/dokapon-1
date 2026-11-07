@@ -51,7 +51,6 @@ func _test_data() -> void:
 	_expect(town.max_food(town.roster[0].person) == town.roster[0].person.max_food, "someone new carries their Max Food")
 	_expect(maren.max_food > bram.max_food, "someone carries more")
 	_expect(bram.food_at(bram.level + 5) == bram.max_food + 5 * Adventurer.FOOD_PER_LEVEL, "each level adds a little")
-	_expect(maren.food_at(20) * FoodPicker.THINNEST_STEP <= FoodPicker.TRACK, "the most food fits its picture")
 
 
 func _test_nobody_hired() -> void:
@@ -127,10 +126,12 @@ func _test_buying_food() -> void:
 	await _pad(JOY_BUTTON_DPAD_LEFT)
 	_expect(town.food == most - 1, "the pad slides the food too")
 	var left := card.food._left()
-	_click_food(card.food, left + card.food._step() * 2.5)
-	_expect(town.food == 3, "a click picks a mark")
-	_drag_food(card.food, left + card.food._step() * 4.5)
+	var day_width := card.food._track() / most
+	_click_food(card.food, left + day_width * 3.2)
+	_expect(town.food == 3, "a click picks a share of the bar")
+	_drag_food(card.food, left + day_width * 4.8)
 	_expect(town.food == 5, "and dragging slides")
+	_expect(card.food._edge_of(most) == Kit.snap(card.food._track()), "all their Max Food fills the bar")
 	_click_food(card.food, card.food.size.x - 4.0)
 	_expect(town.food == 6, "the + buys a day more")
 	_click_food(card.food, 4.0)
@@ -157,9 +158,7 @@ func _test_buying_food() -> void:
 	card.food.grab_focus()
 	await _tap("ui_right")
 	_expect(town.food == 2, "and no more can be bought")
-	_expect(town.forecast(town.stage, town.going, 2)["whole"] >= town.day + 2, "the forecast counts what was bought")
-	_expect(town.forecast(town.stage, town.going, 0)["whole"] == town.forecast(town.stage, town.going, 0)["home"],
-			"with no food, the forecast is the soonest they can be home")
+	_expect(town.forecast(town.stage)["home"] == town.day + town.stage.days, "the trip takes its days, whatever the food")
 	town.buy_food()
 	_expect(town.gold == 1, "buying costs its price a day")
 

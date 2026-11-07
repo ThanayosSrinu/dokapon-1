@@ -5,14 +5,14 @@ extends RefCounted
 ## the file is deleted when the town is lost (D11).
 ##     TownData.current().gold
 ##
-## Time stands still in town. It moves only when a trip ends. A bill or a loan can be paid
+## Time stands still in town. It moves only when a trip ends, by the trip's own days
+## (Stage.days), however it ended: a trip's time is spent even if it is cut short. A bill or a loan can be paid
 ## on its due day, and the game is lost once that day has passed with it unpaid (D11 in
 ## EXPEDITION_PLAN.md), or once nobody can go and no gold can be found to hire anyone.
 
 enum Alert { NONE, WARN, ALARM }
-## What a forecast's color means. SAFE: a whole trip fits before the due day. TIGHT: only
-## calling them home early does. LATE: not even that.
-enum Forecast { SAFE, TIGHT, LATE }
+## What a forecast's color means. SAFE: the trip is home by the due day. LATE: it is not.
+enum Forecast { SAFE, LATE }
 
 const START_GOLD := 300
 ## Gold for one day of food.
@@ -268,7 +268,7 @@ func lost() -> bool:
 func bring_home(trip: Expedition) -> void:
 	var one := member(trip.person)
 	gold += trip.gold_home()
-	day += trip.day
+	day += trip.trip_days
 	one.trips += 1
 	one.keep(trip.player)
 	# The pack went out with them. What comes back belongs to the town.
@@ -898,18 +898,10 @@ func final_story(lines: int) -> Array[Dictionary]:
 	return story
 
 
-## What a trip by `person` to `trip_stage` looks like against the next due day:
-## {"home", "whole", "due", "fit"}. "home" is about the first day they could be back,
-## "whole" is the day the last of their food is eaten, or "home" if that is later, and
-## "fit" is a Forecast. `bought` is the days of food bought, or -1 for all they could take.
-func forecast(trip_stage: Stage, person: Adventurer, bought := -1) -> Dictionary:
-	var map := IslandMap.open(trip_stage.map_file)
-	var home: int = day + ceili(map.days_around(map.portal, person.die_top))
-	var whole: int = maxi(day + (food_limit(person) if bought < 0 else bought), home)
+## What a trip to `trip_stage` looks like against the next due day: {"home", "due", "fit"}.
+## "home" is the day they are back, as every trip there takes the same days, and "fit" is a
+## Forecast. Being home on the due day is in time, as it can still be paid that day.
+func forecast(trip_stage: Stage) -> Dictionary:
+	var home: int = day + trip_stage.days
 	var due := next_due()
-	var fit := Forecast.SAFE
-	if home > due:
-		fit = Forecast.LATE
-	elif whole > due:
-		fit = Forecast.TIGHT
-	return {"home": home, "whole": whole, "due": due, "fit": fit}
+	return {"home": home, "due": due, "fit": Forecast.LATE if home > due else Forecast.SAFE}

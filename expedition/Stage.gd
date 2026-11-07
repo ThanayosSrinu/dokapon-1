@@ -17,6 +17,8 @@ extends Resource
 @export_file("*.json") var map_file := ""
 ## Its small view, from assets/custom/portal/. tools/art_portal.py draws these.
 @export var picture: Texture2D
+## Days the town's calendar moves on for a trip here, however it ends.
+@export var days := 7
 ## About how many turns a whole trip here takes, said at the Portal so that the food can be
 ## judged. It never limits the food: only the person's own Max Food does.
 @export var usual_food := 25

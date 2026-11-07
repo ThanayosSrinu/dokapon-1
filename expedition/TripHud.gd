@@ -156,7 +156,7 @@ func _food_color() -> Color:
 
 
 func _food_tip() -> String:
-	var home := "About %s from the Portal." % TownData.days_words(ceili(_trip.days_home()))
+	var home := "About %s from the Portal." % Expedition.turns_words(ceili(_trip.days_home()))
 	if _trip.food_left > 0:
 		return "Food for %s. One roll of the die is one turn. %s" % [Expedition.turns_words(_trip.food_left), home]
 	return "No food left. They lose health every day, and grow weak. %s" % home

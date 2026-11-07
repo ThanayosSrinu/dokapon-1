@@ -152,8 +152,8 @@ func _test_time_out() -> void:
 	var bram := Database.get_adventurer("bram")
 	var wren := Database.get_adventurer("wren")
 	_expect(town.going == bram, "the first hired goes first")
-	town.bring_home(_ended_trip(town, Expedition.Ending.BEATEN, 5))
-	_expect(town.day == 6, "the days of a trip pass in town")
+	town.bring_home(_ended_trip(town, Expedition.Ending.BEATEN, 3))
+	_expect(town.day == 1 + town.stage.days, "a trip's days pass in town, however few turns it lasted")
 	var one := town.member(bram)
 	_expect(one.days_out(town.day) == TownData.OUT_AFTER_DEFEAT, "a defeat costs days of work")
 	_expect(one.trips == 1 and one.trips_home == 0, "and goes on their record")
@@ -161,18 +161,23 @@ func _test_time_out() -> void:
 	_expect(not town.pick(bram), "the hurt can't be picked")
 	town.bring_home(_ended_trip(town, Expedition.Ending.STARVED, 1))
 	_expect(town.member(wren).days_out(town.day) == TownData.OUT_AFTER_DEFEAT, "hunger counts as a defeat")
+	_expect(town.going == bram, "a week away was time for the first to heal")
+	town.member(bram).ready_on = town.day + 3
+	town._pick_going()
 	_expect(town.going == null and town.send_problem() == "Nobody is ready", "with all hurt, nobody can go")
-	town.day += TownData.OUT_AFTER_DEFEAT - 1
+	town.day += 3
 	town._pick_going()
 	_expect(town.going == bram, "they come back in order")
-	town.day += 1
+	town.day += TownData.OUT_AFTER_DEFEAT - 3
 	town._pick_going()
 	_expect(town.pick(wren), "and a healed person can be picked")
 	_expect(town.member(bram).days_out(town.day) == 0, "the count stops at 0")
 	var warped := _ended_trip(town, Expedition.Ending.WARPED, 0)
 	warped.player.gold = 70
 	var before_warp := town.gold
+	var warp_day := town.day
 	town.bring_home(warped)
+	_expect(town.day == warp_day + town.stage.days, "an Emergency Warp still spends the trip's days")
 	_expect(town.member(wren).days_out(town.day) == 0, "an Emergency Warp costs no days")
 	_expect(town.gold == before_warp, "but nothing they found comes home")
 	_expect(town.going == wren, "and they can go again")
@@ -230,18 +235,21 @@ func _test_forecast() -> void:
 	var person := town.going
 	var small := Database.get_stage("grass_s")
 	var large := Database.get_stage("grass_l")
-	var plan := town.forecast(small, person)
-	_expect(plan["home"] > town.day, "nobody is home before they leave")
-	_expect(plan["home"] <= plan["whole"], "a quick trip is no longer than a whole one")
-	_expect(plan["whole"] == maxi(town.day + town.food_limit(person), plan["home"]), "a whole trip lasts as long as the food")
-	_expect(town.forecast(small, person, 2)["whole"] == plan["home"], "a little food can't bring them home sooner")
-	var long_way := town.forecast(large, person, 20)
-	_expect(long_way["whole"] == town.day + 20, "the forecast counts the food bought")
-	_expect(plan["due"] == 56 and plan["fit"] == TownData.Forecast.SAFE, "day 1 has time for a small trip")
-	town.day = 40
-	_expect(town.forecast(large, person)["fit"] == TownData.Forecast.TIGHT, "a large trip then only fits if cut short")
-	town.day = 55
-	_expect(town.forecast(small, person)["fit"] == TownData.Forecast.LATE, "day 27 is too late for anything")
+	_expect(person != null, "someone is going")
+	var plan := town.forecast(small)
+	_expect(plan["home"] == town.day + 7, "a small trip takes 7 days")
+	_expect(town.forecast(Database.get_stage("grass_m"))["home"] == town.day + 14, "a medium one 14")
+	_expect(town.forecast(large)["home"] == town.day + 21, "and a large one 21")
+	_expect(plan["due"] == 56 and plan["fit"] == TownData.Forecast.SAFE, "the first tax is due at the end of month 2")
+	_expect(not town.bill_open(), "and can't be paid in month 1")
+	town.day = 29
+	_expect(town.bill_open(), "it comes as month 2 begins")
+	town.day = 35
+	_expect(town.forecast(large)["fit"] == TownData.Forecast.SAFE, "home on the due day is in time")
+	town.day = 36
+	_expect(town.forecast(large)["fit"] == TownData.Forecast.LATE, "a day later is not")
+	town.day = 50
+	_expect(town.forecast(small)["fit"] == TownData.Forecast.LATE, "nor is a week before month 3")
 
 
 ## The plan's fairness test. A trip of any length, from any day, is walked as the screens
@@ -499,12 +507,13 @@ func _test_portal_forecast() -> void:
 	var town := _town_with(["bram"])
 	var portal: PortalScreen = await _open(PORTAL)
 	for index in 3:
-		var whole: int = town.forecast(portal._sizes[index], town.going, town.food if index == 0 else -1)["whole"]
-		_expect(portal.card.shown_forecast(index) == "Home %s" % Calendar.date(whole), "each size shows when all the food is used")
+		var home: int = town.forecast(portal._sizes[index])["home"]
+		_expect(portal.card.shown_forecast(index) == "Home %s" % Calendar.date(home), "each size shows its day home")
+	_expect(portal.card.shown_forecast(0) != portal.card.shown_forecast(2), "a bigger trip is home later")
 	var before := portal.card.shown_forecast(2)
 	portal._choose_size(portal._sizes[2])
 	portal._choose_food(town.food - 1)
-	_expect(portal.card.shown_forecast(2) != before, "the forecast follows the food bought")
+	_expect(portal.card.shown_forecast(2) == before, "the food doesn't change the day home")
 	portal._choose_size(portal._sizes[0])
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.SAFE],
 			"a safe trip is green")
@@ -517,14 +526,14 @@ func _test_portal_forecast() -> void:
 	town.day = 45
 	town.stage = portal._sizes[2]
 	portal = await _open(PORTAL)
-	var plan := town.forecast(town.stage, town.going)
-	_expect(plan["fit"] == TownData.Forecast.TIGHT, "this trip only fits if cut short")
+	var plan := town.forecast(town.stage)
+	_expect(plan["fit"] == TownData.Forecast.LATE, "this trip is home too late")
 	portal.card.enter.pressed.emit()
 	await get_tree().process_frame
 	_expect(portal.warning.visible and not portal._leaving, "a risky trip stops to warn")
 	_expect(portal.warning.shown_words().contains(str(town.bill_amount())), "with what is owed")
 	_expect(portal.warning.shown_words().contains("Y1 M2 D28"), "and the due day")
-	_expect(portal.warning.shown_words().contains(Calendar.date(plan["whole"])), "and the day home")
+	_expect(portal.warning.shown_words().contains(Calendar.date(plan["home"])), "and the day home")
 	_expect(view.encloses(portal.warning.get_global_rect()), "the warning fits")
 	_expect(_focused() == portal.warning.bank_button, "the Bank has the focus, not Go on")
 	await _tap("ui_up")
@@ -603,15 +612,16 @@ func _until_first_day(screen: ExpeditionScreen) -> void:
 
 func _test_warnings_on_a_trip() -> void:
 	var town := _town_with(["bram"])
-	town.day = 47
-	town.stage = Database.get_stage("grass_l")
+	# The strip speaks of the day they will be home, as a trip's days are fixed.
+	town.day = 30
+	town.stage = Database.get_stage("grass_s")
 	var screen := await _open_trip(3)
 	await _until_first_day(screen)
 	_expect(not screen.hud.warning.visible, "with time in hand the strip says nothing")
-	screen.trip.day = 2
+	town.day = 42
 	screen._warn_of_debts()
 	_expect(screen.hud.warning.text.contains("due in 7 days"), "the strip says so at 7 days left")
-	screen.trip.day = 6
+	town.day = 46
 	screen._warn_of_debts()
 	_expect(screen.hud.warning.text.contains("due in 3 days"), "and again at 3 days left")
 	screen.free()
@@ -621,7 +631,7 @@ func _test_warnings_on_a_trip() -> void:
 	town.stage = Database.get_stage("grass_s")
 	var late := await _open_trip(3)
 	await _until_first_day(late)
-	_expect(late.hud.warning.text.contains("due in 1 day."), "leaving late, it says so on the first day")
+	_expect(late.hud.warning.text == ExpeditionScreen.DEBT_MISSED % "bill", "leaving too late, it says so on the first day")
 	late.free()
 	Engine.time_scale = 1.0
 	await _wait()
@@ -633,12 +643,12 @@ func _test_game_over_after_the_report() -> void:
 	town.day = 55
 	var screen := await _open_trip(5)
 	screen._warp_home.call_deferred()
-	# The Warp Stone ends it at once, so three days of trip are added by hand.
+	# The Warp Stone ends it at once, but the trip's days still pass.
 	while screen.report == null:
 		await get_tree().process_frame
 	await _until_settled()
 	_expect(get_tree().current_scene == screen, "the report comes first")
-	town.day = 58
+	_expect(town.day == 55 + town.stage.days, "and the warp spent the trip's days")
 	await _tap("ui_accept")
 	await _until_settled()
 	_expect(get_tree().current_scene is GameOverScreen, "then the town is lost, whatever gold there is")
