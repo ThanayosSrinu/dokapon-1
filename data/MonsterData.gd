@@ -20,13 +20,13 @@ extends Resource
 @export_group("Stats")
 ## Stat name -> value. Needs every name in Database.STATS.
 @export var stats: Dictionary[String, int] = {}
-## The ids of the spells it can cast.
-@export var spells: Array[String] = []
+## The ids of its moves. Its habits pick a category, then one of these at random.
+@export var moves: Array[String] = []
 
 @export_group("Habits")
-## How often it picks each offense: keys "attack", "smash" and "spell".
+## How often it picks each offense: keys "attack", "smash", "magic" and "special".
 @export var offense_weights: Dictionary[String, int] = {}
-## How often it picks each defense: keys "guard", "dodge" and "counter".
+## How often it picks each defense: keys "guard", "counter" and "ward".
 @export var defense_weights: Dictionary[String, int] = {}
 
 @export_group("Rewards")

@@ -3,21 +3,24 @@ extends RefCounted
 ## The rules of one fight, with no animation or UI. ui/BattleScreen.gd shows it,
 ## and tools/test_battle.gd runs thousands of them without opening a window.
 ##
-## A round gives each fighter one action. The acting fighter picks an offense in
+## A round gives each fighter one action. The acting fighter picks a category and a move in
 ## secret, the other picks a defense, then resolve() works out what happened:
 ##
-##                 Guard     Dodge              Counter
-##   Attack        half      miss or 1.25x      1.25x
-##   Smash         1.5x      miss or 1.75x      nothing, and it hits the smasher
-##   Spell         0.75x     miss or 1.25x      1.25x
+##                 Guard                Counter                  Ward
+##   Attack        less                 full                     full
+##   Smash         1.5x, it breaks      misses, hits the smasher 1.5x, it breaks
+##   Magic         full                 full                     less
 ##
-## Guard beats Attack, Smash beats Guard, Counter beats Smash, and Attack beats
-## Counter. Dodge depends on speed, so it is only a good bet for quick fighters.
+## A Special asks for no defense. How much "less" is, and how hard a Counter hits back, comes
+## from the defender's move. See MoveData for what comes from where.
+##
+## Attack, Smash, Guard, Counter and Ward are free. Magic uses MP, and a Special works once
+## per fight, with its turns counted in the user's own turns.
 ##
 ## Every random result uses GameState.rng, so a seed replays the same battle.
 
-enum Offense { ATTACK, SMASH, SPELL, ITEM, FLEE }
-enum Defense { NONE, GUARD, DODGE, COUNTER }
+enum Offense { ATTACK, SMASH, MAGIC, SPECIAL, ITEM, FLEE }
+enum Defense { NONE, GUARD, COUNTER, WARD }
 enum Ending { NONE, KNOCKOUT, FLED, DRAW }
 
 ## The fight stops as a draw after this many rounds.
@@ -27,22 +30,14 @@ const DEFENSE_FACTOR := 0.5
 ## Damage varies by this share either way.
 const VARIANCE := 0.1
 
-## Offense -> Defense -> multiplier on damage. Dodge's entry is for a failed dodge.
-const DAMAGE_TABLE := {
-	Offense.ATTACK: {Defense.GUARD: 0.5, Defense.DODGE: 1.25, Defense.COUNTER: 1.25},
-	Offense.SMASH: {Defense.GUARD: 1.5, Defense.DODGE: 1.75, Defense.COUNTER: 0.0},
-	Offense.SPELL: {Defense.GUARD: 0.75, Defense.DODGE: 1.25, Defense.COUNTER: 1.25},
-}
-## A countered Smash hits the smasher for this much of its own force.
-const COUNTER_RETURN := 1.0
+## How much of a hit a Smash lands on a Guard or a Ward.
+const BROKEN_HIT := 1.5
+## How much a Guard or a Ward takes off when nobody says otherwise.
+const USUAL_BLOCK := 0.5
 
-## The chance to dodge, plus this much per point of speed over the attacker.
-const DODGE_BASE := 0.3
-const DODGE_PER_SPEED := 0.03
-const DODGE_MIN := 0.1
-const DODGE_MAX := 0.7
-## A Smash is slow, so it is this much easier to dodge.
-const DODGE_SMASH_BONUS := 0.15
+## The moves anyone has with no weapon and no armor.
+const BARE_ATTACK := "punch"
+const BARE_GUARD := "brace"
 
 ## The chance to flee, plus this much per point of speed over the enemy.
 const FLEE_BASE := 0.5
@@ -58,15 +53,33 @@ const KO_GOLD_SHARE := 0.25
 
 ## Below this share of HP, a monster or an Easy CPU player tries to heal.
 const CPU_HEAL_BELOW := 0.35
-## How often an Easy CPU player picks each move. Monsters use their own habits, and
+## How often an Easy CPU player picks each category. Monsters use their own habits, and
 ## CpuBrain assumes that anyone it has not seen fight has these habits too.
-const CPU_OFFENSE := {"attack": 5, "smash": 2, "spell": 3}
-const CPU_DEFENSE := {"guard": 4, "dodge": 2, "counter": 3}
-const OFFENSE_NAMES := {"attack": Offense.ATTACK, "smash": Offense.SMASH, "spell": Offense.SPELL}
-const DEFENSE_NAMES := {"guard": Defense.GUARD, "dodge": Defense.DODGE, "counter": Defense.COUNTER}
+const CPU_OFFENSE := {"attack": 5, "smash": 2, "magic": 3}
+const CPU_DEFENSE := {"guard": 4, "counter": 3, "ward": 2}
+const OFFENSE_NAMES := {
+	"attack": Offense.ATTACK, "smash": Offense.SMASH, "magic": Offense.MAGIC, "special": Offense.SPECIAL,
+}
+const DEFENSE_NAMES := {"guard": Defense.GUARD, "counter": Defense.COUNTER, "ward": Defense.WARD}
+## A habit's name -> the category of move it needs.
+const CATEGORY_NAMES := {
+	"attack": MoveData.Category.ATTACK, "smash": MoveData.Category.SMASH,
+	"magic": MoveData.Category.MAGIC, "special": MoveData.Category.SPECIAL,
+	"guard": MoveData.Category.GUARD, "counter": MoveData.Category.COUNTER,
+	"ward": MoveData.Category.WARD,
+}
+const OFFENSE_CATEGORIES := {
+	Offense.ATTACK: MoveData.Category.ATTACK, Offense.SMASH: MoveData.Category.SMASH,
+	Offense.MAGIC: MoveData.Category.MAGIC, Offense.SPECIAL: MoveData.Category.SPECIAL,
+}
+const DEFENSE_CATEGORIES := {
+	Defense.GUARD: MoveData.Category.GUARD, Defense.COUNTER: MoveData.Category.COUNTER,
+	Defense.WARD: MoveData.Category.WARD,
+}
 
 
-## An offense, and the id of the spell or item when it uses one.
+## An offense, and the id of the move or item it uses. With no id, an offense uses the
+## first move of its category.
 class Choice:
 	var offense: Offense
 	var id: String
@@ -82,7 +95,10 @@ class Outcome:
 	var defender: Fighter
 	var offense: Offense
 	var defense: Defense
-	var spell: SpellData
+	## The move the attacker used, or null for an item or fleeing.
+	var move: MoveData
+	## The move the defender answered with, or null if there was no answer.
+	var answer: MoveData
 	## Damage to the defender.
 	var damage := 0
 	## Damage to the attacker from a Counter.
@@ -90,7 +106,6 @@ class Outcome:
 	## HP or MP the attacker gained.
 	var healed := 0
 	var mana_restored := 0
-	var dodged := false
 	var fled := false
 	## The sentence that announces the move.
 	var opening := ""
@@ -140,22 +155,21 @@ func is_over() -> bool:
 	return ending != Ending.NONE
 
 
-## True when `choice` is aimed at the enemy, so the enemy gets to defend.
+## True when the defender gets to answer an offense of this kind.
 func needs_defense(choice: Choice) -> bool:
-	match choice.offense:
-		Offense.ATTACK, Offense.SMASH:
-			return true
-		Offense.SPELL:
-			return Database.get_spell(choice.id).kind == SpellData.Kind.ATTACK
-	return false
+	return choice.offense in [Offense.ATTACK, Offense.SMASH, Offense.MAGIC]
 
 
-## The chance that `dodger` avoids `offense` from `striker`.
-func dodge_chance(dodger: Fighter, striker: Fighter, offense: Offense) -> float:
-	var chance := DODGE_BASE + DODGE_PER_SPEED * (dodger.get_stat("speed") - striker.get_stat("speed"))
-	if offense == Offense.SMASH:
-		chance += DODGE_SMASH_BONUS
-	return clampf(chance, DODGE_MIN, DODGE_MAX)
+## How much of a hit lands when `offense` meets `defense`, with `block` being what the
+## defender's move takes off when it answers that hit. A countered Smash lands nothing.
+static func hit_share(offense: Offense, defense: Defense, block := USUAL_BLOCK) -> float:
+	if offense == Offense.SMASH and defense == Defense.COUNTER:
+		return 0.0
+	if offense == Offense.SMASH and defense != Defense.NONE:
+		return BROKEN_HIT
+	if (offense == Offense.ATTACK and defense == Defense.GUARD) or (offense == Offense.MAGIC and defense == Defense.WARD):
+		return 1.0 - block
+	return 1.0
 
 
 ## The chance that `runner` gets away from `enemy`.
@@ -164,37 +178,55 @@ func flee_chance(runner: Fighter, enemy: Fighter) -> float:
 	return clampf(chance, FLEE_MIN, FLEE_MAX)
 
 
-func can_cast(fighter: Fighter, spell_id: String) -> bool:
-	var spell := Database.get_spell(spell_id)
-	if fighter.mp < spell.mp_cost:
+## True if `fighter` could use `move_id` right now.
+func can_use(fighter: Fighter, move_id: String) -> bool:
+	var move := Database.get_move(move_id)
+	if fighter.mp < move.mp_cost or fighter.specials_used.has(move_id):
 		return false
-	return spell.kind == SpellData.Kind.ATTACK or fighter.hp < fighter.get_stat("max_hp")
+	return move.effect != MoveData.Effect.HEAL or fighter.hp < fighter.get_stat("max_hp")
 
 
-## Plays the attacker's action and passes play to the other fighter.
-func resolve(choice: Choice, defense := Defense.NONE) -> Outcome:
+## The moves `fighter` could use right now in `category`.
+func usable_moves(fighter: Fighter, category: MoveData.Category) -> Array[String]:
+	return fighter.moves_in(category).filter(func(id: String) -> bool: return can_use(fighter, id))
+
+
+## The defenses `fighter` has a move for.
+func usable_defenses(fighter: Fighter) -> Array[Defense]:
+	var found: Array[Defense] = []
+	for defense: Defense in DEFENSE_CATEGORIES:
+		if not fighter.moves_in(DEFENSE_CATEGORIES[defense]).is_empty():
+			found.append(defense)
+	return found
+
+
+## Plays the attacker's action and passes play to the other fighter. `answer_id` is the move
+## the defender answers with. With none, they use the first of its category.
+func resolve(choice: Choice, defense := Defense.NONE, answer_id := "") -> Outcome:
 	var outcome := Outcome.new()
 	outcome.attacker = attacker
 	outcome.defender = defender
 	outcome.offense = choice.offense
 	outcome.defense = defense
+	outcome.move = _move_of(attacker, choice)
+	outcome.answer = _answer_of(defender, defense, answer_id)
 	if needs_defense(choice):
 		_remember(seen_offenses, attacker, choice.offense)
 		_remember(seen_defenses, defender, defense)
 	match choice.offense:
-		Offense.ATTACK:
-			outcome.opening = "%s attacks!" % attacker.display_name
-			_strike(outcome, _physical_force())
-		Offense.SMASH:
-			outcome.opening = "%s winds up a Smash!" % attacker.display_name
-			_strike(outcome, _physical_force())
-		Offense.SPELL:
-			_cast(outcome, Database.get_spell(choice.id))
+		Offense.ATTACK, Offense.SMASH:
+			outcome.opening = "%s uses %s!" % [attacker.display_name, outcome.move.display_name]
+			_strike(outcome, _physical_force() * outcome.move.power)
+		Offense.MAGIC:
+			_cast(outcome)
+		Offense.SPECIAL:
+			_use_special(outcome)
 		Offense.ITEM:
 			_use_item(outcome, choice.id)
 		Offense.FLEE:
 			_try_to_flee(outcome)
 
+	outcome.attacker.tick_boosts()
 	if not is_over():
 		_pass_play()
 	return outcome
@@ -229,12 +261,11 @@ func cpu_offense() -> Choice:
 		return healing
 	var weights: Dictionary = fighter.monster.offense_weights if fighter.monster != null else CPU_OFFENSE
 	var offense: Offense = OFFENSE_NAMES[_weighted_pick(weights)]
-	if offense == Offense.SPELL:
-		var spell_id := _cpu_attack_spell(fighter)
-		if spell_id != "":
-			return Choice.new(Offense.SPELL, spell_id)
+	var options := usable_moves(fighter, OFFENSE_CATEGORIES[offense])
+	if options.is_empty():
 		offense = Offense.ATTACK
-	return Choice.new(offense)
+		options = fighter.moves_in(MoveData.Category.ATTACK)
+	return Choice.new(offense, options[GameState.rng.randi_range(0, options.size() - 1)])
 
 
 ## Picks the defender's answer for a monster or CPU player.
@@ -243,7 +274,8 @@ func cpu_defense() -> Defense:
 	if _thinks(fighter):
 		return CpuBrain.defense(self)
 	var weights: Dictionary = fighter.monster.defense_weights if fighter.monster != null else CPU_DEFENSE
-	return DEFENSE_NAMES[_weighted_pick(weights)]
+	var defense: Defense = DEFENSE_NAMES[_weighted_pick(weights)]
+	return defense if usable_defenses(fighter).has(defense) else Defense.GUARD
 
 
 func _thinks(fighter: Fighter) -> bool:
@@ -262,42 +294,81 @@ func _physical_force() -> float:
 	return attacker.get_stat("attack") - defender.get_stat("defense") * DEFENSE_FACTOR
 
 
-# Applies a hit of `force`, before any multiplier, to the defender.
-func _strike(outcome: Outcome, force: float) -> void:
-	if outcome.defense == Defense.DODGE:
-		if GameState.rng.randf() < dodge_chance(defender, attacker, outcome.offense):
-			outcome.dodged = true
-			outcome.result = "%s dodges!" % defender.display_name
-			return
+# The move `choice` means, or null for an item or fleeing.
+func _move_of(fighter: Fighter, choice: Choice) -> MoveData:
+	if not OFFENSE_CATEGORIES.has(choice.offense):
+		return null
+	if choice.id != "":
+		return Database.get_move(choice.id)
+	var moves := fighter.moves_in(OFFENSE_CATEGORIES[choice.offense])
+	return Database.get_move(moves[0] if not moves.is_empty() else BARE_ATTACK)
 
+
+# The move that answers, or null if the fighter gave no defense or has none of that kind.
+func _answer_of(fighter: Fighter, defense: Defense, answer_id: String) -> MoveData:
+	if answer_id != "":
+		return Database.get_move(answer_id)
+	if defense == Defense.NONE:
+		return null
+	var moves := fighter.moves_in(DEFENSE_CATEGORIES[defense])
+	return null if moves.is_empty() else Database.get_move(moves[0])
+
+
+# Applies a hit of `force`, before the defense counts, to the defender.
+func _strike(outcome: Outcome, force: float) -> void:
+	var answer_power := 1.0 if outcome.answer == null else outcome.answer.power
 	if outcome.offense == Offense.SMASH and outcome.defense == Defense.COUNTER:
-		outcome.reflected = _roll(force * COUNTER_RETURN)
+		outcome.reflected = _roll(force * answer_power)
 		attacker.hp -= outcome.reflected
 		outcome.result = "Countered! %s takes %d." % [attacker.display_name, outcome.reflected]
 		if attacker.hp == 0:
 			_end_by_knockout(defender, attacker)
 		return
 
-	var table: Dictionary = DAMAGE_TABLE[outcome.offense]
-	outcome.damage = _roll(force * table.get(outcome.defense, 1.0))
+	outcome.damage = _roll(force * hit_share(outcome.offense, outcome.defense, answer_power))
 	defender.hp -= outcome.damage
-	outcome.result = "%s takes %d." % [defender.display_name, outcome.damage]
+	outcome.result = _hit_words(outcome)
 	if defender.hp == 0:
 		_end_by_knockout(attacker, defender)
 
 
-func _cast(outcome: Outcome, spell: SpellData) -> void:
-	outcome.spell = spell
-	outcome.opening = "%s casts %s!" % [attacker.display_name, spell.display_name]
-	attacker.mp -= spell.mp_cost
-	var total := attacker.get_stat("magic") + spell.power
-	if spell.kind == SpellData.Kind.HEAL:
-		var before := attacker.hp
-		attacker.hp += _roll(total)
-		outcome.healed = attacker.hp - before
-		outcome.result = "%s recovers %d HP." % [attacker.display_name, outcome.healed]
-	else:
-		_strike(outcome, total - defender.get_stat("defense") * DEFENSE_FACTOR)
+# What the defense did, in words, so that a player learns the table by reading it.
+func _hit_words(outcome: Outcome) -> String:
+	var who := defender.display_name
+	var share := hit_share(outcome.offense, outcome.defense)
+	if outcome.defense == Defense.NONE:
+		return "%s takes %d." % [who, outcome.damage]
+	var defense_word := "Guard" if outcome.defense == Defense.GUARD else ("Ward" if outcome.defense == Defense.WARD else "Counter")
+	if share > 1.0:
+		return "The %s breaks! %s takes %d." % [defense_word, who, outcome.damage]
+	if share < 1.0:
+		return "%s holds with %s, and takes %d." % [who, outcome.answer.display_name if outcome.answer != null else defense_word, outcome.damage]
+	return "The %s does nothing. %s takes %d." % [defense_word, who, outcome.damage]
+
+
+func _cast(outcome: Outcome) -> void:
+	var move := outcome.move
+	outcome.opening = "%s casts %s!" % [attacker.display_name, move.display_name]
+	attacker.mp -= move.mp_cost
+	_strike(outcome, attacker.get_stat("magic") + move.power - defender.get_stat("defense") * DEFENSE_FACTOR)
+
+
+func _use_special(outcome: Outcome) -> void:
+	var move := outcome.move
+	outcome.opening = "%s uses %s!" % [attacker.display_name, move.display_name]
+	attacker.specials_used.append(move.id)
+	match move.effect:
+		MoveData.Effect.HEAL:
+			var before := attacker.hp
+			attacker.hp += _roll(attacker.get_stat("magic") + move.power)
+			outcome.healed = attacker.hp - before
+			outcome.result = "%s recovers %d HP." % [attacker.display_name, outcome.healed]
+		MoveData.Effect.BOOST:
+			attacker.add_boost(move.boost_stat, move.power, move.boost_turns)
+			outcome.result = "%s up by %d%%, for %d turns." % [ItemData.STAT_NAMES[move.boost_stat],
+					roundi(move.power * 100.0), move.boost_turns]
+		_:
+			_strike(outcome, _physical_force() * move.power)
 
 
 func _use_item(outcome: Outcome, item_id: String) -> void:
@@ -409,21 +480,10 @@ func _cpu_healing_choice(fighter: Fighter) -> Choice:
 	for item_id in fighter.get_items():
 		if Database.get_item(item_id).heal_hp > 0:
 			return Choice.new(Offense.ITEM, item_id)
-	for spell_id in fighter.get_spells():
-		if Database.get_spell(spell_id).kind == SpellData.Kind.HEAL and can_cast(fighter, spell_id):
-			return Choice.new(Offense.SPELL, spell_id)
+	for move_id in usable_moves(fighter, MoveData.Category.SPECIAL):
+		if Database.get_move(move_id).effect == MoveData.Effect.HEAL:
+			return Choice.new(Offense.SPECIAL, move_id)
 	return null
-
-
-# Returns "" when it cannot afford any attack spell.
-func _cpu_attack_spell(fighter: Fighter) -> String:
-	var options: Array[String] = []
-	for spell_id in fighter.get_spells():
-		if Database.get_spell(spell_id).kind == SpellData.Kind.ATTACK and can_cast(fighter, spell_id):
-			options.append(spell_id)
-	if options.is_empty():
-		return ""
-	return options[GameState.rng.randi_range(0, options.size() - 1)]
 
 
 # Picks a key at random, in proportion to its value. The keys are sorted so a

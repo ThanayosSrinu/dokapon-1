@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ItemData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tome_smite"
+display_name = "Smite Tome"
+description = "Read it once and Smite is yours for good."
+kind = 4
+price = 260
+icon = 20
+teaches = "smite"

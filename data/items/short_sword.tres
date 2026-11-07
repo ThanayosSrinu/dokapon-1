@@ -12,3 +12,4 @@ price = 120
 bonuses = Dictionary[String, int]({
 "attack": 3
 })
+moves = Array[String](["slash", "cleave"])

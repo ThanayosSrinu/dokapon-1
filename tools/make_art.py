@@ -673,6 +673,15 @@ def icon_drop():
     return with_outline(image)
 
 
+def icon_tome(cover, band):
+    image, draw = icon_canvas()
+    draw.rectangle((3, 2, 12, 13), fill=cover, outline=hexc("#2a1f3d"))
+    draw.rectangle((4, 13, 12, 14), fill=hexc("#efe6cf"), outline=hexc("#2a1f3d"))
+    draw.rectangle((5, 4, 10, 5), fill=band)
+    draw.rectangle((7, 8, 8, 10), fill=band)
+    return image
+
+
 def make_items():
     """One picture per item. ItemData.icon counts along this row from 0."""
     steel, iron = hexc("#c6cbd8"), hexc("#8d93b0")
@@ -698,6 +707,8 @@ def make_items():
         icon_flask(hexc("#f0c23f"), big=True),
         icon_drop(),
         icon_flask(hexc("#4c8fe6"), big=True),
+        icon_tome(hexc("#3f62c8"), hexc("#a9d0f5")),
+        icon_tome(hexc("#b8413f"), hexc("#f0d890")),
     ]
     sheet = Image.new("RGBA", (ITEM_CELL * len(icons), ITEM_CELL), (0, 0, 0, 0))
     for index, icon in enumerate(icons):

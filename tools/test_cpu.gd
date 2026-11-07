@@ -109,6 +109,7 @@ func _test_battle_choices() -> void:
 
 	hero.inventory.clear()
 	hero.spells.clear()
+	hero.learned.clear()
 	foe.level = 20
 	foe.heal_fully()
 	battle = _battle_between(hero, foe)

@@ -54,8 +54,13 @@ var inventory: Array[String] = []
 var bag_size := INVENTORY_SIZE
 ## ItemData.Kind -> the id of the item worn in that slot. A slot may be missing.
 var equipment := {}
-## The ids of the spells this player knows.
+## The ids of the spells this player knows, for the old board game. A fight uses `learned`.
 var spells: Array[String] = []
+## The ids of the Magic and Special moves this player knows. See MoveData.MOST_LEARNED.
+var learned: Array[String] = []
+## True in the old board game, where a class teaches spells as it levels up. On a trip,
+## moves only come from tomes.
+var learns_by_level := true
 ## Turns left to sit out, after a knockout or a snare.
 var turns_to_skip := 0
 ## How much of this week's royal quest this player has done.
@@ -96,6 +101,7 @@ func to_save() -> Dictionary:
 		"inventory": inventory.duplicate(),
 		"equipment": equipment.duplicate(),
 		"spells": spells.duplicate(),
+		"learned": learned.duplicate(),
 		"turns_to_skip": turns_to_skip,
 		"quest_progress": quest_progress,
 		"roll_bonus": roll_bonus,
@@ -117,6 +123,7 @@ static func from_save(saved: Dictionary) -> PlayerData:
 	player.inventory.assign(saved["inventory"])
 	player.equipment = saved["equipment"].duplicate()
 	player.spells.assign(saved["spells"])
+	player.learned.assign(saved.get("learned", []))
 	player.turns_to_skip = saved["turns_to_skip"]
 	player.quest_progress = saved["quest_progress"]
 	player.roll_bonus = saved["roll_bonus"]
@@ -136,6 +143,7 @@ func choose_class(id: String) -> void:
 	for item_id in data.starting_equipment:
 		equipment[Database.get_item(item_id).kind] = item_id
 	spells.clear()
+	learned = data.starting_moves.duplicate()
 	_learn_spells()
 	hp = get_stat("max_hp")
 	mp = get_stat("max_mp")
@@ -316,10 +324,48 @@ func learn_spell(spell_id: String) -> void:
 		changed.emit()
 
 
+## The ids of the moves they can use in `category`. Attack and Smash come from the weapon,
+## Guard, Counter and Ward from the armor, and Magic and Special are learned.
+func moves_in(category: MoveData.Category) -> Array[String]:
+	var from: Array[String] = learned
+	if MoveData.WEAPON_CATEGORIES.has(category):
+		from = _worn_moves(ItemData.Kind.WEAPON)
+	elif MoveData.ARMOR_CATEGORIES.has(category):
+		from = _worn_moves(ItemData.Kind.ARMOR)
+	return from.filter(func(id: String) -> bool: return Database.get_move(id).category == category)
+
+
+## True if `move_id`, a move that is learned, has a free slot.
+func has_room_for(move_id: String) -> bool:
+	var category := Database.get_move(move_id).category
+	return moves_in(category).size() < MoveData.MOST_LEARNED[category]
+
+
+## Learns `move_id`. With its category full, name a move to forget in `forgotten`. Returns
+## false if nothing changed.
+func learn_move(move_id: String, forgotten := "") -> bool:
+	if learned.has(move_id) or (forgotten == "" and not has_room_for(move_id)):
+		return false
+	learned.erase(forgotten)
+	learned.append(move_id)
+	changed.emit()
+	return true
+
+
+## Reads a tome from the bag. See learn_move().
+func read_tome(item_id: String, forgotten := "") -> bool:
+	var item := Database.get_item(item_id)
+	if not inventory.has(item_id) or item.kind != ItemData.Kind.TOME or not learn_move(item.teaches, forgotten):
+		return false
+	inventory.erase(item_id)
+	changed.emit()
+	return true
+
+
 ## Wears an item from the bag. What it replaces goes back into the bag.
 func equip(item_id: String) -> bool:
 	var item := Database.get_item(item_id)
-	if not inventory.has(item_id) or item.kind == ItemData.Kind.CONSUMABLE:
+	if not inventory.has(item_id) or not item.is_gear():
 		return false
 	inventory.erase(item_id)
 	if equipment.has(item.kind):
@@ -341,12 +387,20 @@ func unequip(slot: ItemData.Kind) -> bool:
 	return true
 
 
+func _worn_moves(slot: ItemData.Kind) -> Array[String]:
+	return Database.get_item(equipment[slot]).moves if equipment.has(slot) else ([] as Array[String])
+
+
 func _learn_spells() -> void:
+	if not learns_by_level:
+		return
 	var spells_by_level := Database.get_class_data(class_id).spells_by_level
 	for learned_at: int in spells_by_level:
 		var spell_id: String = spells_by_level[learned_at]
 		if learned_at <= level and not spells.has(spell_id):
 			spells.append(spell_id)
+			if Database.get_move(spell_id) != null and not learned.has(spell_id):
+				learned.append(spell_id)
 
 
 # Removing a Life Pendant lowers max HP, so current HP must follow it.

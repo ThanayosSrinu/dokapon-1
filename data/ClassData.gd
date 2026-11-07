@@ -18,5 +18,8 @@ extends Resource
 @export var starting_items: Array[String] = []
 ## Item ids worn at the start, one per equipment slot at most.
 @export var starting_equipment: Array[String] = []
-## Level -> spell id learned on reaching it. Level 1 spells are known at the start.
+## The ids of the Magic and Special moves they know from the start.
+@export var starting_moves: Array[String] = []
+## Level -> spell id learned on reaching it, for the old board game only. Level 1 spells
+## are known at the start. On a trip, moves are only learned from tomes.
 @export var spells_by_level: Dictionary[int, String] = {}

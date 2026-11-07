@@ -6,6 +6,9 @@ extends VBoxContainer
 ## it stays on that item while the mouse is in the column, and a pressed item stays
 ## there even if the mouse crosses other tiles on the way.
 
+## A tome wants reading, but that kind of move is full.
+signal wants_to_forget(item_id: String)
+
 const WIDTH := 264.0
 const GAP := 8
 const PANEL_MARGIN := 14.0
@@ -20,6 +23,7 @@ const SLOT_WORDS := {ItemData.Kind.WEAPON: "Weapon", ItemData.Kind.ARMOR: "Armor
 		ItemData.Kind.ACCESSORY: "Accessory"}
 const FULL_HINT := "They don't need this yet."
 const FIGHT_HINT := "Not during a fight."
+const KNOWN_HINT := "They know this already."
 
 ## One per entry of SLOTS.
 var slots: Array[BagTile] = []
@@ -250,7 +254,14 @@ func _on_action() -> void:
 	if locked or item_id == "":
 		return
 	var at := _picked_at if _picked != "" else _trip.player.inventory.find(item_id)
-	if Database.get_item(item_id).kind == ItemData.Kind.CONSUMABLE:
+	var item := Database.get_item(item_id)
+	if item.kind == ItemData.Kind.TOME:
+		if not _trip.player.has_room_for(item.teaches):
+			wants_to_forget.emit(item_id)
+			return
+		if _trip.read_by_hand(item_id):
+			Sound.play("heal")
+	elif item.kind == ItemData.Kind.CONSUMABLE:
 		if _trip.use_by_hand(item_id):
 			Sound.play("heal")
 	elif _trip.wear_by_hand(item_id):
@@ -291,10 +302,19 @@ func _show_detail() -> void:
 func _show_item(item: ItemData) -> void:
 	var player := _trip.player
 	var lines := PackedStringArray([item.effect_text(), item.description])
+	if item.moves_text() != "":
+		lines.insert(1, item.moves_text())
 	if not player.inventory.has(item.id) or _worn(item):
 		_show_words(item.display_name, "\n".join(lines), "")
 		return
-	if item.kind != ItemData.Kind.CONSUMABLE:
+	if item.kind == ItemData.Kind.TOME:
+		var known := player.learned.has(item.teaches)
+		_show_words(item.display_name, "\n".join(lines), FIGHT_HINT if locked else (KNOWN_HINT if known else ""))
+		action.text = "Read"
+		action.disabled = known
+		action.visible = not locked
+		return
+	if item.is_gear():
 		lines.append_array(_changes(item))
 		_show_words(item.display_name, "\n".join(lines), FIGHT_HINT if locked else "")
 		action.text = "Wear"

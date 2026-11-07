@@ -14,3 +14,4 @@ bonuses = Dictionary[String, int]({
 "attack": 2,
 "magic": 7
 })
+moves = Array[String](["bonk", "crack"])

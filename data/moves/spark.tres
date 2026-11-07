@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MoveData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "spark"
+display_name = "Spark"
+description = "A snapping jolt of energy."
+category = 2
+power = 6.0
+mp_cost = 3

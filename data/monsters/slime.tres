@@ -20,14 +20,14 @@ stats = Dictionary[String, int]({
 "max_mp": 1,
 "speed": 4
 })
-spells = Array[String]([])
+moves = Array[String](["tackle", "body_slam", "block", "riposte", "ward_off"])
 offense_weights = Dictionary[String, int]({
 "attack": 8,
 "smash": 2
 })
 defense_weights = Dictionary[String, int]({
 "guard": 5,
-"dodge": 2,
+"ward": 2,
 "counter": 1
 })
 exp_reward = 30

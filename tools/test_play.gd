@@ -35,6 +35,8 @@ func _ready() -> void:
 	await _test_map()
 	await _test_warnings()
 	await _test_fights_by_hand()
+	await _test_picking_a_move()
+	await _test_reading_a_tome()
 	await _test_full_bag()
 	await _test_leaving()
 	await _test_report_screen()
@@ -527,6 +529,89 @@ func _test_warnings() -> void:
 	await _leave()
 
 
+# The second step of the menu: a category of several moves asks which, and Esc steps back.
+func _test_picking_a_move() -> void:
+	var bram := Database.get_adventurer("bram")
+	var grass := Database.get_stage(TownData.FIRST_STAGE)
+	_hire(bram)
+	var screen := await _open_trip(_seed_for(bram, grass, Expedition.Ending.BEATEN), TEST_SPEED)
+	var wide: ItemData = Database.get_item("iron_sword").duplicate()
+	wide.id = "test_wide"
+	wide.moves = ["slash", "stab", "cleave"]
+	Database.items["test_wide"] = wide
+	screen.trip.player.equipment[ItemData.Kind.WEAPON] = "test_wide"
+	screen.trip.player.equipment.erase(ItemData.Kind.ARMOR)
+	screen.trip.player.hp = 400
+	while not screen.battle_screen.visible:
+		await _make_a_choice(screen, Hand.KEYS)
+		await get_tree().process_frame
+	var battle := screen.battle_screen
+	var row: Container = battle._choices
+	# Wait for the player's own turn, answering Guard if the monster goes first.
+	while row.get_child_count() == 0 or row.get_child(0).text != "Attack":
+		if row.get_child_count() > 0:
+			_expect(row.get_child(1).disabled and row.get_child(2).disabled, "with no armor, only Guard can answer")
+			row.get_child(0).pressed.emit()
+		await get_tree().process_frame
+	await get_tree().process_frame
+	row.get_child(0).pressed.emit()
+	await get_tree().process_frame
+	var words := []
+	for button: Button in row.get_children():
+		words.append(button.text)
+	_expect(words == ["Slash", "Stab", "Back"], "a category of two moves asks which")
+	await _tap("ui_cancel")
+	await get_tree().process_frame
+	_expect(row.get_child(0).text == "Attack", "Esc steps back to the categories")
+	_expect(not screen.leave_panel.visible, "and doesn't open the way out")
+	row.get_child(1).pressed.emit()
+	await get_tree().process_frame
+	_expect(row.get_child_count() == 0, "a category of one move asks nothing more")
+	Database.items.erase("test_wide")
+	await _leave()
+
+
+# A tome is read from the bag, and with no room the player says what to forget.
+func _test_reading_a_tome() -> void:
+	var bram := Database.get_adventurer("bram")
+	var grass := Database.get_stage(TownData.FIRST_STAGE)
+	_hire(bram)
+	var screen := await _open_trip(_seed_for(bram, grass, Expedition.Ending.BEATEN), TEST_SPEED)
+	while not screen.roll_button.visible:
+		await get_tree().process_frame
+	var player := screen.trip.player
+	var bag := screen.bag_panel
+	player.inventory.clear()
+	player.add_item("tome_spark")
+	player.add_item("tome_mend")
+	player.learned.assign(["rally", "focus"])
+	await get_tree().process_frame
+	bag._on_tile_pressed(0)
+	_expect(bag.action.visible and bag.action.text == "Read", "a tome offers Read")
+	bag._on_action()
+	_expect(player.learned.has("spark") and player.inventory == ["tome_mend"], "a free slot learns it at once")
+	await get_tree().process_frame
+	bag._on_tile_pressed(0)
+	bag._on_action()
+	await get_tree().process_frame
+	_expect(screen.learn_prompt.visible, "a full category asks what to forget")
+	_expect(bag.locked, "and the bag waits")
+	var buttons := screen.learn_prompt.get_buttons()
+	_expect(buttons.size() == 3, "both moves, and a way to keep them")
+	buttons[0].pressed.emit()
+	await get_tree().process_frame
+	_expect(not screen.learn_prompt.visible and player.inventory == ["tome_mend"], "keeping them keeps the tome")
+	_expect(screen.roll_button.has_focus(), "and focus goes back to the day")
+	bag._on_tile_pressed(0)
+	bag._on_action()
+	await get_tree().process_frame
+	screen.learn_prompt.get_buttons()[1].pressed.emit()
+	await get_tree().process_frame
+	_expect(player.learned.has("mend") and not player.learned.has("rally"), "a move forgotten makes room")
+	_expect(player.inventory.is_empty(), "and the tome is gone")
+	await _leave()
+
+
 func _test_fights_by_hand() -> void:
 	var bram := Database.get_adventurer("bram")
 	var grass := Database.get_stage(TownData.FIRST_STAGE)
@@ -545,15 +630,17 @@ func _test_fights_by_hand() -> void:
 	_expect(not screen.map_button.visible, "the Map stays out of a fight")
 	_expect(screen.bag_panel.locked, "and the bag stays shut")
 	var first: Button = row.get_child(0)
+	_expect(row.get_child(1).disabled, "with bare hands, Smash can't be picked")
 	_expect(_focused() == first, "the first move has focus")
 	await _tap("ui_up")
 	await _tap("ui_down")
 	await _tap("ui_left")
 	_expect(_focused() == first, "and focus stays on the row")
 	var options := []
-	for button: Button in row.get_children():
-		options.append(button.text)
-	_expect(options == ["Attack", "Smash", "Magic", "Item", "Flee"], "the row has the moves and nothing else")
+	for button in row.get_children():
+		if button is Button:
+			options.append(button.text)
+	_expect(options == ["Attack", "Smash", "Magic", "Special", "Item", "Flee"], "the row has the moves and nothing else")
 	while screen.battle_screen.visible:
 		if row.get_child_count() > 0:
 			await get_tree().process_frame

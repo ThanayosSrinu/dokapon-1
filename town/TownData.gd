@@ -228,6 +228,7 @@ func bring_home(trip: Expedition) -> void:
 	gold += trip.gold_home()
 	day += trip.day
 	one.trips += 1
+	one.keep(trip.player)
 	if trip.ending == Expedition.Ending.HOME:
 		one.trips_home += 1
 		one.gold_home += trip.gold_home()

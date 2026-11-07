@@ -142,7 +142,8 @@ func show_food(amount: int, carry: int, afford: int, cost: int, gold: int, warni
 
 
 ## Shows who is going. With nobody, it says where to find someone instead.
-func show_person(person: Adventurer) -> void:
+## Shows who is going. `level` is theirs now, which trips may have raised.
+func show_person(person: Adventurer, level := 1) -> void:
 	_portrait.visible = person != null
 	if person == null:
 		_person.text = "Nobody yet"
@@ -151,7 +152,7 @@ func show_person(person: Adventurer) -> void:
 		return
 	_portrait.texture = person.portrait
 	_person.text = person.display_name
-	_class.text = "%s, level %d" % [person.class_data().display_name, person.level]
+	_class.text = "%s, level %d" % [person.class_data().display_name, level]
 	_die.text = "Walks up to %d spaces a day" % person.die_top
 
 

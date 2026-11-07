@@ -150,7 +150,7 @@ func _build_people(town: TownData) -> void:
 ## Makes the card show the trip the town has chosen.
 func _show_trip(town: TownData) -> void:
 	card.show_stage(town.stage)
-	card.show_person(town.going)
+	card.show_person(town.going, 1 if town.going == null else town.member(town.going).level)
 	card.mark_size(_sizes.find(town.stage))
 	card.mark_person(_people.find(town.going))
 	_show_food(town)

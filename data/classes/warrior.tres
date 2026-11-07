@@ -25,7 +25,8 @@ growth = Dictionary[String, int]({
 })
 starting_gold = 200
 starting_items = Array[String](["herb"])
-starting_equipment = Array[String](["short_sword"])
+starting_equipment = Array[String](["short_sword", "leather_vest"])
 spells_by_level = Dictionary[int, String]({
 5: "spark"
 })
+starting_moves = Array[String](["rally"])

@@ -38,8 +38,13 @@ var mp: int:
 		else:
 			_mp = clamped
 
+## The Specials already used in this fight. A Special works once per fight.
+var specials_used: Array[String] = []
+
 var _hp := 0
 var _mp := 0
+# What a Boost raised, as {"stat", "share", "turns"}, with its own turns left.
+var _boosts: Array[Dictionary] = []
 
 
 static func from_player(source: PlayerData) -> Fighter:
@@ -64,7 +69,32 @@ static func from_monster(source: MonsterData) -> Fighter:
 
 
 func get_stat(stat: String) -> int:
-	return ShadowCrown.boost(player, stat, player.get_stat(stat)) if player != null else monster.stats[stat]
+	var value: int = ShadowCrown.boost(player, stat, player.get_stat(stat)) if player != null else monster.stats[stat]
+	var share := 1.0
+	for boost in _boosts:
+		if boost["stat"] == stat:
+			share += boost["share"]
+	return ceili(value * share) if share > 1.0 else value
+
+
+## Raises `stat` by `share` for `turns` of this fighter's own turns, counted from the next
+## one. Using the same boost again starts it over.
+func add_boost(stat: String, share: float, turns: int) -> void:
+	_boosts = _boosts.filter(func(boost: Dictionary) -> bool: return boost["stat"] != stat)
+	# The turn it was used on is counted off too.
+	_boosts.append({"stat": stat, "share": share, "turns": turns + 1})
+
+
+## Counts one of this fighter's own turns.
+func tick_boosts() -> void:
+	for boost in _boosts:
+		boost["turns"] -= 1
+	_boosts = _boosts.filter(func(boost: Dictionary) -> bool: return boost["turns"] > 0)
+
+
+## What is raised right now, as {"stat", "share", "turns"}.
+func boosts() -> Array[Dictionary]:
+	return _boosts
 
 
 ## True when nobody chooses this fighter's moves on screen.
@@ -72,12 +102,16 @@ func is_cpu() -> bool:
 	return player == null or player.is_cpu
 
 
-## The spells usable in battle. Field magic is for the board.
-func get_spells() -> Array[String]:
-	if player == null:
-		return monster.spells
-	return player.spells.filter(func(id: String) -> bool:
-			return Database.get_spell(id).kind != SpellData.Kind.FIELD)
+## The ids of the moves this fighter has in `category`. With no weapon or armor, there is
+## still Punch and Brace.
+func moves_in(category: MoveData.Category) -> Array[String]:
+	var found: Array[String] = player.moves_in(category) if player != null else monster.moves.filter(
+			func(id: String) -> bool: return Database.get_move(id).category == category)
+	if found.is_empty() and category == MoveData.Category.ATTACK:
+		found.append(Battle.BARE_ATTACK)
+	elif found.is_empty() and category == MoveData.Category.GUARD:
+		found.append(Battle.BARE_GUARD)
+	return found
 
 
 ## The healing items in the bag, without repeats. Monsters carry none.

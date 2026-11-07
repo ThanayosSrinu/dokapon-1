@@ -44,7 +44,7 @@ const TURN_VALUE_PER_LEVEL := 25
 const PRIZE_FADE := 0.8
 ## How many steps away a prize can be and still be felt.
 const PRIZE_REACH := 12
-## Damage that lands, on average, once guards, dodges and counters are counted.
+## Damage that lands, on average, once guards, wards and counters are counted.
 const TYPICAL_HIT := 0.9
 ## How much of a healing item counts as extra HP, since using it costs an action.
 const HEAL_WORTH := 0.6
@@ -67,6 +67,8 @@ const HEAL_BELOW := 0.35
 ## On the board it heals below this share of HP, and refills MP below this.
 const TIDY_HEAL_BELOW := 0.6
 const TIDY_MANA_BELOW := 0.3
+## What a Special Boost is worth, in plain hits.
+const BOOST_WORTH := 2.0
 ## It runs from a fight it has less chance than this of winning.
 const FLEE_BELOW_ODDS := 0.25
 ## The worst hit it plans around, as a multiple of a plain hit.
@@ -151,13 +153,13 @@ static func _rounds_to_beat(striker: Fighter, target: Fighter) -> int:
 	for round_number in range(1, ROUND_LIMIT + 1):
 		var hit := _physical_force(striker, target)
 		var cost := 0
-		for id in striker.get_spells():
-			var spell := Database.get_spell(id)
-			if spell.kind == SpellData.Kind.ATTACK and spell.mp_cost <= mp:
-				var force := _spell_force(striker, target, spell)
+		for id in striker.moves_in(MoveData.Category.MAGIC):
+			var move := Database.get_move(id)
+			if move.mp_cost <= mp:
+				var force := _spell_force(striker, target, move)
 				if force > hit:
 					hit = force
-					cost = spell.mp_cost
+					cost = move.mp_cost
 		mp -= cost
 		left -= hit * TYPICAL_HIT
 		if left <= 0.0:
@@ -177,18 +179,18 @@ static func _physical_force(striker: Fighter, target: Fighter) -> float:
 	return maxf(striker.get_stat("attack") - target.get_stat("defense") * Battle.DEFENSE_FACTOR, 1.0)
 
 
-static func _spell_force(striker: Fighter, target: Fighter, spell: SpellData) -> float:
-	var total := striker.get_stat("magic") + spell.power
+static func _spell_force(striker: Fighter, target: Fighter, move: MoveData) -> float:
+	var total := striker.get_stat("magic") + move.power
 	return maxf(total - target.get_stat("defense") * Battle.DEFENSE_FACTOR, 1.0)
 
 
 # The hardest plain hit `striker` can throw at `target` right now.
 static func _strongest_hit(striker: Fighter, target: Fighter) -> float:
 	var hit := _physical_force(striker, target)
-	for id in striker.get_spells():
-		var spell := Database.get_spell(id)
-		if spell.kind == SpellData.Kind.ATTACK and spell.mp_cost <= striker.mp:
-			hit = maxf(hit, _spell_force(striker, target, spell))
+	for id in striker.moves_in(MoveData.Category.MAGIC):
+		var move := Database.get_move(id)
+		if move.mp_cost <= striker.mp:
+			hit = maxf(hit, _spell_force(striker, target, move))
 	return hit
 
 
@@ -204,18 +206,25 @@ static func offense(battle: Battle) -> Battle.Choice:
 	var weights: Array[float] = []
 	var best_hit := 0.0
 	for offense_kind: Battle.Offense in [Battle.Offense.ATTACK, Battle.Offense.SMASH]:
-		var force := _physical_force(me, foe)
-		var value := _move_value(battle, offense_kind, force, defenses)
-		moves.append(Battle.Choice.new(offense_kind))
-		weights.append(value)
-		best_hit = maxf(best_hit, value)
-	for id in me.get_spells():
-		var spell := Database.get_spell(id)
-		if spell.kind == SpellData.Kind.ATTACK and battle.can_cast(me, id):
-			var value := _move_value(battle, Battle.Offense.SPELL, _spell_force(me, foe, spell), defenses)
-			moves.append(Battle.Choice.new(Battle.Offense.SPELL, id))
+		for id in me.moves_in(Battle.OFFENSE_CATEGORIES[offense_kind]):
+			var force := _physical_force(me, foe) * Database.get_move(id).power
+			var value := _move_value(battle, offense_kind, force, defenses)
+			moves.append(Battle.Choice.new(offense_kind, id))
 			weights.append(value)
 			best_hit = maxf(best_hit, value)
+	for id in me.moves_in(MoveData.Category.MAGIC):
+		if battle.can_use(me, id):
+			var value := _move_value(battle, Battle.Offense.MAGIC, _spell_force(me, foe, Database.get_move(id)), defenses)
+			moves.append(Battle.Choice.new(Battle.Offense.MAGIC, id))
+			weights.append(value)
+			best_hit = maxf(best_hit, value)
+	for id in me.moves_in(MoveData.Category.SPECIAL):
+		var move := Database.get_move(id)
+		if battle.can_use(me, id) and move.effect != MoveData.Effect.HEAL:
+			# Nobody can answer a Special, so a hit counts in full, and a Boost as two hits.
+			var hits := BOOST_WORTH if move.effect == MoveData.Effect.BOOST else move.power
+			moves.append(Battle.Choice.new(Battle.Offense.SPECIAL, id))
+			weights.append(_physical_force(me, foe) * hits)
 
 	if best_hit < foe.hp:
 		var danger := _strongest_hit(foe, me) * WORST_HIT
@@ -235,22 +244,19 @@ static func defense(battle: Battle) -> Battle.Defense:
 	var me := battle.defender
 	var foe := battle.attacker
 	var offenses := _expected_offenses(battle, foe)
-	var answers: Array[Battle.Defense] = [Battle.Defense.GUARD, Battle.Defense.DODGE, Battle.Defense.COUNTER]
+	var answers := battle.usable_defenses(me)
 	var weights: Array[float] = []
 	for answer in answers:
 		var taken := 0.0
 		for offense_kind: Battle.Offense in offenses:
 			var share: float = offenses[offense_kind]
 			var force := _physical_force(foe, me)
-			if offense_kind == Battle.Offense.SPELL:
+			if offense_kind == Battle.Offense.MAGIC:
 				force = _strongest_hit(foe, me)
 			if offense_kind == Battle.Offense.SMASH and answer == Battle.Defense.COUNTER:
-				taken -= share * force * Battle.COUNTER_RETURN * 0.5
+				taken -= share * force * 0.5
 				continue
-			var times: float = Battle.DAMAGE_TABLE[offense_kind][answer]
-			if answer == Battle.Defense.DODGE:
-				times *= 1.0 - battle.dodge_chance(me, foe, offense_kind)
-			taken += share * force * times
+			taken += share * force * Battle.hit_share(offense_kind, answer)
 		weights.append(1.0 / maxf(taken, _physical_force(foe, me) * LEAST_EXPECTED_HIT))
 	return answers[_mixed_pick(weights, _profile(me.player)["mix"])]
 
@@ -262,12 +268,9 @@ static func _move_value(battle: Battle, kind: Battle.Offense, force: float, defe
 	for answer: Battle.Defense in defenses:
 		var share: float = defenses[answer]
 		if kind == Battle.Offense.SMASH and answer == Battle.Defense.COUNTER:
-			value -= share * force * Battle.COUNTER_RETURN
+			value -= share * force
 			continue
-		var times: float = Battle.DAMAGE_TABLE[kind][answer]
-		if answer == Battle.Defense.DODGE:
-			times *= 1.0 - battle.dodge_chance(battle.defender, battle.attacker, kind)
-		value += share * force * times
+		value += share * force * Battle.hit_share(kind, answer)
 	return maxf(value, 0.1)
 
 
@@ -291,7 +294,7 @@ static func _expected_offenses(battle: Battle, foe: Fighter) -> Dictionary:
 	var counts := {}
 	for habit: String in habits:
 		var kind: Battle.Offense = Battle.OFFENSE_NAMES[habit]
-		if kind == Battle.Offense.SPELL and _strongest_hit(foe, battle.defender) == _physical_force(foe, battle.defender):
+		if kind == Battle.Offense.MAGIC and _strongest_hit(foe, battle.defender) == _physical_force(foe, battle.defender):
 			kind = Battle.Offense.ATTACK
 		counts[kind] = counts.get(kind, 0.0) + habits[habit]
 	if _profile(battle.defender.player)["reads"]:
@@ -321,12 +324,12 @@ static func _best_healing(battle: Battle, me: Fighter) -> Battle.Choice:
 		if amount > best_amount:
 			best = Battle.Choice.new(Battle.Offense.ITEM, id)
 			best_amount = amount
-	for id in me.get_spells():
-		var spell := Database.get_spell(id)
-		if spell.kind == SpellData.Kind.HEAL and battle.can_cast(me, id):
-			var amount := mini(me.get_stat("magic") + spell.power, missing)
+	for id in me.moves_in(MoveData.Category.SPECIAL):
+		var move := Database.get_move(id)
+		if move.effect == MoveData.Effect.HEAL and battle.can_use(me, id):
+			var amount := mini(me.get_stat("magic") + roundi(move.power), missing)
 			if amount > best_amount:
-				best = Battle.Choice.new(Battle.Offense.SPELL, id)
+				best = Battle.Choice.new(Battle.Offense.SPECIAL, id)
 				best_amount = amount
 	return best
 
@@ -487,7 +490,7 @@ static func _shop_value(player: PlayerData) -> float:
 	var best := 0
 	for id in Database.sorted_ids(Database.items):
 		var item := Database.get_item(id)
-		if item.kind != ItemData.Kind.CONSUMABLE and item.price <= player.gold and _upgrade_value(player, id) > 0.0:
+		if item.is_gear() and item.price <= player.gold and _upgrade_value(player, id) > 0.0:
 			best = maxi(best, item.price)
 	var cures_wanted: int = _profile(player)["cures"]
 	var short := maxi(cures_wanted - _healing_items(player), 0)
@@ -803,14 +806,14 @@ static func shop(player: PlayerData, shelves: Array[String]) -> PackedStringArra
 # Wears whatever in the bag beats what is worn.
 static func _wear_best(player: PlayerData) -> void:
 	for id in player.inventory.duplicate():
-		if Database.get_item(id).kind != ItemData.Kind.CONSUMABLE and _upgrade_value(player, id) > 0.0:
+		if Database.get_item(id).is_gear() and _upgrade_value(player, id) > 0.0:
 			player.equip(id)
 
 
 static func _sell_spare_gear(player: PlayerData) -> void:
 	_wear_best(player)
 	for id in player.inventory.duplicate():
-		if Database.get_item(id).kind != ItemData.Kind.CONSUMABLE:
+		if Database.get_item(id).is_gear():
 			Shop.sell(player, id)
 
 
@@ -818,7 +821,7 @@ static func _best_upgrade(player: PlayerData, shelves: Array[String]) -> String:
 	var best := ""
 	var best_value := 0.0
 	for id in shelves:
-		if Database.get_item(id).kind == ItemData.Kind.CONSUMABLE or Shop.why_not_buy(player, id) != "":
+		if not Database.get_item(id).is_gear() or Shop.why_not_buy(player, id) != "":
 			continue
 		var value := _upgrade_value(player, id)
 		if value > best_value:

@@ -119,7 +119,7 @@ func _test_field_magic() -> void:
 		red.learn_spell(spell_id)
 	red.mp = 40
 	_expect(FieldMagic.all_ids().size() == 5 and FieldMagic.known(red).size() == 5, "five field spells")
-	_expect(not Fighter.from_player(red).get_spells().has("slumber"), "field spells stay out of battle")
+	_expect(not Fighter.from_player(red).moves_in(MoveData.Category.MAGIC).has("slumber"), "field spells stay out of battle")
 	_expect(red.spells.has("slumber"), "the player still knows them")
 	var start := red.mp
 	FieldMagic.cast(red, "swift_wind")

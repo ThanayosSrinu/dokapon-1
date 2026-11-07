@@ -20,7 +20,7 @@ static func stock(space_id: int, week: int) -> Array[String]:
 	for id in Database.sorted_ids(Database.items):
 		if Database.get_item(id).kind == ItemData.Kind.CONSUMABLE:
 			consumables.append(id)
-		else:
+		elif Database.get_item(id).is_gear():
 			equipment.append(id)
 	var shelves := _first_few(equipment, EQUIPMENT_STOCK, dice)
 	shelves.append_array(_first_few(consumables, CONSUMABLE_STOCK, dice))

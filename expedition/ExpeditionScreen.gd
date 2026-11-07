@@ -113,6 +113,7 @@ var die: RollBlock
 var battle_screen: BattleScreen
 ## Asks what to do with something found when the bag is full.
 var bag_prompt: BagPrompt
+var learn_prompt: LearnPrompt
 var back: KitBackButton
 var arrow: KitArrow
 var bubble: TavernBubble
@@ -161,7 +162,7 @@ var _zoom_before := 1
 
 func _ready() -> void:
 	var town := TownData.current()
-	trip = Expedition.new(town.going, town.stage, next_seed, true, town.food)
+	trip = Expedition.new(town.going, town.stage, next_seed, true, town.food, town.member(town.going))
 	_build_world(town)
 	_build_ui(town)
 	EventBus.space_clicked.connect(_on_space_clicked)
@@ -225,7 +226,7 @@ func _on_space_clicked(node: BoardNode) -> void:
 
 # Keeps the bag shut during fights, and points its box at the space under the mouse.
 func _update_bag_panel() -> void:
-	bag_panel.locked = battle_screen.visible or bag_prompt.visible or trip.is_over()
+	bag_panel.locked = battle_screen.visible or bag_prompt.visible or learn_prompt.visible or trip.is_over()
 	var space := board.get_node_at(get_global_mouse_position())
 	if get_viewport().gui_get_hovered_control() != null or space == null:
 		bag_panel.point_at_space(trip.space_id)
@@ -405,6 +406,19 @@ func _settle_found_item() -> void:
 	await bag_prompt.ask(trip.player, trip.found_item)
 	trip.found_item = ""
 	hud.refresh()
+
+
+# A tome wants a move forgotten, so the player says which.
+func _on_wants_to_forget(item_id: String) -> void:
+	var before := get_viewport().gui_get_focus_owner()
+	if await learn_prompt.ask(trip, item_id):
+		Sound.play("heal")
+	bag_panel.refresh()
+	hud.refresh()
+	if before != null and before.is_visible_in_tree():
+		before.grab_focus()
+	elif roll_button.visible:
+		roll_button.grab_focus()
 
 
 func _ask_about_portal() -> void:
@@ -775,6 +789,8 @@ func _build_ui(town: TownData) -> void:
 	fight_layer.add_child(battle_screen)
 	bag_prompt = BagPrompt.new()
 	fight_layer.add_child(bag_prompt)
+	learn_prompt = LearnPrompt.new()
+	fight_layer.add_child(learn_prompt)
 	var ui := CanvasLayer.new()
 	ui.layer = UI_LAYER
 	add_child(ui)
@@ -821,6 +837,7 @@ func _build_strip() -> void:
 
 func _build_bag_panel() -> void:
 	bag_panel = BagPanel.new(trip)
+	bag_panel.wants_to_forget.connect(_on_wants_to_forget)
 	_at_top_right(bag_panel, BAG_TOP)
 
 

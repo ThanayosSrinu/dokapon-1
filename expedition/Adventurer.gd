@@ -38,7 +38,8 @@ func class_data() -> ClassData:
 	return Database.get_class_data(class_id)
 
 
-## Stat `stat_name` at their level. See Database.STATS for the names.
-func stat(stat_name: String) -> int:
+## Stat `stat_name` at `at_level`, or at the level they join at. See Database.STATS for
+## the names.
+func stat(stat_name: String, at_level := 0) -> int:
 	var data := class_data()
-	return data.base_stats[stat_name] + data.growth[stat_name] * (level - 1)
+	return data.base_stats[stat_name] + data.growth[stat_name] * ((at_level if at_level > 0 else level) - 1)

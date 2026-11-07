@@ -35,7 +35,7 @@ func _init(trip: Expedition) -> void:
 	furthest = trip.furthest
 	fights = trip.fights
 	fights_won = trip.fights_won
-	levels_gained = trip.player.level - trip.person.level
+	levels_gained = trip.player.level - trip.level_at_start
 	gold_home = trip.gold_home()
 	gold_lost = trip.player.gold - gold_home
 	failed = trip.ending != Expedition.Ending.HOME

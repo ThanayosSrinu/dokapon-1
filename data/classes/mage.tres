@@ -32,3 +32,4 @@ spells_by_level = Dictionary[int, String]({
 6: "thunderbolt",
 10: "inferno"
 })
+starting_moves = Array[String](["spark", "focus"])

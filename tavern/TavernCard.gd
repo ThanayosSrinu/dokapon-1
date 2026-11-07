@@ -61,7 +61,7 @@ func show_recruit(person: Adventurer) -> void:
 ## Fills the card with someone on the roster.
 func show_member(one: Member, today: int) -> void:
 	var person := one.person
-	_show_person(person)
+	_show_person(person, one.level)
 	var out := one.days_out(today)
 	_set_fact(0, "heart", "Ready to go" if out == 0 else "Down, back in %s" % TownData.days_words(out))
 	_set_fact(1, "coin", "Wage: %d gold a month" % person.wage)
@@ -74,14 +74,16 @@ func shown_status() -> String:
 	return _facts[0].text
 
 
-func _show_person(person: Adventurer) -> void:
+func _show_person(person: Adventurer, level := 0) -> void:
+	if level == 0:
+		level = person.level
 	_portrait.texture = person.portrait
 	_name.text = person.display_name
-	_class.text = "%s, level %d" % [person.class_data().display_name, person.level]
+	_class.text = "%s, level %d" % [person.class_data().display_name, level]
 	_about.text = person.description
-	_fill_bar(strength_bar, person.stat("attack"), FULL_STRENGTH, "Strength", "How hard they hit.")
-	_fill_bar(health_bar, person.stat("max_hp"), FULL_HEALTH, "Health", "How much they can take.")
-	_fill_bar(magic_bar, person.stat("magic"), FULL_MAGIC, "Magic", "How strong their spells are.")
+	_fill_bar(strength_bar, person.stat("attack", level), FULL_STRENGTH, "Strength", "How hard they hit.")
+	_fill_bar(health_bar, person.stat("max_hp", level), FULL_HEALTH, "Health", "How much they can take.")
+	_fill_bar(magic_bar, person.stat("magic", level), FULL_MAGIC, "Magic", "How strong their spells are.")
 	die.top = person.die_top
 	Tips.attach(die, "Movement die", "Rolls 0 to %d each day. A higher roll walks further." % person.die_top)
 

@@ -13,3 +13,4 @@ price = 110
 bonuses = Dictionary[String, int]({
 "defense": 3
 })
+moves = Array[String](["block", "riposte", "ward_off"])

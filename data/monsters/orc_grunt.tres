@@ -20,7 +20,7 @@ stats = Dictionary[String, int]({
 "max_mp": 1,
 "speed": 7
 })
-spells = Array[String]([])
+moves = Array[String](["pound", "crush", "block", "riposte", "ward_off"])
 offense_weights = Dictionary[String, int]({
 "attack": 3,
 "smash": 6

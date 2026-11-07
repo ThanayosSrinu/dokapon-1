@@ -29,6 +29,31 @@ var _grass: Stage
 var _bram: Adventurer
 
 
+# What stays with a person from trip to trip, and what doesn't.
+func _test_gear_and_learning_stay() -> void:
+	var bram := Database.get_adventurer("bram")
+	var grass := Database.get_stage(TownData.FIRST_STAGE)
+	var one := Member.new(bram)
+	var first := Expedition.new(bram, grass, 41, true, -1, one)
+	first.player.add_experience(first.player.exp_to_next_level() + 5)
+	first.player.learned.append("spark")
+	first.player.add_item("iron_sword")
+	first.wear_by_hand("iron_sword")
+	first.player.add_item("potion")
+	first.ending = Expedition.Ending.BEATEN
+	one.trips += 1
+	one.keep(first.player)
+	var second := Expedition.new(bram, grass, 42, true, -1, one)
+	_expect(second.player.level == 2 and second.player.experience == 5, "a level stays, even after a defeat")
+	_expect(second.level_at_start == 2, "and the next trip counts from there")
+	_expect(second.player.equipment[ItemData.Kind.WEAPON] == "iron_sword", "gear stays")
+	_expect(second.player.learned.has("spark"), "what was learned stays")
+	_expect(not second.player.inventory.has("potion"), "the bag does not")
+	_expect(second.player.hp == second.player.get_stat("max_hp"), "and they set out whole")
+	second.player.add_experience(second.player.exp_to_next_level() * 5)
+	_expect(second.player.learned == first.player.learned, "a level teaches nothing on a trip")
+
+
 func _ready() -> void:
 	_grass = Database.get_stage("grass_l")
 	_bram = Database.get_adventurer("bram")
@@ -48,6 +73,7 @@ func _ready() -> void:
 	_test_exact_landing()
 	_test_rolling_zero()
 	_test_by_hand()
+	_test_gear_and_learning_stay()
 	_test_warnings()
 	_test_dead_ends()
 	_test_roll_block()

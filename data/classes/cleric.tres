@@ -32,3 +32,4 @@ spells_by_level = Dictionary[int, String]({
 4: "renew",
 8: "sanctuary"
 })
+starting_moves = Array[String](["smite", "mend"])

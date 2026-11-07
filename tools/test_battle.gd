@@ -18,7 +18,11 @@ func _ready() -> void:
 	_test_damage_table()
 	_test_counter_knockout()
 	_test_turn_order_and_rounds()
-	_test_spells_and_items()
+	_test_magic_and_items()
+	_test_moves_from_gear()
+	_test_specials()
+	_test_learning()
+	_test_many_fights()
 	_test_flee()
 	_test_rewards()
 	_test_pvp_rewards()
@@ -65,38 +69,61 @@ func _average_damage(offense: Battle.Offense, defense: Battle.Defense) -> float:
 	var total := 0
 	for index in 200:
 		var battle := _duel()
-		total += battle.resolve(Battle.Choice.new(offense), defense).damage
+		var move := "spark" if offense == Battle.Offense.MAGIC else ""
+		total += battle.resolve(Battle.Choice.new(offense, move), defense).damage
 	return total / 200.0
 
 
+# Every row of the table in Battle.gd, for fighters who hit with a force of 9: 15 attack
+# against 12 defense. Spark is 2 magic + 6 against the same, so a force of 2.
 func _test_damage_table() -> void:
-	# Warrior against warrior: 15 attack, 9 defense, so a force of 10.5.
-	_expect(absf(_average_damage(Battle.Offense.ATTACK, Battle.Defense.GUARD) - 5.25) < 0.8, "guard halves an attack")
-	_expect(absf(_average_damage(Battle.Offense.ATTACK, Battle.Defense.COUNTER) - 13.1) < 0.8, "a counter misread takes 1.25x")
-	_expect(absf(_average_damage(Battle.Offense.SMASH, Battle.Defense.GUARD) - 15.75) < 0.8, "smash breaks guard")
+	var cases := [
+		[Battle.Offense.ATTACK, Battle.Defense.GUARD, 4.5, "Guard takes less from an Attack"],
+		[Battle.Offense.ATTACK, Battle.Defense.COUNTER, 9.0, "Counter takes all of an Attack"],
+		[Battle.Offense.ATTACK, Battle.Defense.WARD, 9.0, "Ward takes all of an Attack"],
+		[Battle.Offense.SMASH, Battle.Defense.GUARD, 13.5, "a Smash breaks a Guard"],
+		[Battle.Offense.SMASH, Battle.Defense.WARD, 13.5, "a Smash breaks a Ward"],
+	]
+	for case: Array in cases:
+		_expect(absf(_average_damage(case[0], case[1]) - case[2]) < 0.7, case[3])
+
+	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.GUARD) == 1.0, "Guard takes all of Magic")
+	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.COUNTER) == 1.0, "Counter takes all of Magic")
+	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.WARD) == 0.5, "Ward takes less from Magic")
+	_expect(Battle.hit_share(Battle.Offense.SMASH, Battle.Defense.COUNTER) == 0.0, "a Counter stops a Smash")
+	_expect(_ward_share() < _guard_share(), "a real Ward takes less Magic than a Guard does")
 
 	var battle := _duel()
 	var attacker := battle.attacker
 	var defender := battle.defender
 	var outcome := battle.resolve(Battle.Choice.new(Battle.Offense.SMASH), Battle.Defense.COUNTER)
 	_expect(outcome.damage == 0 and defender.hp == defender.get_stat("max_hp"), "counter takes no damage")
-	_expect(outcome.reflected >= 9 and attacker.hp == attacker.get_stat("max_hp") - outcome.reflected,
+	_expect(outcome.reflected >= 7 and attacker.hp == attacker.get_stat("max_hp") - outcome.reflected,
 			"counter hurts the smasher")
 
-	var slow := Fighter.from_player(_player("cleric"))
-	var quick := Fighter.from_player(_player("rogue"))
-	var pair := Battle.new(slow, quick)
-	_expect(pair.dodge_chance(quick, slow, Battle.Offense.ATTACK) > pair.dodge_chance(slow, quick, Battle.Offense.ATTACK),
-			"speed helps dodging")
-	_expect(pair.dodge_chance(quick, slow, Battle.Offense.SMASH) > pair.dodge_chance(quick, slow, Battle.Offense.ATTACK),
-			"smash is easier to dodge")
+	var special := _duel()
+	_expect(not special.needs_defense(Battle.Choice.new(Battle.Offense.SPECIAL, "rally")), "a Special asks for no defense")
+	_expect(not Battle.Defense.has("DODGE"), "Dodge is gone")
 
-	var dodges := 0
-	for index in 400:
-		var trial := _duel()
-		if trial.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.DODGE).dodged:
-			dodges += 1
-	_expect(dodges > 80 and dodges < 160, "equal speed dodges about 30%% (got %d of 400)" % dodges)
+
+func _ward_share() -> float:
+	return _magic_damage(Battle.Defense.WARD)
+
+
+func _guard_share() -> float:
+	return _magic_damage(Battle.Defense.GUARD)
+
+
+func _magic_damage(defense: Battle.Defense) -> float:
+	var total := 0
+	for index in 100:
+		var mage := Fighter.from_player(_player("mage", 12))
+		var target := Fighter.from_player(_player("mage", 12))
+		var battle := Battle.new(mage, target)
+		battle.attacker = mage
+		battle.defender = target
+		total += battle.resolve(Battle.Choice.new(Battle.Offense.MAGIC, "spark"), defense).damage
+	return total / 100.0
 
 
 func _test_counter_knockout() -> void:
@@ -130,30 +157,18 @@ func _test_turn_order_and_rounds() -> void:
 	_expect(long_fight.conclude().size() == 1, "a draw gives nothing")
 
 
-func _test_spells_and_items() -> void:
+func _test_magic_and_items() -> void:
 	var mage := Fighter.from_player(_player("mage"))
 	var target := Fighter.from_player(_player("warrior"))
 	var battle := Battle.new(mage, target)
 	battle.attacker = mage
 	battle.defender = target
-	var spark := Battle.Choice.new(Battle.Offense.SPELL, "spark")
-	_expect(battle.needs_defense(spark), "attack spells can be defended")
+	var spark := Battle.Choice.new(Battle.Offense.MAGIC, "spark")
+	_expect(battle.needs_defense(spark), "Magic can be answered")
 	var mp_before := mage.mp
 	var outcome := battle.resolve(spark, Battle.Defense.COUNTER)
-	_expect(mage.mp == mp_before - 3, "a spell costs MP")
-	_expect(outcome.damage > 0 and outcome.reflected == 0, "a spell cannot be countered")
-
-	var cleric := Fighter.from_player(_player("cleric"))
-	var pair := Battle.new(cleric, target)
-	pair.attacker = cleric
-	pair.defender = target
-	_expect(not pair.can_cast(cleric, "mend"), "no healing at full HP")
-	cleric.hp = 5
-	_expect(pair.can_cast(cleric, "mend"), "healing when hurt")
-	var heal := Battle.Choice.new(Battle.Offense.SPELL, "mend")
-	_expect(not pair.needs_defense(heal), "healing is not defended")
-	var healed := pair.resolve(heal)
-	_expect(healed.healed > 0 and cleric.hp == 5 + healed.healed, "mend restores HP")
+	_expect(mage.mp == mp_before - 3, "Magic costs MP")
+	_expect(outcome.damage > 0 and outcome.reflected == 0, "Magic cannot be countered")
 
 	var fighter := Fighter.from_player(_player("warrior"))
 	var with_item := Battle.new(fighter, target)
@@ -164,8 +179,152 @@ func _test_spells_and_items() -> void:
 	var used := with_item.resolve(Battle.Choice.new(Battle.Offense.ITEM, "herb"))
 	_expect(used.healed > 0 and fighter.player.inventory.is_empty(), "an item heals and is used up")
 
-	fighter.player.mp = 0
-	_expect(not with_item.can_cast(fighter, "spark"), "no MP, no spell")
+	mage.mp = 0
+	_expect(not battle.can_use(mage, "spark"), "no MP, no Magic")
+	_expect(battle.can_use(mage, "bonk"), "and the free moves cost nothing")
+
+
+func _test_moves_from_gear() -> void:
+	var hero := _player("warrior")
+	var fighter := Fighter.from_player(hero)
+	_expect(fighter.moves_in(MoveData.Category.ATTACK) == ["slash"], "the weapon gives its Attack")
+	_expect(fighter.moves_in(MoveData.Category.SMASH) == ["cleave"], "and its Smash")
+	_expect(fighter.moves_in(MoveData.Category.GUARD) == ["block"], "the armor gives its Guard")
+	_expect(fighter.moves_in(MoveData.Category.COUNTER) == ["riposte"], "and its Counter")
+	_expect(fighter.moves_in(MoveData.Category.WARD) == ["ward_off"], "and its Ward")
+
+	var long_sword: ItemData = Database.get_item("iron_sword").duplicate()
+	long_sword.id = "test_sword"
+	long_sword.moves = ["slash", "stab", "bonk", "pound", "cleave", "lunge", "crack", "crush"]
+	Database.items["test_sword"] = long_sword
+	hero.equipment[ItemData.Kind.WEAPON] = "test_sword"
+	_expect(fighter.moves_in(MoveData.Category.ATTACK).size() == 4, "a weapon can hold 4 moves in a category")
+	_expect(fighter.moves_in(MoveData.Category.SMASH).size() == 4, "in each category")
+	var battle := _duel()
+	battle.attacker.player.equipment[ItemData.Kind.WEAPON] = "test_sword"
+	var picked := battle.resolve(Battle.Choice.new(Battle.Offense.ATTACK, "pound"), Battle.Defense.GUARD)
+	_expect(picked.move.id == "pound", "the move picked is the move played")
+	Database.items.erase("test_sword")
+
+	var weak := Battle.new(Fighter.from_player(_player("warrior")), Fighter.from_player(_player("warrior")))
+	var bare := weak.attacker
+	bare.player.equipment.clear()
+	_expect(bare.moves_in(MoveData.Category.ATTACK) == ["punch"], "no weapon still leaves Punch")
+	_expect(bare.moves_in(MoveData.Category.SMASH).is_empty(), "but no Smash")
+	_expect(bare.moves_in(MoveData.Category.GUARD) == ["brace"], "no armor still leaves Brace")
+	_expect(bare.moves_in(MoveData.Category.COUNTER).is_empty() and bare.moves_in(MoveData.Category.WARD).is_empty(),
+			"but no Counter or Ward")
+	_expect(weak.usable_defenses(bare) == [Battle.Defense.GUARD], "so Guard is the only answer")
+	_expect(weak.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD).move.id == "punch", "Punch lands")
+
+	var braced := 0
+	var blocked := 0
+	for index in 100:
+		var trial := _duel()
+		var target := trial.defender
+		target.player.equipment.erase(ItemData.Kind.ARMOR)
+		braced += trial.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD).damage
+		var other := _duel()
+		blocked += other.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD).damage
+	_expect(braced > blocked, "Brace does less than a real Guard")
+
+	for monster_id in Database.sorted_ids(Database.monsters):
+		var monster := Fighter.from_monster(Database.get_monster(monster_id))
+		_expect(monster.moves_in(MoveData.Category.ATTACK)[0] != Battle.BARE_ATTACK, "%s has its own Attack" % monster_id)
+		_expect(monster.moves_in(MoveData.Category.GUARD)[0] != Battle.BARE_GUARD, "%s has its own Guard" % monster_id)
+
+
+func _test_specials() -> void:
+	var cleric := Fighter.from_player(_player("cleric"))
+	var target := Fighter.from_player(_player("warrior"))
+	var pair := Battle.new(cleric, target)
+	pair.attacker = cleric
+	pair.defender = target
+	_expect(not pair.can_use(cleric, "mend"), "no healing at full HP")
+	cleric.hp = 5
+	_expect(pair.can_use(cleric, "mend"), "healing when hurt")
+	var mp_before := cleric.mp
+	var healed := pair.resolve(Battle.Choice.new(Battle.Offense.SPECIAL, "mend"))
+	_expect(healed.healed > 0 and cleric.hp == 5 + healed.healed, "Mend restores HP")
+	_expect(cleric.mp == mp_before, "a Special costs no MP")
+	cleric.hp = 5
+	_expect(not pair.can_use(cleric, "mend"), "a Special works once per fight")
+	_expect(pair.usable_moves(cleric, MoveData.Category.SPECIAL).is_empty(), "so it leaves the list")
+
+	# Rally: the user's next 3 turns are up 20%, and the enemy's turns don't count.
+	var bram := Fighter.from_player(_player("warrior", 30))
+	var foe := Fighter.from_monster(Database.get_monster("orc_warlord"))
+	var fight := Battle.new(bram, foe)
+	fight.attacker = bram
+	fight.defender = foe
+	var usual := bram.get_stat("attack")
+	fight.resolve(Battle.Choice.new(Battle.Offense.SPECIAL, "rally"))
+	var raised := ceili(usual * 1.2)
+	_expect(bram.get_stat("attack") == raised, "Rally raises Attack by 20%")
+	for turn in 3:
+		_expect(bram.get_stat("attack") == raised, "and lasts on the enemy's turn %d" % turn)
+		fight.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD)
+		_expect(bram.get_stat("attack") == raised, "still up before their own turn %d" % turn)
+		fight.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD)
+	_expect(bram.get_stat("attack") == usual, "and ends after their own 3 turns")
+
+	# Sure Strike hits in full, with nothing to answer it.
+	var wren := Fighter.from_player(_player("rogue"))
+	var slime := Fighter.from_monster(Database.get_monster("slime"))
+	var strike := Battle.new(wren, slime)
+	strike.attacker = wren
+	strike.defender = slime
+	var outcome := strike.resolve(Battle.Choice.new(Battle.Offense.SPECIAL, "sure_strike"))
+	_expect(outcome.damage > 0 and outcome.defense == Battle.Defense.NONE, "Sure Strike lands with no answer")
+
+
+func _test_learning() -> void:
+	var hero := _player("warrior")
+	hero.inventory.clear()
+	_expect(hero.learned == ["rally"], "a warrior starts with Rally alone")
+	_expect(Fighter.from_player(hero).moves_in(MoveData.Category.MAGIC).is_empty(), "and no Magic")
+	hero.add_item("tome_spark")
+	_expect(not hero.equip("tome_spark"), "a tome can't be worn")
+	_expect(not hero.use_item("tome_spark"), "or used up like a potion")
+	_expect(hero.read_tome("tome_spark"), "a tome is read")
+	_expect(hero.learned.has("spark") and hero.inventory.is_empty(), "it teaches, and it is gone")
+	hero.add_item("tome_spark")
+	_expect(not hero.read_tome("tome_spark") and hero.inventory.size() == 1, "a known move stays a tome")
+
+	hero.inventory.clear()
+	hero.learned.assign(["rally", "focus"])
+	hero.add_item("tome_mend")
+	_expect(not hero.has_room_for("mend"), "two Specials fill the slots")
+	_expect(not hero.read_tome("tome_mend"), "so a third needs one forgotten")
+	_expect(hero.read_tome("tome_mend", "focus"), "name one and it is replaced")
+	_expect(hero.learned.has("mend") and not hero.learned.has("focus"), "the new for the old")
+	hero.learned.assign(["spark", "smite", "frost_shard", "thunderbolt"])
+	_expect(not hero.has_room_for("inferno"), "four Magic fill the slots")
+	_expect(hero.has_room_for("rally"), "and Magic has no say over Special")
+
+
+# Thousands of fights, across everyone and everything, must all end with no error.
+func _test_many_fights() -> void:
+	var fights := 0
+	for class_id in Database.sorted_ids(Database.classes):
+		for monster_id in Database.sorted_ids(Database.monsters):
+			var monster := Database.get_monster(monster_id)
+			for index in 60:
+				var hero := _player(class_id, monster.min_level)
+				hero.difficulty = CpuBrain.Level.HARD if index % 2 == 0 else CpuBrain.Level.EASY
+				var battle := Battle.new(Fighter.from_player(hero), Fighter.from_monster(monster))
+				var turns := 0
+				while not battle.is_over() and turns < 40:
+					var choice := battle.cpu_offense()
+					var defense := battle.cpu_defense() if battle.needs_defense(choice) else Battle.Defense.NONE
+					battle.resolve(choice, defense)
+					turns += 1
+				_expect(battle.is_over(), "a fight always ends")
+				_expect(battle.round_number <= Battle.MAX_ROUNDS + 1, "within the round limit")
+				battle.conclude()
+				fights += 1
+	print("Fought %d fights." % fights)
+	_expect(fights >= 2000, "thousands of fights were played")
 
 
 func _test_flee() -> void:

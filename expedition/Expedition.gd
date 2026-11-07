@@ -67,6 +67,8 @@ var map: IslandMap
 var brain: ExpeditionBrain
 ## The current day, starting at 1 once start_day() is called.
 var day := 0
+## Their level on setting out.
+var level_at_start := 1
 ## Days of food they set out with.
 var food_taken := 0
 ## Days of food still in the pack.
@@ -125,12 +127,14 @@ var _depth := {}
 
 ## Starts a trip by `new_person` to `stage`. A `seed_value` of 0 picks a new random seed.
 ## With `hand` on, the player makes every choice and no brain is made. `food` is the days of
-## food bought, or -1 for all they can carry.
-func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false, food := -1) -> void:
+## food bought, or -1 for all they can carry. `kept` is who they are on the roster, for the
+## level, gear and moves they have from earlier trips.
+func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false, food := -1, kept: Member = null) -> void:
 	person = new_person
 	by_hand = hand
 	map = IslandMap.open(stage.map_file)
-	player = _make_player(person, hand)
+	player = _make_player(person, hand, kept)
+	level_at_start = player.level
 	food_taken = stage.most_food(person) if food < 0 else food
 	food_left = food_taken
 	space_id = map.portal
@@ -448,6 +452,8 @@ func _bot_morning() -> void:
 		head_home()
 	for item_name in CpuBrain.tidy(player):
 		note("item", "%s uses a %s." % [player.player_name, item_name])
+	for item_id in player.inventory.duplicate():
+		read_by_hand(item_id)
 
 
 # Ends the bot's trip if it stands on the Portal and was told to come home.
@@ -535,6 +541,15 @@ func use_by_hand(item_id: String) -> bool:
 	return true
 
 
+## The player has them read the tome `item_id`. With that kind of move full, `forgotten` is
+## the move it replaces.
+func read_by_hand(item_id: String, forgotten := "") -> bool:
+	if not player.read_tome(item_id, forgotten):
+		return false
+	note("item", "%s learns %s." % [player.player_name, Database.get_move(Database.get_item(item_id).teaches).display_name])
+	return true
+
+
 ## The player has them wear `item_id`, and what it replaces goes in the bag.
 func wear_by_hand(item_id: String) -> bool:
 	if not player.equip(item_id):
@@ -554,12 +569,18 @@ func _give(item_id: String) -> void:
 		player.add_item(item_id)
 
 
-static func _make_player(who: Adventurer, hand: bool) -> PlayerData:
+static func _make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerData:
 	var made := PlayerData.new(who.display_name, Color.WHITE, not hand)
 	made.character_sheet = who.sheet
+	made.learns_by_level = false
 	made.choose_class(who.class_id)
-	while made.level < who.level:
+	var level := who.level if kept == null else kept.level
+	while made.level < level:
 		made.add_experience(made.exp_to_next_level())
+	if kept != null and kept.has_kit():
+		made.experience = kept.experience
+		made.equipment = kept.equipment.duplicate()
+		made.learned = kept.learned.duplicate()
 	made.gold = 0
 	made.gold_share = GOLD_SHARE
 	made.rest_share = CAMP_SHARE

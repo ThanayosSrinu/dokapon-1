@@ -5,6 +5,7 @@ extends Node
 
 const ITEM_FOLDER := "res://data/items"
 const SPELL_FOLDER := "res://data/spells"
+const MOVE_FOLDER := "res://data/moves"
 const CLASS_FOLDER := "res://data/classes"
 const MONSTER_FOLDER := "res://data/monsters"
 const ADVENTURER_FOLDER := "res://data/adventurers"
@@ -19,6 +20,7 @@ const TAVERN_SIZE := 3
 
 var items := {}
 var spells := {}
+var moves := {}
 var classes := {}
 var monsters := {}
 var adventurers := {}
@@ -32,6 +34,7 @@ func _ready() -> void:
 func load_all() -> void:
 	items = _load_folder(ITEM_FOLDER)
 	spells = _load_folder(SPELL_FOLDER)
+	moves = _load_folder(MOVE_FOLDER)
 	classes = _load_folder(CLASS_FOLDER)
 	monsters = _load_folder(MONSTER_FOLDER)
 	adventurers = _load_folder(ADVENTURER_FOLDER)
@@ -44,6 +47,10 @@ func get_item(id: String) -> ItemData:
 
 func get_spell(id: String) -> SpellData:
 	return spells.get(id)
+
+
+func get_move(id: String) -> MoveData:
+	return moves.get(id)
 
 
 func get_class_data(id: String) -> ClassData:
@@ -102,12 +109,14 @@ func sorted_ids(table: Dictionary) -> Array[String]:
 ## Lists every mistake in the data. tools/check_data.gd prints these.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
-	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER, STAGE_FOLDER]:
+	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, MOVE_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER, STAGE_FOLDER]:
 		_check_folder(folder, problems)
 	for id: String in items:
 		_check_item(items[id], problems)
 	for id: String in spells:
 		_check_spell(spells[id], problems)
+	for id: String in moves:
+		_check_move(moves[id], problems)
 	for id: String in classes:
 		_check_class(classes[id], problems)
 	for id: String in monsters:
@@ -166,8 +175,22 @@ func _check_item(item: ItemData, problems: PackedStringArray) -> void:
 		problems.append("item %s heals nothing" % item.id)
 	if consumable and not item.bonuses.is_empty():
 		problems.append("item %s is consumable but has bonuses" % item.id)
-	if not consumable and item.bonuses.is_empty():
+	if item.is_gear() and item.bonuses.is_empty():
 		problems.append("item %s is equipment with no bonuses" % item.id)
+	if item.kind == ItemData.Kind.WEAPON:
+		_check_gear_moves(item, MoveData.WEAPON_CATEGORIES, problems)
+	elif item.kind == ItemData.Kind.ARMOR:
+		_check_gear_moves(item, MoveData.ARMOR_CATEGORIES, problems)
+		if item.moves.size() > MoveData.MOST_ON_ARMOR:
+			problems.append("item %s has too many moves" % item.id)
+	elif not item.moves.is_empty():
+		problems.append("item %s can't give moves" % item.id)
+	if item.kind == ItemData.Kind.TOME:
+		var taught := get_move(item.teaches)
+		if taught == null or not MoveData.MOST_LEARNED.has(taught.category):
+			problems.append("item %s teaches '%s', which can't be learned" % [item.id, item.teaches])
+	elif item.teaches != "":
+		problems.append("item %s is no tome, so it can't teach" % item.id)
 	for stat: String in item.bonuses:
 		if not STATS.has(stat):
 			problems.append("item %s has unknown stat '%s'" % [item.id, stat])
@@ -181,7 +204,45 @@ func _check_spell(spell: SpellData, problems: PackedStringArray) -> void:
 		problems.append("spell %s needs mp_cost and power above 0" % spell.id)
 
 
+# A weapon or armor needs 1 to 4 moves in each of `categories`, and no others.
+func _check_gear_moves(item: ItemData, categories: Array[MoveData.Category], problems: PackedStringArray) -> void:
+	var counts := {}
+	for id in item.moves:
+		var move := get_move(id)
+		if move == null:
+			problems.append("item %s has unknown move '%s'" % [item.id, id])
+		elif not categories.has(move.category):
+			problems.append("item %s can't give the move %s" % [item.id, id])
+		else:
+			counts[move.category] = counts.get(move.category, 0) + 1
+	for category in categories:
+		if not counts.has(category) or counts[category] > MoveData.MOST_IN_CATEGORY:
+			problems.append("item %s needs 1 to %d moves in each category" % [item.id, MoveData.MOST_IN_CATEGORY])
+
+
+func _check_move(move: MoveData, problems: PackedStringArray) -> void:
+	var uses_mp := move.category == MoveData.Category.MAGIC
+	if uses_mp != (move.mp_cost > 0):
+		problems.append("move %s: Magic, and only Magic, costs MP" % move.id)
+	if move.power <= 0.0:
+		problems.append("move %s needs power above 0" % move.id)
+	if (move.category == MoveData.Category.SPECIAL) != (move.effect != MoveData.Effect.NONE):
+		problems.append("move %s: Specials, and only Specials, have an effect" % move.id)
+	if move.effect == MoveData.Effect.BOOST and (not STATS.has(move.boost_stat) or move.boost_turns <= 0):
+		problems.append("move %s needs a stat and a number of turns to boost" % move.id)
+
+
 func _check_class(data: ClassData, problems: PackedStringArray) -> void:
+	var learned := {}
+	for id in data.starting_moves:
+		var move := get_move(id)
+		if move == null or not MoveData.MOST_LEARNED.has(move.category):
+			problems.append("class %s can't start with the move '%s'" % [data.id, id])
+		else:
+			learned[move.category] = learned.get(move.category, 0) + 1
+	for category: MoveData.Category in learned:
+		if learned[category] > MoveData.MOST_LEARNED[category]:
+			problems.append("class %s starts with too many moves" % data.id)
 	for stat in STATS:
 		if data.base_stats.get(stat, 0) <= 0:
 			problems.append("class %s needs base_stats %s above 0" % [data.id, stat])
@@ -255,11 +316,18 @@ func _check_monster(monster: MonsterData, problems: PackedStringArray) -> void:
 			problems.append("monster %s needs stat %s above 0" % [monster.id, stat])
 	_check_weights(monster, monster.offense_weights, Battle.OFFENSE_NAMES, problems)
 	_check_weights(monster, monster.defense_weights, Battle.DEFENSE_NAMES, problems)
-	for id in monster.spells:
-		if not spells.has(id):
-			problems.append("monster %s knows unknown spell '%s'" % [monster.id, id])
-	if monster.offense_weights.has("spell") and monster.spells.is_empty():
-		problems.append("monster %s has a spell habit but no spells" % monster.id)
+	var known := {}
+	for id in monster.moves:
+		if not moves.has(id):
+			problems.append("monster %s knows unknown move '%s'" % [monster.id, id])
+		else:
+			known[get_move(id).category] = true
+	for habits: Dictionary in [monster.offense_weights, monster.defense_weights]:
+		for habit: String in habits:
+			if Battle.CATEGORY_NAMES.has(habit) and not known.has(Battle.CATEGORY_NAMES[habit]):
+				problems.append("monster %s has the habit %s but no such move" % [monster.id, habit])
+	if not known.has(MoveData.Category.ATTACK):
+		problems.append("monster %s needs an Attack move" % monster.id)
 	for id in monster.loot:
 		if not items.has(id):
 			problems.append("monster %s drops unknown item '%s'" % [monster.id, id])

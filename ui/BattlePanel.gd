@@ -15,6 +15,7 @@ var _fighter: Fighter
 var _shows_mp := true
 var _name_label: Label
 var _hp_label: Label
+var _boost_label: Label
 var _hp_bar: ColorRect
 var _mp_bar: ColorRect
 
@@ -34,13 +35,18 @@ func _init() -> void:
 	_hp_label = Label.new()
 	_hp_label.add_theme_font_size_override("font_size", 14)
 	box.add_child(_hp_label)
+	_boost_label = Label.new()
+	_boost_label.add_theme_font_size_override("font_size", 14)
+	_boost_label.add_theme_color_override("font_color", GameArt.GOLD)
+	_boost_label.hide()
+	box.add_child(_boost_label)
 
 
 func setup(fighter: Fighter) -> void:
 	_fighter = fighter
 	_name_label.text = "%s  Lv %d" % [fighter.display_name, fighter.level]
 	# A monster with no spells has no use for MP.
-	_shows_mp = fighter.player != null or not fighter.get_spells().is_empty()
+	_shows_mp = fighter.player != null or not fighter.moves_in(MoveData.Category.MAGIC).is_empty()
 	_mp_bar.get_parent().visible = _shows_mp
 	refresh(0.0)
 
@@ -54,6 +60,11 @@ func refresh(duration := 0.3) -> void:
 	_hp_bar.color = HP_LOW_COLOR if hp_share <= LOW_HP else HP_COLOR
 	_slide(_hp_bar, hp_share, duration)
 	_slide(_mp_bar, float(fighter.mp) / fighter.get_stat("max_mp"), duration)
+	var boosts := PackedStringArray()
+	for boost in fighter.boosts():
+		boosts.append("%s up, %s" % [ItemData.STAT_NAMES[boost["stat"]], Expedition.turns_words(boost["turns"])])
+	_boost_label.text = "  ".join(boosts)
+	_boost_label.visible = not boosts.is_empty()
 
 
 func _add_bar(parent: Container, color: Color) -> ColorRect:

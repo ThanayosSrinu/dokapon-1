@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MoveData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "body_slam"
+display_name = "Body Slam"
+description = "Leaps up and lands hard."
+category = 1
+power = 1.0

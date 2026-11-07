@@ -149,6 +149,7 @@ func _test_cpu_choices() -> void:
 	_new_game([hero])
 	_expect(CpuBrain.will_fight_guard(hero, NEAR), "a CPU player fights a weak guard")
 	_expect(not CpuBrain.will_fight_guard(hero, FAR), "a CPU player avoids a strong guard")
+	hero.equipment.erase(ItemData.Kind.ARMOR)
 	hero.hp = 1
 	_expect(not CpuBrain.will_fight_guard(hero, NEAR), "a hurt CPU player avoids fights")
 	Town.claim(NEAR, hero)

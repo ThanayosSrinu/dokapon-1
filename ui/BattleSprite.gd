@@ -90,6 +90,11 @@ func lunge(target: Vector2) -> void:
 	await _play("swing")
 
 
+## Pulls back before a Smash.
+func wind_up() -> void:
+	await _move_to(_home - Vector2(_facing * 24.0, 0), 0.22, Tween.TRANS_SINE)
+
+
 func go_home() -> void:
 	await _move_to(_home, 0.2, Tween.TRANS_SINE)
 
@@ -104,13 +109,6 @@ func hurt() -> void:
 	tween.tween_property(self, "position", _home + shove, 0.07)
 	tween.tween_property(self, "position", _home, 0.16)
 	await _play("hurt")
-
-
-func sidestep() -> void:
-	var tween := create_tween().set_trans(Tween.TRANS_SINE)
-	tween.tween_property(self, "position", _home + Vector2(-_facing * 42.0, -18.0), 0.14)
-	tween.tween_property(self, "position", _home, 0.2)
-	await tween.finished
 
 
 func stumble() -> void:
