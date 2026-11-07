@@ -25,6 +25,9 @@ const CATEGORY_WORDS := {MoveData.Category.MAGIC: "Magic", MoveData.Category.SPE
 const SAY_HELLO := "Welcome, my lord. Who will study today?"
 const SAY_NOBODY := "Welcome, my lord. Send me a student from the Tavern."
 const SAY_TAUGHT := "%s has it. Practice makes perfect!"
+const SAY_RESET := "%s can choose again. Choose wisely!"
+## What the tile that takes back a skill tree stands for, in place of a tome id.
+const RESET := "reset_tree"
 const MORE_LATER := "A bigger Academy teaches more. Raise it from the Town Plans at the Castle."
 
 var back: KitBackButton
@@ -124,6 +127,16 @@ func _build_tiles(town: TownData) -> Control:
 		_grid.add_child(one)
 		tiles.append(one)
 		tile_ids.append(id)
+	var reset := KitButton.new()
+	reset.kind = KitButton.Kind.SMALL
+	reset.left_aligned = true
+	reset.custom_minimum_size.x = MOVE_WIDTH
+	reset.text = "Reset skill tree"
+	reset.pressed.connect(pick.bind(RESET))
+	reset.focus_entered.connect(_pick_quietly.bind(RESET))
+	_grid.add_child(reset)
+	tiles.append(reset)
+	tile_ids.append(RESET)
 	if town.level("academy") < TownPlans.ACADEMY_MOVES.size() - 1:
 		panel.body.add_child(Kit.text(MORE_LATER, COLUMNS * (MOVE_WIDTH + GAP), &"PaperLabel"))
 	return panel
@@ -247,6 +260,9 @@ func _show_picked(town: TownData) -> void:
 		_icons.texture = null
 		action.visible = false
 		return
+	if picked == RESET:
+		_show_reset(town)
+		return
 	var tome := Database.get_item(picked)
 	var move := Database.get_move(tome.teaches)
 	_title.text = move.display_name
@@ -272,6 +288,27 @@ func _show_picked(town: TownData) -> void:
 			swaps[index].visible = true
 			swaps[index].text = "Forget %s for %d gold" % [old.display_name, tome.price]
 			swaps[index].block("")
+
+
+func _show_reset(town: TownData) -> void:
+	_title.text = "Reset skill tree"
+	_kind.text = "%d gold a point" % SkillTree.RESET_PRICE_PER_POINT
+	_icons.texture = null
+	_words.text = "Takes back every point spent on the skill tree, to spend again on the details page."
+	action.visible = true
+	var one := learner()
+	if one == null:
+		action.text = "Hire someone first"
+		action.block("A skill tree belongs to someone on your roster.")
+		return
+	var problem := town.reset_problem(one)
+	action.text = problem if problem != "" else "Reset for %d gold" % one.reset_price()
+	if problem == "No points spent":
+		action.block("%s has no points spent." % one.person.display_name)
+	elif problem != "":
+		action.block("You have %d gold, and it costs %d." % [town.gold, one.reset_price()])
+	else:
+		action.block("")
 
 
 func _reason(town: TownData, tome: ItemData, one: Member, problem: String) -> String:
@@ -327,6 +364,15 @@ func _swap(index: int) -> void:
 func _teach(forgotten: String, button: KitButton = null) -> void:
 	var one := learner()
 	var pressed: KitButton = action if button == null else button
+	if picked == RESET:
+		if one == null or not TownData.current().reset_tree(one):
+			pressed.deny()
+			return
+		_say(SAY_RESET % one.person.display_name)
+		Sound.play("magic")
+		_refresh()
+		tile_of(RESET).grab_focus()
+		return
 	if one == null or not TownData.current().teach(picked, one, forgotten):
 		pressed.deny()
 		return

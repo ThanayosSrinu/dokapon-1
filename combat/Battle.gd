@@ -36,6 +36,10 @@ const VARIANCE := 0.1
 ## How much of a hit a heavy move lands on a Guard or a Ward, unless the move answering it
 ## says otherwise.
 const BROKEN_HIT := 1.5
+## What a critical hit multiplies by. A skill tree's Assassin adds to it.
+const CRIT_TIMES := 2.0
+## The most of a hit a Guard or a Ward can take off, however strong.
+const MOST_BLOCK := 0.9
 ## How much a Guard or a Ward takes off when nobody says otherwise.
 const USUAL_BLOCK := 0.5
 ## What a Guard leaves of a status move's turns, rounded up.
@@ -123,6 +127,10 @@ class Outcome:
 	## HP the attacker lost to poison at the end of this turn.
 	var poison := 0
 	var fled := false
+	## A skill tree's Evasion made a weapon hit miss.
+	var dodged := false
+	## The hit landed double, or more, from a skill tree.
+	var critical := false
 	## The sentence that announces the move.
 	var opening := ""
 	## The sentence that says how it went.
@@ -161,7 +169,12 @@ func _init(new_challenger: Fighter, new_opponent: Fighter) -> void:
 	var challenger_speed := challenger.get_stat("speed")
 	var opponent_speed := opponent.get_stat("speed")
 	var challenger_first := challenger_speed > opponent_speed
-	if challenger_speed == opponent_speed:
+	# A skill tree's First Blow beats speed, unless both have it.
+	var challenger_leads := challenger.perk(SkillTree.FIRST) > 0.0
+	var opponent_leads := opponent.perk(SkillTree.FIRST) > 0.0
+	if challenger_leads != opponent_leads:
+		challenger_first = challenger_leads
+	elif challenger_speed == opponent_speed:
 		challenger_first = GameState.rng.randf() < 0.5
 	attacker = challenger if challenger_first else opponent
 	defender = opponent if challenger_first else challenger
@@ -233,11 +246,22 @@ static func hit_share(kind: Kind, defense: Defense, block := USUAL_BLOCK, broken
 	return 1.0
 
 
-## How much of the hit in `outcome` lands, with the answer it met.
+## How much of the hit in `outcome` lands, with the answer it met and both sides' skill
+## trees.
 static func share_of(outcome: Outcome) -> float:
-	if outcome.answer == null:
-		return hit_share(outcome.kind, outcome.defense)
-	return hit_share(outcome.kind, outcome.defense, outcome.answer.power, outcome.answer.broken_share)
+	var block := USUAL_BLOCK if outcome.answer == null else outcome.answer.power
+	var broken := BROKEN_HIT if outcome.answer == null else outcome.answer.broken_share
+	var defender := outcome.defender
+	if defender != null:
+		if outcome.defense == Defense.GUARD:
+			block += defender.perk(SkillTree.GUARD_POWER)
+		elif outcome.defense == Defense.WARD:
+			block += defender.perk(SkillTree.WARD_POWER)
+			if defender.perk(SkillTree.WARD_HOLDS) > 0.0:
+				broken = minf(broken, 1.0)
+	if outcome.attacker != null and broken > 1.0:
+		broken += outcome.attacker.perk(SkillTree.HEAVY_BREAK)
+	return hit_share(outcome.kind, outcome.defense, minf(block, MOST_BLOCK), broken)
 
 
 ## How many turns a status move of `turns` holds against `defense`. A Ward blocks it, and
@@ -253,13 +277,13 @@ static func status_turns(turns: int, defense: Defense) -> int:
 ## The chance that `runner` gets away from `enemy`.
 func flee_chance(runner: Fighter, enemy: Fighter) -> float:
 	var chance := FLEE_BASE + FLEE_PER_SPEED * (runner.get_stat("speed") - enemy.get_stat("speed"))
-	return clampf(chance, FLEE_MIN, FLEE_MAX)
+	return clampf(chance + runner.perk(SkillTree.FLEE), FLEE_MIN, FLEE_MAX)
 
 
 ## True if `fighter` could use `move_id` right now.
 func can_use(fighter: Fighter, move_id: String) -> bool:
 	var move := Database.get_move(move_id)
-	if fighter.mp < move.mp_cost or (move.has(MoveData.ONCE) and fighter.specials_used.has(move_id)):
+	if fighter.mp < fighter.mp_cost(move) or (move.has(MoveData.ONCE) and fighter.specials_used.has(move_id)):
 		return false
 	return move.effect != MoveData.Effect.HEAL or fighter.hp < fighter.get_stat("max_hp")
 
@@ -424,13 +448,15 @@ func _use_move(outcome: Outcome) -> void:
 	outcome.opening = "%s %s %s!" % [attacker.display_name, "casts" if magic else "uses", move.display_name]
 	if move.has(MoveData.ONCE):
 		attacker.specials_used.append(move.id)
-	attacker.mp -= move.mp_cost
+	attacker.mp -= attacker.mp_cost(move)
 	match move.effect:
 		MoveData.Effect.HEAL:
 			var before := attacker.hp
-			attacker.hp += _roll(attacker.get_stat("magic") + move.power)
+			attacker.hp += _roll((attacker.get_stat("magic") + move.power) * (1.0 + attacker.perk(SkillTree.HEAL_POWER)))
 			outcome.healed = attacker.hp - before
 			outcome.result = "%s recovers %d HP." % [attacker.display_name, outcome.healed]
+			if attacker.perk(SkillTree.CLEANSE) > 0.0:
+				attacker.cleanse()
 		MoveData.Effect.BOOST:
 			attacker.add_boost(move.boost_stat, move.power, move.boost_turns)
 			outcome.result = "%s up by %d%%, for %d turns." % [ItemData.STAT_NAMES[move.boost_stat],
@@ -438,9 +464,10 @@ func _use_move(outcome: Outcome) -> void:
 		MoveData.Effect.WEAKEN, MoveData.Effect.POISON:
 			_afflict(outcome)
 		_:
-			var force := _physical_force() * move.power
+			var force := _physical_force() * move.power * (1.0 + attacker.perk(SkillTree.WEAPON_POWER))
 			if magic:
 				force = attacker.get_stat("magic") + move.power - defender.get_stat("defense") * DEFENSE_FACTOR
+				force *= 1.0 + attacker.perk(SkillTree.MAGIC_POWER)
 			_strike(outcome, force)
 
 
@@ -448,6 +475,7 @@ func _use_move(outcome: Outcome) -> void:
 func _strike(outcome: Outcome, force: float) -> void:
 	var answer_power := 1.0 if outcome.answer == null else outcome.answer.power
 	if outcome.kind == Kind.HEAVY and outcome.defense == Defense.COUNTER:
+		answer_power *= 1.0 + defender.perk(SkillTree.COUNTER_POWER)
 		outcome.reflected = _roll(force * answer_power)
 		attacker.hp -= outcome.reflected
 		outcome.result = "Countered! %s takes %d." % [attacker.display_name, outcome.reflected]
@@ -455,9 +483,34 @@ func _strike(outcome: Outcome, force: float) -> void:
 			_end_by_knockout(defender, attacker)
 		return
 
+	var weapon := outcome.kind == Kind.PLAIN or outcome.kind == Kind.HEAVY
+	# Skill tree perks roll only for those who have them, so a seed replays the same
+	# battle for everyone else.
+	var dodge := defender.perk(SkillTree.DODGE)
+	if weapon and dodge > 0.0 and GameState.rng.randf() < dodge:
+		outcome.dodged = true
+		outcome.result = "%s dodges! No harm done." % defender.display_name
+		return
+	var critical := false
+	if weapon:
+		critical = attacker.perk(SkillTree.OPENER) > 0.0 and not attacker.has_struck
+		if not critical and attacker.perk(SkillTree.CRIT) > 0.0:
+			critical = GameState.rng.randf() < attacker.perk(SkillTree.CRIT)
+		attacker.has_struck = true
+	if critical:
+		force *= CRIT_TIMES + attacker.perk(SkillTree.CRIT_POWER)
+		outcome.critical = true
 	outcome.damage = _roll(force * share_of(outcome))
 	defender.hp -= outcome.damage
-	outcome.result = _hit_words(outcome)
+	outcome.result = ("Critical! " if critical else "") + _hit_words(outcome)
+	var mirror := defender.perk(SkillTree.MIRROR)
+	if outcome.kind == Kind.MAGIC and outcome.defense == Defense.WARD and mirror > 0.0 and defender.hp > 0:
+		outcome.reflected = _roll(outcome.damage * mirror)
+		attacker.hp -= outcome.reflected
+		outcome.result += " The Ward sends %d back." % outcome.reflected
+		if attacker.hp == 0:
+			_end_by_knockout(defender, attacker)
+			return
 	if defender.hp == 0:
 		_end_by_knockout(attacker, defender)
 
@@ -481,10 +534,15 @@ func _hit_words(outcome: Outcome) -> String:
 # A status move on the defender: a Ward blocks it, and a Guard makes it shorter.
 func _afflict(outcome: Outcome) -> void:
 	var move := outcome.move
-	outcome.turns = status_turns(move.boost_turns, outcome.defense)
+	var defense := outcome.defense
+	if defense == Defense.GUARD and defender.perk(SkillTree.GUARD_STOPS_STATUS) > 0.0:
+		defense = Defense.WARD
+	outcome.turns = status_turns(move.boost_turns, defense)
+	if outcome.turns > 0 and defender.perk(SkillTree.STATUS_SHORT) > 0.0:
+		outcome.turns = maxi(ceili(outcome.turns * (1.0 - defender.perk(SkillTree.STATUS_SHORT))), 1)
 	if outcome.turns == 0:
 		outcome.blocked = true
-		outcome.result = "The Ward stops it. Nothing happens."
+		outcome.result = "The %s stops it. Nothing happens." % DEFENSE_WORDS[outcome.defense]
 		return
 	var held := "The Guard keeps it short. " if outcome.defense == Defense.GUARD else ""
 	var who := defender.display_name
@@ -549,7 +607,7 @@ func _reward(player: PlayerData, lines: PackedStringArray) -> void:
 	var exp_gain := PVP_EXP_PER_LEVEL * loser.level
 	var gold_gain := 0
 	if loser.monster != null:
-		exp_gain = loser.monster.exp_reward
+		exp_gain = roundi(loser.monster.exp_reward * (1.0 + player.perk(SkillTree.EXP)))
 		gold_gain = player.found_gold(loser.monster.gold_reward)
 	else:
 		var usual := exp_gain

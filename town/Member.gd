@@ -21,6 +21,8 @@ var learned: Array[String] = []
 ## their class's items, and after that only what the town gives them goes in. A trip takes
 ## it all, and what comes home goes to the town's stock, so it is empty after each trip.
 var pack: Array[String] = []
+## The skill tree spaces they have taken, as SkillTree ids. A level gives a point.
+var tree: Array[String] = []
 
 
 func _init(who: Adventurer) -> void:
@@ -39,6 +41,45 @@ func keep(player: PlayerData) -> void:
 	experience = player.experience
 	equipment = player.equipment.duplicate()
 	learned = player.learned.duplicate()
+
+
+## Skill tree points they have and have not spent.
+func points_free() -> int:
+	return SkillTree.points_at(level) - tree.size()
+
+
+## True if they can take the space `id` now.
+func can_take(id: String) -> bool:
+	return points_free() > 0 and SkillTree.can_take(person.class_id, tree, id)
+
+
+## Takes the space `id` with a point. Returns false if they can't.
+func take(id: String) -> bool:
+	if not can_take(id):
+		return false
+	tree.append(id)
+	return true
+
+
+## Spends every free point on the branches in `order`, as the sim does.
+func spend_points(order: Array[int]) -> void:
+	while points_free() > 0:
+		var id := SkillTree.next_in(person.class_id, tree, order)
+		if id == "":
+			return
+		tree.append(id)
+
+
+## What taking back every point costs at the Academy.
+func reset_price() -> int:
+	return tree.size() * SkillTree.RESET_PRICE_PER_POINT
+
+
+## The most days of food they can carry on a trip: their Max Food at their level, with
+## what the skill tree adds.
+func max_food() -> int:
+	var food := person.food_at(level) + SkillTree.stat_add(person.class_id, tree, "food")
+	return floori(food * (1.0 + SkillTree.perk(person.class_id, tree, SkillTree.FOOD_SHARE)))
 
 
 ## Puts on the gear `item_id`, and returns the id of what it replaces, or "".

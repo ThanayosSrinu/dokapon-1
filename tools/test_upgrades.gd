@@ -340,7 +340,8 @@ func _test_academy_screen() -> void:
 	town.buildings["academy"] = 1
 	var one := town.roster[0]
 	var academy: AcademyScreen = await _open(ACADEMY)
-	_expect(academy.tiles.size() == town.teachable().size(), "the Academy shows each move it teaches")
+	_expect(academy.tiles.size() == town.teachable().size() + 1 and academy.tile_ids.back() == AcademyScreen.RESET,
+			"the Academy shows each move it teaches, then the reset")
 	_expect(academy.picked == academy.tile_ids[0], "and opens on the first")
 	academy.pick("tome_spark")
 	await _wait()

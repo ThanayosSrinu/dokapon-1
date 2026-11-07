@@ -51,12 +51,18 @@ static func sum_words(person: Adventurer, made: PlayerData, stat: String) -> Str
 	var parts := PackedStringArray()
 	parts.append("%s at level %d: %d." % [data.display_name, made.level,
 			data.base_stats[stat] + data.growth[stat] * (made.level - 1)])
+	var tree_add := SkillTree.stat_add(made.class_id, made.tree, stat)
+	if tree_add != 0:
+		parts.append("Skill tree: %+d." % tree_add)
 	for slot: ItemData.Kind in PlayerData.EQUIPMENT_SLOTS:
 		if made.equipment.has(slot):
 			var item := Database.get_item(made.equipment[slot])
 			var bonus: int = item.bonuses.get(stat, 0)
 			if bonus != 0:
 				parts.append("%s: %+d." % [item.display_name, bonus])
+	var times := SkillTree.stat_mult(made.class_id, made.tree, stat)
+	if not is_equal_approx(times, 1.0):
+		parts.append("Keystone: x%s." % str(snappedf(times, 0.01)))
 	return " ".join(parts)
 
 
@@ -84,4 +90,4 @@ static func trait_lines(person: Adventurer) -> String:
 
 ## The days of food they can carry on a trip that starts now.
 static func food(person: Adventurer, one: Member) -> int:
-	return person.food_at(0 if one == null else one.level)
+	return person.food_at() if one == null else one.max_food()

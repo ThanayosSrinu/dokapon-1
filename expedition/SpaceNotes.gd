@@ -17,9 +17,24 @@ static func of(trip: Expedition, id: int) -> Dictionary:
 	var type := trip.type_at(id)
 	if type == BoardNode.NodeType.TREASURE:
 		var guarded := trip.is_guarded(id)
+		var seen := trip.foreseen_chest(id)
 		return {"title": GUARDED_TITLE if guarded else BoardNode.TYPE_INFO[type]["name"],
-				"text": _chest_words(trip.player, guarded)}
+				"text": _chest_words(trip.player, guarded) if seen == null else _seen_chest_words(seen)}
+	var foe := trip.foreseen_monster(id) if type == BoardNode.NodeType.BATTLE else null
+	if foe != null:
+		return {"title": foe.display_name, "text": "%s, level %d. Landing exactly on it starts a fight, and walking past does nothing." % [
+				foe.display_name, foe.level]}
 	return {"title": BoardNode.TYPE_INFO[type]["name"], "text": WORDS.get(type, "")}
+
+
+# What a chest holds, for those who can see it. It takes an exact landing all the same.
+static func _seen_chest_words(chest: SpaceEffects.Result) -> String:
+	var words := "It holds %d gold." % chest.gold
+	if chest.item_id != "":
+		words = "It holds a %s." % Database.get_item(chest.item_id).display_name
+	if chest.guardian != null:
+		words += " A %s guards it." % chest.guardian.display_name
+	return words + " It takes an exact landing."
 
 
 static func _chest_words(player: PlayerData, guarded: bool) -> String:

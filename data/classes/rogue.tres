@@ -16,12 +16,12 @@ base_stats = Dictionary[String, int]({
 "speed": 11
 })
 growth = Dictionary[String, int]({
-"attack": 2,
+"attack": 1,
 "defense": 1,
 "magic": 1,
-"max_hp": 6,
+"max_hp": 3,
 "max_mp": 1,
-"speed": 3
+"speed": 2
 })
 starting_gold = 300
 starting_items = Array[String](["herb", "herb"])

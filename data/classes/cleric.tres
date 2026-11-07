@@ -17,10 +17,10 @@ base_stats = Dictionary[String, int]({
 })
 growth = Dictionary[String, int]({
 "attack": 1,
-"defense": 2,
-"magic": 2,
-"max_hp": 5,
-"max_mp": 3,
+"defense": 1,
+"magic": 1,
+"max_hp": 3,
+"max_mp": 2,
 "speed": 1
 })
 starting_gold = 200

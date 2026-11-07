@@ -352,7 +352,7 @@ func _wait_for_choice() -> bool:
 func _offer_camp() -> void:
 	if trip.can_camp():
 		camp_button.block("")
-		Tips.attach(camp_button, CAMP_TEXT, CAMP_WORDS % roundi(Expedition.CAMP_SHARE * 100.0))
+		Tips.attach(camp_button, CAMP_TEXT, CAMP_WORDS % roundi(trip.player.rest_share * 100.0))
 	else:
 		camp_button.block(CAMP_HUNGRY if trip.food_left == 0 else CAMP_FULL)
 

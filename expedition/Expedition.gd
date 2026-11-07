@@ -131,8 +131,13 @@ var map_data := {}
 var _lands := true
 # True once the Portal has been in reach of the die while heading home.
 var _portal_in_reach := false
-# True if they ate this morning.
+# True if they ate this morning, or today needed no meal.
 var _fed_today := false
+# How much of a meal is owed. Each day adds what a day costs, less what the skill tree
+# saves, and a meal is eaten for each whole one.
+var _meals_owed := 0.0
+# Space id -> the monster waiting there, for those who can see them (SkillTree.SEE_MONSTERS).
+var _foes := {}
 # Space id -> what stands on it on this trip, as a BoardNode.NodeType.
 var _board := {}
 # The spaces that hold a monster right now, as keys.
@@ -166,7 +171,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	trip_days = stage.days
 	player = make_player(person, hand, kept)
 	level_at_start = player.level
-	food_taken = person.food_at(0 if kept == null else kept.level) if food < 0 else food
+	food_taken = (person.food_at() if kept == null else kept.max_food()) if food < 0 else food
 	food_left = food_taken
 	space_id = map.portal
 	player.space_id = space_id
@@ -309,9 +314,10 @@ func start_day() -> bool:
 	return true
 
 
-## Rolls the die. The result can be 0.
+## Rolls the die. The result can be 0, unless the skill tree says it never is.
 func roll() -> int:
-	var steps := maxi(GameState.rng.randi_range(0, person.die_top) + player.take_roll_bonus(), 0)
+	var lowest := 1 if player.perk(SkillTree.NO_ZERO) > 0.0 else 0
+	var steps := maxi(GameState.rng.randi_range(lowest, person.die_top) + player.take_roll_bonus(), 0)
 	note("roll", "%s rolled %d." % [player.player_name, steps])
 	return steps
 
@@ -430,8 +436,7 @@ func land() -> void:
 		BoardNode.NodeType.TREASURE:
 			_open_chest()
 		BoardNode.NodeType.BATTLE:
-			var ids := Database.monster_ids_for_level(player.level)
-			_meet(Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)]))
+			_meet(_foes[space_id] if _foes.has(space_id) else _roll_monster())
 
 
 ## Plays `fight` with no screen, as the bot would.
@@ -507,6 +512,36 @@ func _set_up_board(stage: Stage) -> void:
 		var id: int = road.pop_back()
 		_board[id] = BoardNode.NodeType.BATTLE
 		_monsters[id] = true
+	# Those who can see what waits have it settled now, so the map can tell it.
+	if player.perk(SkillTree.SEE_CHESTS) > 0.0:
+		for id in map.spaces():
+			if _board[id] == BoardNode.NodeType.TREASURE:
+				_chests[id] = _roll_chest(id)
+	if player.perk(SkillTree.SEE_MONSTERS) > 0.0:
+		for id in map.spaces():
+			if _monsters.has(id):
+				_foes[id] = _roll_monster()
+
+
+## What the chest on space `id` holds, if they can see it, or null.
+func foreseen_chest(id: int) -> SpaceEffects.Result:
+	return _chests.get(id) if player.perk(SkillTree.SEE_CHESTS) > 0.0 else null
+
+
+## The monster waiting on space `id`, if they can see it, or null.
+func foreseen_monster(id: int) -> MonsterData:
+	return _foes.get(id) if _monsters.has(id) else null
+
+
+func _roll_monster() -> MonsterData:
+	var ids := Database.monster_ids_for_level(player.level)
+	return Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)])
+
+
+func _roll_chest(id: int) -> SpaceEffects.Result:
+	var rolled := SpaceEffects.roll_chest(player)
+	rolled.guardian = SpaceEffects.roll_guardian(player) if is_guarded(id) else null
+	return rolled
 
 
 # Array.shuffle() ignores GameState.rng, so it wouldn't follow the seed.
@@ -521,11 +556,18 @@ func _shuffle(list: Array[int]) -> void:
 func _clear_space(id: int) -> void:
 	_board[id] = BoardNode.NodeType.NORMAL
 	_monsters.erase(id)
+	_foes.erase(id)
 	_guarded.erase(id)
 	space_emptied.emit(id)
 
 
 func _eat() -> void:
+	_meals_owed += 1.0 - minf(player.perk(SkillTree.FOOD_SAVED), 0.75)
+	# A little over, so that four days of three quarters make three whole meals.
+	if _meals_owed < 0.999:
+		_fed_today = true
+		return
+	_meals_owed -= 1.0
 	_fed_today = food_left > 0
 	if food_left > 0:
 		food_left -= 1
@@ -574,9 +616,7 @@ func _open_chest() -> void:
 	if not by_hand and not CpuBrain.will_open_chest(player):
 		return
 	if not _chests.has(space_id):
-		var rolled := SpaceEffects.roll_chest(player)
-		rolled.guardian = SpaceEffects.roll_guardian(player) if is_guarded(space_id) else null
-		_chests[space_id] = rolled
+		_chests[space_id] = _roll_chest(space_id)
 	var chest: SpaceEffects.Result = _chests[space_id]
 	if chest.guardian != null:
 		note("find", chest.text)
@@ -744,8 +784,10 @@ static func make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerData
 		made.equipment = kept.equipment.duplicate()
 		made.learned = kept.learned.duplicate()
 		made.inventory = kept.pack.duplicate()
+		made.tree = kept.tree.duplicate()
 	made.gold = 0
-	made.gold_share = GOLD_SHARE
-	made.rest_share = CAMP_SHARE
+	made.gold_share = GOLD_SHARE * (1.0 + made.perk(SkillTree.GOLD))
+	made.rest_share = CAMP_SHARE + made.perk(SkillTree.CAMP)
+	made.bag_size += roundi(made.perk(SkillTree.BAG))
 	made.heal_fully()
 	return made

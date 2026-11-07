@@ -286,7 +286,7 @@ func _move_options(fighter: Fighter, moves: Array[String], with_back: bool) -> A
 	var options: Array[Dictionary] = []
 	for move_id in moves:
 		var move := Database.get_move(move_id)
-		var words := "%s %d MP" % [move.display_name, move.mp_cost] if move.mp_cost > 0 else move.display_name
+		var words := "%s %d MP" % [move.display_name, fighter.mp_cost(move)] if move.mp_cost > 0 else move.display_name
 		var option := _option(words, move_id, MoveIcons.hint_for(move), not _battle.can_use(fighter, move_id))
 		option["icon"] = MoveIcons.for_move(move)
 		options.append(option)

@@ -47,7 +47,7 @@ func _test_levels() -> void:
 	_expect(mage.add_experience(76) == 2, "76 EXP gives two levels")
 	_expect(mage.level == 3 and mage.experience == 15, "leftover EXP is kept")
 	_expect(signals[0] == 2, "leveled_up fires once per level")
-	_expect(mage.hp == start_hp + 8, "levels add growth to current HP")
+	_expect(mage.hp == start_hp + 2 * Database.get_class_data("mage").growth["max_hp"], "levels add growth to current HP")
 	_expect(mage.spells.has("frost_shard"), "mage learns frost_shard at level 3")
 	mage.add_experience(1000000)
 	_expect(mage.level == PlayerData.MAX_LEVEL, "level stops at the maximum")

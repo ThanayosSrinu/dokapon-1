@@ -58,6 +58,8 @@ var equipment := {}
 var spells: Array[String] = []
 ## The ids of the Magic and Special moves this player knows, at most MoveData.MOST_LEARNED.
 var learned: Array[String] = []
+## The skill tree spaces they have taken, as SkillTree ids. Only trips use a tree.
+var tree: Array[String] = []
 ## True in the old board game, where a class teaches spells as it levels up. On a trip,
 ## moves only come from tomes.
 var learns_by_level := true
@@ -156,11 +158,15 @@ func get_class_name_text() -> String:
 
 ## What a stat would be with `item_id` worn in place of what is in its slot.
 func get_stat_with(item_id: String, stat: String) -> int:
-	var item := Database.get_item(item_id)
-	var worn_bonus := 0
-	if equipment.has(item.kind):
-		worn_bonus = Database.get_item(equipment[item.kind]).bonuses.get(stat, 0)
-	return maxi(get_stat(stat) - worn_bonus + item.bonuses.get(stat, 0), 1)
+	var kind := Database.get_item(item_id).kind
+	var worn: String = equipment.get(kind, "")
+	equipment[kind] = item_id
+	var value := get_stat(stat)
+	if worn == "":
+		equipment.erase(kind)
+	else:
+		equipment[kind] = worn
+	return value
 
 
 ## A stat's current value: the fed value, less what being weak takes.
@@ -171,14 +177,23 @@ func get_stat(stat: String) -> int:
 	return maxi(value, 1)
 
 
-## A stat when not weak: class, then level, then everything worn. Always at least 1,
-## because equipment can lower a stat.
+## A stat when not weak: class, then level, then the skill tree, then everything worn,
+## then the tree's keystones multiply it. Always at least 1, because equipment can lower
+## a stat.
 func fed_stat(stat: String) -> int:
 	var data := Database.get_class_data(class_id)
 	var value: int = data.base_stats[stat] + data.growth[stat] * (level - 1)
+	value += SkillTree.stat_add(class_id, tree, stat)
 	for item_id: String in equipment.values():
 		value += Database.get_item(item_id).bonuses.get(stat, 0)
+	if not tree.is_empty():
+		value = floori(value * SkillTree.stat_mult(class_id, tree, stat))
 	return maxi(value, 1)
+
+
+## The skill tree perk `perk_name`, or 0. See SkillTree.
+func perk(perk_name: String) -> float:
+	return 0.0 if tree.is_empty() else SkillTree.perk(class_id, tree, perk_name)
 
 
 ## How much experience the next level takes.

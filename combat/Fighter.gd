@@ -44,6 +44,8 @@ var specials_used: Array[String] = []
 ## many more of them. See poison_tick().
 var poison_damage := 0
 var poison_turns := 0
+## True once this fighter has landed a weapon hit in this fight.
+var has_struck := false
 
 var _hp := 0
 var _mp := 0
@@ -118,6 +120,25 @@ func tick_boosts() -> void:
 ## What is raised or lowered right now, as {"stat", "share", "turns"}.
 func boosts() -> Array[Dictionary]:
 	return _boosts
+
+
+## The skill tree perk `perk_name`, or 0. Monsters have none.
+func perk(perk_name: String) -> float:
+	return player.perk(perk_name) if player != null else 0.0
+
+
+## The MP `move` costs this fighter, after a skill tree's Thrift.
+func mp_cost(move: MoveData) -> int:
+	if move.mp_cost <= 0:
+		return 0
+	return maxi(ceili(move.mp_cost * (1.0 - perk(SkillTree.THRIFT))), 1)
+
+
+## Ends poison and anything lowering a stat.
+func cleanse() -> void:
+	poison_turns = 0
+	poison_damage = 0
+	_boosts = _boosts.filter(func(boost: Dictionary) -> bool: return boost["share"] > 0.0)
 
 
 ## True when nobody chooses this fighter's moves on screen.

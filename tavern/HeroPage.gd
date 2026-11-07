@@ -1,7 +1,7 @@
 class_name HeroPage
 extends KitPage
 ## Everything about one person, behind the hero card's Details button: their stats, gear,
-## moves, traits and history, one tab at a time. The numbers come from HeroFacts, so they
+## moves, traits, history and skill tree, one tab at a time. The numbers come from HeroFacts, so they
 ## are the ones a trip that starts now would use. Left and right move between the tabs,
 ## and down reads the rows, each with a tip.
 
@@ -18,6 +18,8 @@ var tabs: Array[KitButton] = []
 var tab := Tab.STATS
 ## The rows of the tab shown, which can take focus.
 var rows: Array[Control] = []
+## The Skill tree tab's grid, while that tab is shown, or null.
+var tree_grid: SkillGrid
 
 var _person: Adventurer
 var _one: Member
@@ -86,7 +88,14 @@ func show_person(person: Adventurer, one: Member) -> void:
 	_portrait.texture = person.portrait
 	_name.text = person.display_name
 	_class.text = "%s, level %d" % [person.class_data().display_name, _made.level]
+	_name_tree_tab()
 	_show_tab(tab, true)
+
+
+# The Skill tree tab says how many points wait to be spent.
+func _name_tree_tab() -> void:
+	var free := 0 if _one == null else _one.points_free()
+	tabs[Tab.TREE].text = TAB_NAMES[Tab.TREE] if free <= 0 else "%s (%d)" % [TAB_NAMES[Tab.TREE], free]
 
 
 func first_focus() -> Control:
@@ -118,6 +127,7 @@ func _show_tab(which: int, again := false) -> void:
 		tabs[index].lit = index == tab
 	Tips.close()
 	rows.clear()
+	tree_grid = null
 	for child in _list.get_children():
 		_list.remove_child(child)
 		child.queue_free()
@@ -135,9 +145,26 @@ func _show_tab(which: int, again := false) -> void:
 		Tab.HISTORY:
 			_fill_history()
 		Tab.TREE:
-			_add_row("", "Skill tree", "", "Not open yet.", "Skill tree", "Each class gets its own skill tree in a later update.")
+			_fill_tree()
 	_link_rows()
 	_scroll.scroll_vertical = 0
+
+
+func _fill_tree() -> void:
+	tree_grid = SkillGrid.new()
+	tree_grid.show_tree(_person, _one)
+	tree_grid.taken.connect(_on_taken)
+	_list.add_child(tree_grid)
+
+
+# A point was spent: the numbers change, and the town keeps it.
+func _on_taken(_id: String) -> void:
+	_made = HeroFacts.sheet(_person, _one)
+	_class.text = "%s, level %d" % [_person.class_data().display_name, _made.level]
+	_name_tree_tab()
+	var town := TownData.current()
+	if town != null and town.roster.has(_one):
+		town.save()
 
 
 func _fill_stats() -> void:
@@ -260,8 +287,9 @@ func _add_row(icon_name: String, title: String, value: String, words: String, ti
 
 func _link_rows() -> void:
 	var above: Control = tabs[tab]
+	var below: Control = rows[0] if not rows.is_empty() else (tree_grid.first_spot() if tree_grid != null else null)
 	for button in tabs:
-		button.focus_neighbor_bottom = button.get_path_to(rows[0]) if not rows.is_empty() else NodePath("")
+		button.focus_neighbor_bottom = button.get_path_to(below) if below != null else NodePath("")
 	for index in rows.size():
 		var row := rows[index]
 		row.focus_neighbor_top = row.get_path_to(above)

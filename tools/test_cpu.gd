@@ -274,7 +274,7 @@ func _test_rivals() -> void:
 	_expect(CpuBrain.duel_value(hero, equal) > without_grudge, "a grudge makes a duel worth more")
 	hero.grudges.clear()
 
-	var hunter := _hero("warrior", 16)
+	var hunter := _hero("warrior", 22)
 	GameState.players.append(hunter)
 	var plain_value := CpuBrain.duel_value(hunter, equal)
 	GameState.shadow_crown = {"wearer": equal.player_name, "ends_day": 8}

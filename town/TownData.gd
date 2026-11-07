@@ -295,7 +295,7 @@ func bring_home(trip: Expedition) -> void:
 ## The most days of food `person` can carry, on any trip: their Max Food at their level now.
 func max_food(person: Adventurer) -> int:
 	var one := member(person)
-	return person.food_at(0 if one == null else one.level)
+	return person.food_at() if one == null else one.max_food()
 
 
 ## The most days of food `person` can take, by what they carry, what the Storehouse keeps,
@@ -649,6 +649,25 @@ func teach(tome_id: String, one: Member, forgotten := "") -> bool:
 	return true
 
 
+## Why `one`'s skill tree points can't be taken back at the Academy, or "".
+func reset_problem(one: Member) -> String:
+	if one.tree.is_empty():
+		return "No points spent"
+	if one.reset_price() > gold:
+		return "Need %d more gold" % (one.reset_price() - gold)
+	return ""
+
+
+## Takes back every skill tree point `one` has spent, for gold, so they can spend them again.
+func reset_tree(one: Member) -> bool:
+	if reset_problem(one) != "":
+		return false
+	gold -= one.reset_price()
+	one.tree.clear()
+	remember("%s took back their skill tree points." % one.person.display_name)
+	return true
+
+
 # --- Saving -------------------------------------------------------------------
 
 static func save_path() -> String:
@@ -700,7 +719,7 @@ func to_save() -> Dictionary:
 			"person": one.person.id, "ready_on": one.ready_on, "trips": one.trips,
 			"trips_home": one.trips_home, "gold_home": one.gold_home, "level": one.level,
 			"experience": one.experience, "equipment": one.equipment.duplicate(),
-			"learned": one.learned.duplicate(), "pack": one.pack.duplicate(),
+			"learned": one.learned.duplicate(), "pack": one.pack.duplicate(), "tree": one.tree.duplicate(),
 		})
 	return {
 		"version": SAVE_VERSION, "gold": gold, "day": day, "buildings": buildings.duplicate(),
@@ -730,6 +749,9 @@ static func from_save(saved: Dictionary) -> TownData:
 		one.equipment = kept["equipment"].duplicate()
 		one.learned.assign(kept["learned"])
 		one.pack.assign(kept["pack"])
+		for id: String in kept.get("tree", []):
+			if SkillTree.can_take(person.class_id, one.tree, id):
+				one.tree.append(id)
 		town.roster.append(one)
 	var found_stage := Database.get_stage(saved["stage"])
 	if found_stage != null:

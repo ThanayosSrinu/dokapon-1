@@ -16,10 +16,10 @@ base_stats = Dictionary[String, int]({
 "speed": 6
 })
 growth = Dictionary[String, int]({
-"attack": 3,
-"defense": 2,
+"attack": 2,
+"defense": 1,
 "magic": 0,
-"max_hp": 8,
+"max_hp": 4,
 "max_mp": 1,
 "speed": 1
 })
