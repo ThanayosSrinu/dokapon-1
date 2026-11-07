@@ -310,7 +310,8 @@ func _item_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
 	for item_id in attacker.get_items():
 		var item := Database.get_item(item_id)
-		options.append(_option(item.display_name, item_id, item.description,
+		var effect := item.effect_text()
+		options.append(_option(item.display_name, item_id, effect if effect != "" else item.description,
 				not attacker.player.can_use_item(item_id)))
 	options.append(_option("Back", BACK, ""))
 	return options

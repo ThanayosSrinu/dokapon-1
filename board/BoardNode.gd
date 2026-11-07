@@ -93,7 +93,7 @@ const DASHES := 10
 		display_name = value
 		queue_redraw()
 
-## When true, a chest here has a monster guarding it, and shows crossed swords behind it.
+## When true, a chest here has a monster guarding it, and shows as a chest with fangs.
 ## Not saved; set by code while playing.
 var guarded := false:
 	set(value):

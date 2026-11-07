@@ -8,7 +8,7 @@ extends RefCounted
 const WORLD: Texture2D = preload("res://assets/puny/world/punyworld-overworld-tileset.png")
 const SPACES: Texture2D = preload("res://assets/custom/spaces.png")
 const ICONS: Texture2D = preload("res://assets/custom/space_icons.png")
-## A chest that a monster guards: tools/make_art.py builds it from two of ICONS.
+## A chest that a monster guards, with fangs and red eyes: drawn by tools/make_art.py.
 const GUARDED_CHEST_ICON: Texture2D = preload("res://assets/custom/guarded_chest_icon.png")
 ## The Portal's gate on the island, one row of frames. Its foot is at the bottom middle.
 const PORTAL_GATE: Texture2D = preload("res://assets/custom/portal/board_gate.png")

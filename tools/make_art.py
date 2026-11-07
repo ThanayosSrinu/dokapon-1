@@ -160,15 +160,35 @@ def make_icons():
     sheet.save(OUT / "space_icons.png")
 
 
+# A chest that a monster guards: the chest has woken up, with fangs and red eyes in its open
+# mouth. "k" is the dark inside of the mouth.
+GUARDED_CHEST = [
+    "..nnnnnnnnnn..", ".nNNNNNNNNNNn.", ".nNnnnnnnnnNn.", ".gggggggggggg.",
+    ".kwkwkkkkwkwk.", ".kkwkkkkkkwkk.", ".kRyrkkkkryRk.", ".kRrrkkkkrrRk.",
+    ".kkkkwkkwkkkk.", ".kwkwwkkwwkwk.", ".gggggggggggg.", ".nnnnngynnnnn.",
+    ".nnnnnggnnnnn.", ".NnnnnnnnnnnN.", ".NNNNNNNNNNNN.",
+]
+GUARDED_COLORS = dict(PALETTE, k="#2a1420")
+
+
 def make_guarded_icon():
-    """A chest with crossed swords behind it: a chest that a monster guards. Made from the
-    Battle and Treasure icons on space_icons.png, so the two always match."""
-    sheet = Image.open(OUT / "space_icons.png")
-    swords = sheet.crop((8 * ICON_CELL, 0, 9 * ICON_CELL, ICON_CELL))
-    chest = sheet.crop((9 * ICON_CELL, 0, 10 * ICON_CELL, ICON_CELL))
+    """A chest that a monster guards, drawn the same way as the space icons."""
     icon = Image.new("RGBA", (ICON_CELL, ICON_CELL), (0, 0, 0, 0))
-    icon.alpha_composite(swords, (0, -3))
-    icon.alpha_composite(chest, (0, 4))
+    rows = GUARDED_CHEST
+    left = (ICON_CELL - max(len(r) for r in rows)) // 2
+    top = (ICON_CELL - len(rows)) // 2
+    filled = {}
+    for y, row in enumerate(rows):
+        for x, char in enumerate(row):
+            if char != ".":
+                filled[(x, y)] = hexc(GUARDED_COLORS[char])
+    for (x, y) in filled:
+        for ox in (-1, 0, 1):
+            for oy in (-1, 0, 1):
+                if (x + ox, y + oy) not in filled:
+                    icon.putpixel((left + x + ox, top + y + oy), INK)
+    for (x, y), color in filled.items():
+        icon.putpixel((left + x, top + y), color)
     icon.save(OUT / "guarded_chest_icon.png")
 
 

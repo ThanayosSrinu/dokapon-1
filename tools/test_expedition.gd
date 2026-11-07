@@ -284,7 +284,7 @@ func _test_camp() -> void:
 	var hungry := Expedition.new(_bram, _grass, 1, true, 1)
 	hungry.player.hp = 5
 	hungry.start_day()
-	_expect(hungry.food_left == 0 and hungry.can_camp(), "the last day of food still pays for camp")
+	_expect(hungry.food_left == 0 and not hungry.can_camp(), "an empty bag means no camp, even on the last day of food")
 	hungry.end_day()
 	hungry.start_day()
 	var hp := hungry.player.hp

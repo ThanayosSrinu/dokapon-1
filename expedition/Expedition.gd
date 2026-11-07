@@ -191,9 +191,10 @@ func is_guarded(id: int) -> bool:
 	return _guarded.has(id)
 
 
-## True if a day at camp would do something, and today's food was there to pay for it.
+## True if a day at camp would do something, and there is food left in the bag to pay
+## for it. With the bag empty there is no camp, even on the day the last food was eaten.
 func can_camp() -> bool:
-	if is_over() or not _fed_today:
+	if is_over() or not _fed_today or food_left <= 0:
 		return false
 	return player.hp < player.get_stat("max_hp") or player.mp < player.get_stat("max_mp")
 
