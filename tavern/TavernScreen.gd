@@ -40,6 +40,8 @@ const DISMISS_LOST := "Nobody else could go, and you could not hire anyone. It i
 
 var back: KitBackButton
 var card: TavernCard
+## Everything about whoever the card shows.
+var page: HeroPage
 var bubble: TavernBubble
 var gold_chip: KitChip
 var arrow: KitArrow
@@ -80,6 +82,11 @@ func _ready() -> void:
 	_build_dismiss_panel()
 	arrow = KitArrow.new(null, KitArrow.Side.LEFT)
 	add_child(arrow)
+	page = HeroPage.new()
+	page.closed.connect(func() -> void:
+			_refresh_hire()
+			card.more.grab_focus())
+	add_child(page)
 	Sound.music("shop")
 	_show_tab(Tab.ROSTER if _strangers(town).is_empty() else Tab.RECRUIT)
 	if not Screens.busy and get_tree().current_scene == self:
@@ -166,6 +173,7 @@ func _build_card() -> void:
 	card = TavernCard.new()
 	card.position = Vector2(CARD_LEFT, CARD_TOP)
 	card.hire.pressed.connect(_on_main_button)
+	card.more.pressed.connect(open_details)
 	var layer := Control.new()
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage.add_child(layer)
@@ -378,6 +386,21 @@ func _point_at(target: Control, side: KitArrow.Side) -> void:
 	arrow.rotation = KitArrow.TURNS[side]
 
 
+## Opens the details page of whoever the card shows.
+func open_details() -> void:
+	if chosen == null or _leaving or page.visible or dismiss_panel.visible:
+		return
+	page.show_person(chosen.adventurer, TownData.current().member(chosen.adventurer))
+	arrow.target = null
+	page.open()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("game_character") and not page.visible:
+		get_viewport().set_input_as_handled()
+		open_details()
+
+
 func _on_guest_pressed() -> void:
 	card.hire.grab_focus()
 
@@ -452,7 +475,9 @@ func _on_hire() -> void:
 
 
 func _on_back() -> void:
-	if dismiss_panel.visible:
+	if page.visible:
+		page.close()
+	elif dismiss_panel.visible:
 		_close_dismiss()
 	elif not _leaving:
 		Screens.go(TOWN)

@@ -37,6 +37,11 @@ extends Resource
 
 ## Max Food a level adds. Kept small, so that the town's upgrades and gear matter more.
 const FOOD_PER_LEVEL := 1
+## A die at or below this is slow, and at or above FAST_DIE fast.
+const SLOW_DIE := 6
+const FAST_DIE := 9
+## Most people carry this many days of food when they join.
+const USUAL_FOOD := 25
 
 
 func class_data() -> ClassData:
@@ -53,3 +58,20 @@ func stat(stat_name: String, at_level := 0) -> int:
 ## The days of food they can carry at `at_level`, or at the level they join at.
 func food_at(at_level := 0) -> int:
 	return max_food + FOOD_PER_LEVEL * maxi((at_level if at_level > 0 else level) - level, 0)
+
+
+## What sets them apart, as {"name", "effect"}, read from their die, food and level, so
+## that the words always match what a trip does.
+func traits() -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	if die_top >= FAST_DIE:
+		found.append({"name": "Fast feet", "effect": "Movement die 0-%d, so they cover more ground each day." % die_top})
+	elif die_top <= SLOW_DIE:
+		found.append({"name": "Slow feet", "effect": "Movement die 0-%d, the smallest there is." % die_top})
+	if max_food < USUAL_FOOD:
+		found.append({"name": "Packs light", "effect": "Carries food for %d days when they join. Most carry %d." % [max_food, USUAL_FOOD]})
+	elif max_food > USUAL_FOOD:
+		found.append({"name": "Well fed", "effect": "Carries food for %d days when they join. Most carry %d." % [max_food, USUAL_FOOD]})
+	if level > 1:
+		found.append({"name": "Seasoned", "effect": "Joins at level %d, with the stats of that level." % level})
+	return found

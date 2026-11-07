@@ -52,9 +52,6 @@ func _test_data() -> void:
 	_expect(_cheap().fee <= TownData.START_GOLD, "a new player can pay someone")
 	_expect(_costly().fee > TownData.START_GOLD, "someone costs more than a new player has")
 	for person in people:
-		_expect(person.stat("attack") < TavernCard.FULL_STRENGTH, "%s fits the strength bar" % person.id)
-		_expect(person.stat("max_hp") < TavernCard.FULL_HEALTH, "%s fits the health bar" % person.id)
-		_expect(person.stat("magic") < TavernCard.FULL_MAGIC, "%s fits the magic bar" % person.id)
 		_expect(person.die_top < DieRuler.NUMBERS, "%s fits the die ruler" % person.id)
 
 
@@ -116,7 +113,7 @@ func _test_opening() -> void:
 func _test_card_stays_put() -> void:
 	var tavern := await _open_tavern()
 	var box := tavern.card.get_global_rect()
-	var bars := tavern.card.strength_bar.get_global_rect()
+	var bars: Rect2 = tavern.card.stats["attack"].get_global_rect()
 	var hire := tavern.card.hire.get_global_rect()
 	var room := Rect2(TavernScreen.ROOM_AREA.position + tavern._stage.position, TavernScreen.ROOM_AREA.size)
 	for one in tavern.guests:
@@ -125,14 +122,13 @@ func _test_card_stays_put() -> void:
 		var name_shown := one.adventurer.display_name
 		_expect(tavern.card.shown_name() == name_shown, "the card follows the focus to %s" % name_shown)
 		_expect(tavern.card.get_global_rect() == box, "the card stays put for %s" % name_shown)
-		_expect(tavern.card.strength_bar.get_global_rect() == bars, "the bars stay put for %s" % name_shown)
+		_expect(tavern.card.stats["attack"].get_global_rect() == bars, "the stats stay put for %s" % name_shown)
 		_expect(tavern.card.hire.get_global_rect() == hire, "Hire stays put for %s" % name_shown)
 		_expect(tavern.card.hire.size.x >= tavern.card.hire.get_combined_minimum_size().x,
 				"Hire's words fit for %s" % name_shown)
 		_expect(room.encloses(tavern.bubble.get_global_rect()), "%s's words stay in the room" % name_shown)
-		var strength: float = float(one.adventurer.stat("attack")) / TavernCard.FULL_STRENGTH
-		await get_tree().create_timer(KitBar.SLIDE_SECONDS).timeout
-		_expect(is_equal_approx(tavern.card.strength_bar.shown, strength), "the bar shows %s's strength" % name_shown)
+		_expect(tavern.card.stats["attack"].shown_value() == HeroFacts.sheet(one.adventurer, null).get_stat("attack"),
+				"the card shows %s's ATK" % name_shown)
 		_expect(tavern.card.die.top == one.adventurer.die_top, "the die shows %s's die" % name_shown)
 	var first := tavern.guests[0]
 	var said := tavern.bubble.shown_words()
@@ -175,14 +171,17 @@ func _test_keys() -> void:
 	_expect(_focused() == tavern.card.hire, "down reaches Hire")
 	_expect(tavern.chosen == guests[1], "Hire keeps the person chosen")
 	await _tap("ui_up")
-	_expect(_focused() == tavern.card.die, "up from Hire reaches the details")
+	var parts := tavern.card.details()
+	_expect(_focused() == parts[-1], "up from Hire reaches the details")
+	for _step in range(parts.size() - 1 - parts.find(tavern.card.die)):
+		await _tap("ui_up")
+	_expect(_focused() == tavern.card.die, "up walks through the details to the die")
 	await get_tree().create_timer(Tips.DELAY + WAIT).timeout
 	_expect(Tips.showing() and Tips.shown_text().contains(str(guests[1].adventurer.die_top)),
 			"focus on a detail opens its tip")
-	await _tap("ui_up")
-	await _tap("ui_up")
-	await _tap("ui_up")
-	_expect(_focused() == tavern.card.strength_bar, "up walks through the details")
+	while _focused() != tavern.card.more and _focused() is not TavernGuest:
+		await _tap("ui_up")
+	_expect(_focused() == tavern.card.more, "up walks through the details to Details")
 	await _tap("ui_up")
 	_expect(_focused() == guests[1], "and comes back to the person")
 	await _tap("ui_accept")
@@ -285,8 +284,18 @@ func _test_tabs_and_roster() -> void:
 	_expect(tavern.guests.size() == 2, "the Roster shows your people")
 	_expect(tavern.card.shown_status() == "Ready to go", "the card says who is ready")
 	_expect(tavern.card._facts[1].text.contains(str(bram.wage)), "the card shows the wage")
-	_expect(tavern.card._facts[2].text.contains("240"), "the card shows past trips")
-	_expect(tavern.card._facts[3].text.contains("Short Sword"), "the card shows the gear")
+	tavern.open_details()
+	tavern.page.tabs[HeroPage.Tab.HISTORY].grab_focus()
+	await _wait()
+	_expect(tavern.page.shown_words().contains("240"), "the details page shows past trips")
+	tavern.page.tabs[HeroPage.Tab.GEAR].grab_focus()
+	await _wait()
+	_expect(tavern.page.shown_words().contains("Short Sword"), "the details page shows the gear")
+	tavern.page.tabs[HeroPage.Tab.STATS].grab_focus()
+	tavern.page.close()
+	await _wait()
+	tavern.guest("bram").grab_focus()
+	await _wait()
 	_expect(tavern.card.hire.text == "Dismiss Bram", "the button dismisses")
 	_expect(tavern.card.hire.danger, "and is stained red")
 	await _tap("ui_right")

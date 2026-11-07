@@ -23,9 +23,21 @@ func _ready() -> void:
 	tavern.card.hire.grab_focus()
 	await _settle(0.7)
 	await _save(folder + "/tavern_no_gold.png")
-	tavern.card.strength_bar.grab_focus()
+	PadInput.keys_in_use = true
+	tavern.card.stats["attack"].grab_focus()
 	await _settle(0.7)
 	await _save(folder + "/tavern_tip.png")
+	for index in tavern.guests.size():
+		tavern.guests[index].grab_focus()
+		await _settle(0.3)
+		tavern.open_details()
+		for tab in HeroPage.TAB_NAMES.size():
+			tavern.page.tabs[tab].grab_focus()
+			await _settle(0.4)
+			await _save(folder + "/page_%s_%d.png" % [tavern.guests[index].adventurer.id, tab])
+		tavern.page.tabs[0].grab_focus()
+		tavern.page.close()
+	PadInput.keys_in_use = false
 	tavern.guests[0].grab_focus()
 	await _settle(0.4)
 	tavern.card.hire.grab_focus()

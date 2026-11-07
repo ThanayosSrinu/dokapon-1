@@ -50,6 +50,8 @@ var heading: Label
 var hero: CharacterFigure
 ## Stops the player when the trip may not be home before the next due day.
 var warning: TripWarning
+## Everything about whoever is going, on C or the controller's Y.
+var page: HeroPage
 
 var _stage: Node2D
 # The sizes of trip on offer, in the same order as the card's buttons.
@@ -77,6 +79,8 @@ func _ready() -> void:
 	arrow = KitArrow.new(null, KitArrow.Side.LEFT)
 	add_child(arrow)
 	_build_warning()
+	page = HeroPage.new()
+	add_child(page)
 	_refresh_enter(town)
 	if not Screens.busy and get_tree().current_scene == self:
 		Screens.reveal()
@@ -419,8 +423,29 @@ func _site_area() -> Rect2:
 	return Rect2(SITE_AREA.position + _stage.position, SITE_AREA.size)
 
 
+## Opens the details page of whoever is going.
+func open_details() -> void:
+	var town := TownData.current()
+	if town.going == null or _leaving or page.visible or warning.visible:
+		return
+	var had_focus := get_viewport().gui_get_focus_owner()
+	page.show_person(town.going, town.member(town.going))
+	page.closed.connect(func() -> void:
+			if is_instance_valid(had_focus):
+				had_focus.grab_focus(), CONNECT_ONE_SHOT)
+	page.open()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("game_character") and not page.visible:
+		get_viewport().set_input_as_handled()
+		open_details()
+
+
 func _leave() -> void:
-	if warning.visible:
+	if page.visible:
+		page.close()
+	elif warning.visible:
 		_close_warning()
 	elif not _leaving:
 		Screens.go(TOWN)

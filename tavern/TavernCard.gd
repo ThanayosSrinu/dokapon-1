@@ -1,29 +1,29 @@
 class_name TavernCard
 extends PanelContainer
 ## The card of one adventurer. It never moves or changes size, whoever it shows, so
-## that moving between people compares them: only the bars and the die change (rule U3).
+## that moving between people compares them: only the numbers and the die change.
+## The numbers are the ones a trip that starts now would use (HeroFacts).
 
 const WIDTH := 440.0
 const PORTRAIT_SIZE := Vector2(112, 112)
-const BAR_GAP := 6.0
-## What a full bar means. The strongest adventurer in the game so far is below these.
-const FULL_STRENGTH := 20.0
-const FULL_HEALTH := 60.0
-const FULL_MAGIC := 20.0
+## Looking for work, for someone not on the roster.
+const LOOKING := "Looking for work"
 
-var strength_bar: KitBar
-var health_bar: KitBar
-var magic_bar: KitBar
+## Stat name -> its HeroStat.
+var stats := {}
 var die: DieRuler
+## Opens the details page.
+var more: KitButton
 var hire: KitButton
 
 var _portrait: TextureRect
 var _name: Label
 var _class: Label
-var _about: Label
-## The four lines of facts, which mean different things for strangers and your people.
+var _traits: Label
+## The three lines of facts: food, money and status.
 var _facts: Array[Label] = []
 var _fact_icons: Array[TextureRect] = []
+var _fact_rows: Array[Control] = []
 
 
 func _init() -> void:
@@ -33,15 +33,18 @@ func _init() -> void:
 	column.add_theme_constant_override("separation", 6)
 	add_child(column)
 	_build_top(column)
-	var bars := VBoxContainer.new()
-	bars.add_theme_constant_override("separation", int(BAR_GAP))
-	column.add_child(bars)
-	strength_bar = _add_bar(bars, Kit.DANGER, "sword")
-	health_bar = _add_bar(bars, Kit.HEALTH, "heart")
-	magic_bar = _add_bar(bars, Kit.MAGIC, "star")
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 2)
+	column.add_child(grid)
+	for stat in HeroFacts.STATS:
+		var cell := HeroStat.new(stat)
+		grid.add_child(cell)
+		stats[stat] = cell
 	die = DieRuler.new()
-	bars.add_child(die)
-	for icon_name: String in ["food", "coin", "coin", "sword"]:
+	column.add_child(die)
+	for icon_name: String in ["food", "coin", "heart"]:
 		_add_fact(column, icon_name)
 	hire = KitButton.new()
 	hire.kind = KitButton.Kind.PRIMARY
@@ -49,71 +52,78 @@ func _init() -> void:
 	column.add_child(hire)
 
 
-## Fills the card with a stranger, sliding the bars from the last person's numbers.
+## Fills the card with a stranger.
 func show_recruit(person: Adventurer) -> void:
-	_show_person(person)
-	_set_fact(0, "food", "Carries food for %s" % Expedition.turns_words(person.max_food))
-	_set_fact(1, "coin", "Asks for %d gold to join" % person.fee)
-	_set_fact(2, "coin", "Wage: %d gold a month" % person.wage)
-	_set_fact(3, "sword", "Gear: %s" % _gear(person))
+	_show_person(person, null)
+	_set_fact(1, "coin", "Joins for %d gold, then %d a month" % [person.fee, person.wage],
+			"Money", "%d gold to hire them, then a wage of %d gold a month on the King's bill." % [person.fee, person.wage])
+	_set_fact(2, "heart", LOOKING, "Status", "Not on your roster. Hire them to send them out.")
 
 
 ## Fills the card with someone on the roster.
 func show_member(one: Member, today: int) -> void:
 	var person := one.person
-	_show_person(person, one.level)
+	_show_person(person, one)
+	_set_fact(1, "coin", "Wage: %d gold a month" % person.wage, "Wage",
+			"%d gold a month, paid with the King's bill." % person.wage)
 	var out := one.days_out(today)
-	_set_fact(0, "heart", "Ready to go" if out == 0 else "Down, back in %s" % TownData.days_words(out))
-	_set_fact(1, "coin", "Wage: %d gold a month" % person.wage)
-	_set_fact(2, "boot", _past_trips(one))
-	_set_fact(3, "sword", "Gear: %s" % _gear(person))
+	if out == 0:
+		_set_fact(2, "heart", "Ready to go", "Status", "They can go on a trip today.")
+	else:
+		_set_fact(2, "heart", "Down, back in %s" % TownData.days_words(out), "Status",
+				"Beaten on their last trip. They rest until they can go again.")
 
 
-## What the first line of facts says.
+## What the status line says.
 func shown_status() -> String:
-	return _facts[0].text
+	return _facts[2].text
 
 
-func _show_person(person: Adventurer, level := 0) -> void:
-	if level == 0:
-		level = person.level
+func _show_person(person: Adventurer, one: Member) -> void:
+	var made := HeroFacts.sheet(person, one)
 	_portrait.texture = person.portrait
 	_name.text = person.display_name
-	_class.text = "%s, level %d" % [person.class_data().display_name, level]
-	_about.text = person.description
-	_fill_bar(strength_bar, person.stat("attack", level), FULL_STRENGTH, "Strength", "How hard they hit.")
-	_fill_bar(health_bar, person.stat("max_hp", level), FULL_HEALTH, "Health", "How much they can take.")
-	_fill_bar(magic_bar, person.stat("magic", level), FULL_MAGIC, "Magic", "How strong their spells are.")
+	_class.text = "%s, level %d" % [person.class_data().display_name, made.level]
+	var names := HeroFacts.trait_names(person)
+	_traits.text = names if names != "" else person.description
+	Tips.attach(_traits, "Traits" if names != "" else "", HeroFacts.trait_lines(person) if names != "" else person.description)
+	for stat: String in stats:
+		var cell: HeroStat = stats[stat]
+		cell.show_value(made.get_stat(stat), HeroFacts.growth_words(person, stat))
+		Tips.attach(cell, ItemData.STAT_NAMES[stat], HeroFacts.stat_tip(person, made, stat))
 	die.top = person.die_top
 	Tips.attach(die, "Movement die", "Rolls 0 to %d each day. A higher roll walks further." % person.die_top)
+	var food := HeroFacts.food(person, one)
+	_set_fact(0, "food", "Carries food for %s" % Expedition.turns_words(food), "Max Food",
+			"The most days of food they can take on a trip. Each level adds %d." % Adventurer.FOOD_PER_LEVEL)
 
 
-func _past_trips(one: Member) -> String:
-	if one.trips == 0:
-		return "No trips yet"
-	var trips := "1 trip" if one.trips == 1 else "%d trips" % one.trips
-	return "%s, %d home, %d gold" % [trips, one.trips_home, one.gold_home]
-
-
-func _gear(person: Adventurer) -> String:
-	var names := PackedStringArray()
-	for id in person.class_data().starting_equipment:
-		names.append(Database.get_item(id).display_name)
-	return ", ".join(names) if not names.is_empty() else "nothing"
-
-
-func _set_fact(index: int, icon_name: String, words: String) -> void:
+func _set_fact(index: int, icon_name: String, words: String, title: String, tip: String) -> void:
 	_fact_icons[index].texture = Kit.icon(icon_name)
 	_facts[index].text = words
+	Tips.attach(_fact_rows[index], title, tip)
 
 
-## The parts that can take focus, from the top down.
+## The parts that can take focus, from the top down, above Hire.
 func details() -> Array[Control]:
-	return [strength_bar, health_bar, magic_bar, die]
+	var parts: Array[Control] = [more]
+	for stat in HeroFacts.STATS:
+		parts.append(stats[stat])
+	parts.append(die)
+	parts.append_array(_fact_rows)
+	return parts
 
 
 func shown_name() -> String:
 	return _name.text
+
+
+func shown_traits() -> String:
+	return _traits.text
+
+
+func shown_food() -> String:
+	return _facts[0].text
 
 
 func _build_top(parent: Container) -> void:
@@ -126,26 +136,32 @@ func _build_top(parent: Container) -> void:
 	row.add_child(_portrait)
 	var words := VBoxContainer.new()
 	words.alignment = BoxContainer.ALIGNMENT_CENTER
+	words.add_theme_constant_override("separation", 2)
 	row.add_child(words)
 	_name = Kit.text("", 0.0, &"PaperHeading")
 	words.add_child(_name)
 	_class = Kit.text("", 0.0, &"PaperTitle")
 	words.add_child(_class)
-	_about = Kit.text("", 0.0, &"PaperLabel")
-	words.add_child(_about)
-
-
-func _add_bar(parent: Container, color: Color, icon_name: String) -> KitBar:
-	var bar := KitBar.new(color, Kit.icon(icon_name))
-	bar.width = WIDTH - 40.0
-	bar.focus_mode = Control.FOCUS_ALL
-	parent.add_child(bar)
-	return bar
+	_traits = Kit.text("", 0.0, &"PaperLabel")
+	_traits.mouse_filter = Control.MOUSE_FILTER_STOP
+	words.add_child(_traits)
+	more = KitButton.new()
+	more.kind = KitButton.Kind.SMALL
+	more.text = "Details"
+	more.icon = Kit.icon("book")
+	more.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	words.add_child(more)
+	Tips.attach(more, "Details", "Everything about them: stats, gear, moves, traits and history. Key C, or the controller's Y.")
 
 
 func _add_fact(parent: Container, icon_name: String) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	row.focus_mode = Control.FOCUS_ALL
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.draw.connect(Kit.draw_focus.bind(row))
+	row.focus_entered.connect(row.queue_redraw)
+	row.focus_exited.connect(row.queue_redraw)
 	parent.add_child(row)
 	var picture := Kit.picture(icon_name)
 	row.add_child(picture)
@@ -154,8 +170,4 @@ func _add_fact(parent: Container, icon_name: String) -> void:
 	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(words)
 	_facts.append(words)
-
-
-func _fill_bar(bar: KitBar, amount: int, full: float, title: String, job: String) -> void:
-	bar.set_amount(amount, full)
-	Tips.attach(bar, title, "%d. %s" % [amount, job])
+	_fact_rows.append(row)
