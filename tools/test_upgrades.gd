@@ -81,6 +81,10 @@ func _test_plans() -> void:
 	town.materials = {"wood": 9, "ore": 9}
 	_expect(town.build("storehouse") and town.level("storehouse") == 2, "a level-2 plan raises it")
 	_expect(town.materials == {"wood": 4, "ore": 7}, "using what it costs")
+	_expect(town.next_plan("storehouse") == TownPlans.plan("storehouse", 2), "the Storehouse keeps rising past level 2")
+	town.buildings["storehouse"] = TownPlans.PLANS["storehouse"].keys().max()
+	_expect(TownPlans.STOREHOUSE_FOOD.has(town.level("storehouse")), "every Storehouse level keeps some food")
+	_expect(TownBuilding.picture_name("storehouse", town.level("storehouse")) == "storehouse_2", "and keeps its last picture")
 	_expect(town.plan_problem("storehouse") == "Fully built" and not town.plan_ids().has("storehouse"),
 			"a building with no plan left leaves the Town Plans")
 	for id: String in TownPlans.PLANS:

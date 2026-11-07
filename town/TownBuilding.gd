@@ -38,6 +38,9 @@ func _init(building_id := "tavern", building_level := 1) -> void:
 static func picture_name(building_id: String, building_level: int) -> String:
 	if building_level <= 0:
 		return LOT
+	## Levels above the last drawn one keep the last picture.
+	while building_level > 1 and not ResourceLoader.exists(FOLDER % ("%s_%d" % [building_id, building_level])):
+		building_level -= 1
 	return building_id if building_level == 1 else "%s_%d" % [building_id, building_level]
 
 

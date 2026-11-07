@@ -15,6 +15,18 @@ const PLANS := {
 				"does": "Food left over from a trip is kept for the next one, up to 10 days."},
 		2: {"gold": 240, "materials": {"wood": 5, "ore": 2},
 				"does": "Keeps up to 30 days of food."},
+		3: {"gold": 400, "materials": {"wood": 8, "ore": 4},
+				"does": "Keeps up to 50 days of food."},
+		4: {"gold": 600, "materials": {"wood": 10, "ore": 6, "wild_herbs": 4},
+				"does": "Keeps up to 80 days of food."},
+		5: {"gold": 900, "materials": {"wood": 12, "ore": 8, "starstone": 1},
+				"does": "Keeps up to 120 days of food."},
+		6: {"gold": 1300, "materials": {"wood": 15, "ore": 10, "starstone": 2},
+				"does": "Keeps up to 170 days of food."},
+		7: {"gold": 1800, "materials": {"wood": 18, "ore": 12, "wild_herbs": 8, "starstone": 3},
+				"does": "Keeps up to 230 days of food."},
+		8: {"gold": 2500, "materials": {"wood": 22, "ore": 15, "starstone": 4},
+				"does": "Keeps up to 300 days of food."},
 	},
 	"smithy": {
 		1: {"gold": 160, "materials": {"wood": 2, "ore": 3},
@@ -36,7 +48,7 @@ const PLANS := {
 
 ## What each building can do at each level, for its sign and the Castle. A building with no
 ## entry for a level does nothing new there.
-const STOREHOUSE_FOOD := {0: 0, 1: 10, 2: 30}
+const STOREHOUSE_FOOD := {0: 0, 1: 10, 2: 30, 3: 50, 4: 80, 5: 120, 6: 170, 7: 230, 8: 300}
 ## The dearest gear the Shop sells, by the Smithy's level.
 const SMITHY_GEAR := {0: 200, 1: 350, 2: 100000}
 ## The dearest move the Academy teaches, by its level. Level 0 is not built.
