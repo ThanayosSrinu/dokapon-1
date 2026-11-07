@@ -34,6 +34,10 @@ func _ready() -> void:
 	portal.card.enter.grab_focus()
 	await _settle(0.5)
 	await _save(folder + "/portal_large.png")
+	portal._choose_food(0)
+	await _settle(0.3)
+	await _save(folder + "/portal_no_food.png")
+	portal._choose_food(99)
 	TownData.current().day = 45
 	portal.card.enter.pressed.emit()
 	await _settle(0.6)

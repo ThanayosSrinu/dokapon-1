@@ -233,7 +233,10 @@ func _test_forecast() -> void:
 	var plan := town.forecast(small, person)
 	_expect(plan["home"] > town.day, "nobody is home before they leave")
 	_expect(plan["home"] <= plan["whole"], "a quick trip is no longer than a whole one")
-	_expect(plan["whole"] == town.day + small.food_days, "a whole trip lasts as long as the food")
+	_expect(plan["whole"] == maxi(town.day + town.food_limit(small, person), plan["home"]), "a whole trip lasts as long as the food")
+	_expect(town.forecast(small, person, 2)["whole"] == plan["home"], "a little food can't bring them home sooner")
+	var long_way := town.forecast(large, person, 20)
+	_expect(long_way["whole"] == town.day + 20, "the forecast counts the food bought")
 	_expect(plan["due"] == 56 and plan["fit"] == TownData.Forecast.SAFE, "day 1 has time for a small trip")
 	town.day = 40
 	_expect(town.forecast(large, person)["fit"] == TownData.Forecast.TIGHT, "a large trip then only fits if cut short")
@@ -493,9 +496,14 @@ func _test_stranded_screens() -> void:
 func _test_portal_forecast() -> void:
 	var town := _town_with(["bram"])
 	var portal: PortalScreen = await _open(PORTAL)
-	_expect(portal.card.shown_forecast(0) == "Home Y1 M1 D8", "a small trip is back after 7 days")
-	_expect(portal.card.shown_forecast(1) == "Home Y1 M1 D15", "a medium trip after 14")
-	_expect(portal.card.shown_forecast(2) == "Home Y1 M1 D22", "a large trip after 21")
+	for index in 3:
+		var whole: int = town.forecast(portal._sizes[index], town.going, town.food if index == 0 else -1)["whole"]
+		_expect(portal.card.shown_forecast(index) == "Home %s" % Calendar.date(whole), "each size shows when all the food is used")
+	var before := portal.card.shown_forecast(2)
+	portal._choose_size(portal._sizes[2])
+	portal._choose_food(town.food - 1)
+	_expect(portal.card.shown_forecast(2) != before, "the forecast follows the food bought")
+	portal._choose_size(portal._sizes[0])
 	_expect(portal.card._forecasts[0].get_theme_color("font_color") == PortalScreen.FIT_COLORS[TownData.Forecast.SAFE],
 			"a safe trip is green")
 	var middle := portal.get_viewport_rect().size / 2.0
@@ -555,7 +563,9 @@ func _test_pick_who_goes() -> void:
 	_expect(people[2].disabled and people[2].text == "3 days", "the hurt can't be picked, and say how long")
 	_expect(portal.card.shown_person() == "Bram", "the card shows who goes")
 	await _tap("ui_up")
-	_expect(_focused() == people[0], "up from Enter reaches who goes")
+	await _tap("ui_up")
+	await _tap("ui_up")
+	_expect(_focused() == people[0], "up from Enter, past the food and the sizes, reaches who goes")
 	await _tap("ui_right")
 	_expect(_focused() == people[1], "right walks along the people")
 	await _tap("ui_accept")
@@ -564,7 +574,7 @@ func _test_pick_who_goes() -> void:
 	_expect(portal.card.shown_person() == "Wren" and people[1].lit, "the card follows")
 	_expect(portal.heading.text.contains("Wren"), "and the heading")
 	_expect(portal.hero.texture == wren.sheet, "and they stand on the road")
-	_expect(portal.card.food.trip_days == town.stage.food_days, "the food follows them")
+	_expect(portal.card.food.carry == town.stage.most_food(wren), "the food follows them")
 	people[2].pressed.emit()
 	await _wait()
 	_expect(town.going == wren, "the hurt stay at home")

@@ -24,6 +24,8 @@ const READY := "%s is ready to go"
 const NOBODY := "Nobody is here yet"
 const NOT_READY := "Nobody is ready"
 const GOING := "Good luck, %s!"
+const NO_FOOD := "No food: they will lose health every day."
+const LOW_FOOD := "This food may not last the walk home."
 
 const HERO_SPOT := Vector2(404, 610)
 ## Where they stand when the Portal takes them.
@@ -63,6 +65,7 @@ var _shaking := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var town := TownData.current()
+	town.fill_food()
 	_stage = Node2D.new()
 	_stage.position = _stage_corner()
 	add_child(_stage)
@@ -105,6 +108,7 @@ func _build_card(town: TownData) -> void:
 	card = PortalCard.new()
 	card.position = Vector2(CARD_LEFT, CARD_TOP)
 	card.enter.pressed.connect(_on_enter)
+	card.food.picked.connect(_choose_food)
 	var layer := Control.new()
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage.add_child(layer)
@@ -146,11 +150,28 @@ func _build_people(town: TownData) -> void:
 ## Makes the card show the trip the town has chosen.
 func _show_trip(town: TownData) -> void:
 	card.show_stage(town.stage)
-	card.show_person(town.stage, town.going)
+	card.show_person(town.going)
 	card.mark_size(_sizes.find(town.stage))
 	card.mark_person(_people.find(town.going))
+	_show_food(town)
+
+
+# The food, and the forecasts that follow from it.
+func _show_food(town: TownData) -> void:
+	var carry := 0 if town.going == null else town.stage.most_food(town.going)
+	var afford := 0 if town.going == null else town.food_limit(town.stage, town.going)
+	card.show_food(town.food, carry, afford, town.food * TownData.FOOD_PRICE, town.gold, _food_warning(town))
 	Tips.attach(card.food, "Food", _food_tip(town))
 	_show_forecasts(town)
+
+
+func _food_warning(town: TownData) -> String:
+	if town.going == null:
+		return ""
+	if town.food == 0:
+		return NO_FOOD
+	var map := IslandMap.open(town.stage.map_file)
+	return LOW_FOOD if town.food < ceili(map.days_around(map.portal, town.going.die_top)) else ""
 
 
 # Each size says about when it could be back, in the color of how that sits with the due day.
@@ -158,11 +179,11 @@ func _show_forecasts(town: TownData) -> void:
 	for index in _sizes.size():
 		var stage := _sizes[index]
 		var spaces := IslandMap.open(stage.map_file).spaces().size()
-		var words := "%d spaces, and %s of food." % [spaces, Expedition.turns_words(stage.food_days)]
+		var words := "%d spaces, %d monsters and %d chests." % [spaces, stage.monsters, stage.chests]
 		if town.going == null:
 			card.show_forecast(index, "", Kit.SOFT_INK)
 		else:
-			var plan := town.forecast(stage, town.going)
+			var plan := town.forecast(stage, town.going, town.food if stage == town.stage else -1)
 			card.show_forecast(index, "Home %s" % Calendar.date(plan["whole"]), FIT_COLORS[plan["fit"]])
 			words += " Home about %s at the soonest, or %s if all the food is used. %s" % [
 					Calendar.date(plan["home"]), Calendar.date(plan["whole"]), FIT_WORDS[plan["fit"]]]
@@ -175,6 +196,7 @@ func _choose_person(person: Adventurer) -> void:
 		return
 	_build_hero(town)
 	heading.text = READY % person.display_name
+	town.fill_food()
 	_show_trip(town)
 
 
@@ -183,16 +205,23 @@ func _choose_size(stage: Stage) -> void:
 	if _leaving or town.stage == stage:
 		return
 	town.stage = stage
+	town.fill_food()
 	_show_trip(town)
 	card.food.focus_neighbor_top = card.food.get_path_to(_chosen_size_button())
 
 
+func _choose_food(amount: int) -> void:
+	var town := TownData.current()
+	if not _leaving:
+		town.choose_food(amount)
+		_show_food(town)
+
+
 ## Says where the food comes from, because that is what the player can change.
 func _food_tip(town: TownData) -> String:
-	var stage := town.stage
-	var words := "One roll of the die is one turn. A %s trip gives %s of food." % [stage.size_name.to_lower(), Expedition.turns_words(stage.food_days)]
-	if town.going != null and town.going.bonus_food > 0:
-		words += " %s brings %d more." % [town.going.display_name, town.going.bonus_food]
+	var words := "One roll of the die is one turn, and a day at camp too. Each costs a day of food, at %d gold a day. Leftover food is lost." % TownData.FOOD_PRICE
+	if town.going != null:
+		words += " %s can carry %d on a %s trip." % [town.going.display_name, town.stage.most_food(town.going), town.stage.size_name.to_lower()]
 	return words
 
 
@@ -230,32 +259,32 @@ func _build_warning() -> void:
 	holder.add_child(warning)
 
 
-## Up from the button reads the people, the food, then the sizes, and every way out of the
-## card reaches Back. Left and right walk along the rows. Below Back is Enter.
+## Up from the button reads the food, the sizes, then the people, and every way out of the
+## card reaches Back. Left and right walk along the rows, and slide the food. Below Back is
+## Enter.
 func _link_focus() -> void:
 	var enter := card.enter
 	var food := card.food
 	var people := card.people
-	var above_enter: Control = food
+	var sizes := card.sizes
+	var above_sizes: Control = back
 	if not people.is_empty():
-		above_enter = people[maxi(_people.find(TownData.current().going), 0)]
+		above_sizes = people[maxi(_people.find(TownData.current().going), 0)]
 		for index in people.size():
 			var button := people[index]
-			button.focus_neighbor_top = button.get_path_to(food)
-			button.focus_neighbor_bottom = button.get_path_to(enter)
+			button.focus_neighbor_top = button.get_path_to(back)
+			button.focus_neighbor_bottom = button.get_path_to(_chosen_size_button())
 			button.focus_neighbor_left = button.get_path_to(people[index - 1] if index > 0 else back)
 			button.focus_neighbor_right = button.get_path_to(people[mini(index + 1, people.size() - 1)])
-	enter.focus_neighbor_top = enter.get_path_to(above_enter)
+	enter.focus_neighbor_top = enter.get_path_to(food)
 	enter.focus_neighbor_bottom = enter.get_path_to(enter)
-	food.focus_neighbor_bottom = food.get_path_to(above_enter)
+	enter.focus_neighbor_left = enter.get_path_to(back)
+	enter.focus_neighbor_right = enter.get_path_to(enter)
+	food.focus_neighbor_bottom = food.get_path_to(enter)
 	food.focus_neighbor_top = food.get_path_to(_chosen_size_button())
-	for part: Control in [enter, food]:
-		part.focus_neighbor_left = part.get_path_to(back)
-		part.focus_neighbor_right = part.get_path_to(part)
-	var sizes := card.sizes
 	for index in sizes.size():
 		var button := sizes[index]
-		button.focus_neighbor_top = button.get_path_to(back)
+		button.focus_neighbor_top = button.get_path_to(above_sizes)
 		button.focus_neighbor_bottom = button.get_path_to(food)
 		button.focus_neighbor_left = button.get_path_to(sizes[index - 1] if index > 0 else back)
 		button.focus_neighbor_right = button.get_path_to(sizes[mini(index + 1, sizes.size() - 1)])
@@ -296,7 +325,7 @@ func _on_enter() -> void:
 	if town.send_problem() != "" or _leaving:
 		card.enter.deny()
 		return
-	var plan := town.forecast(town.stage, town.going)
+	var plan := town.forecast(town.stage, town.going, town.food)
 	if plan["fit"] == TownData.Forecast.SAFE:
 		_depart(town)
 	else:
@@ -328,6 +357,7 @@ func _on_go_on() -> void:
 
 func _depart(town: TownData) -> void:
 	_leaving = true
+	town.buy_food()
 	town.remember_leaving()
 	for button in card.people:
 		button.focus_mode = Control.FOCUS_NONE

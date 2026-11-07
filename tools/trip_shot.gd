@@ -11,6 +11,7 @@ func _ready() -> void:
 	TownData.start_new()
 	TownData.current().gold = 1000
 	TownData.current().hire(Database.get_adventurer("wren"))
+	TownData.current().fill_food()
 	ExpeditionScreen.next_seed = 4
 	Screens.go("res://expedition/ExpeditionScreen.tscn")
 	await _settle(1.2)

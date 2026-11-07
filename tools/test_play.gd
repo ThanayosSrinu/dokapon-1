@@ -39,6 +39,7 @@ func _ready() -> void:
 	await _test_leaving()
 	await _test_report_screen()
 	await _test_two_trips()
+	await _test_board_and_camp()
 	Engine.time_scale = 1.0
 	ExpeditionScreen.next_seed = 0
 	print("TESTS OK" if _failures == 0 else "%d TEST(S) FAILED" % _failures)
@@ -62,6 +63,7 @@ func _open_trip(seed_value: int, speed := 1.0) -> ExpeditionScreen:
 	var town := TownData.current()
 	town.member(town.roster[0].person).ready_on = 0
 	town._pick_going()
+	town.fill_food()
 	await Screens.go(SCREEN)
 	await _wait()
 	var screen: ExpeditionScreen = get_tree().current_scene
@@ -92,7 +94,7 @@ func _back_to_town() -> void:
 ## Plays a trip by the rules, always taking the first road, Attack and Guard: what the
 ## hands below do on screen. With `goes_home` off, they stay out at the Portal.
 func _plain_trip(person: Adventurer, stage: Stage, seed_value: int, goes_home := true) -> Expedition:
-	var trip := Expedition.new(person, stage, seed_value, true)
+	var trip := Expedition.new(person, stage, seed_value, true, stage.most_food(person))
 	while not trip.is_over():
 		if trip.start_day():
 			trip.begin_walk(trip.roll())
@@ -729,6 +731,78 @@ func _test_two_trips() -> void:
 
 
 # --- The bag ----------------------------------------------------------------
+
+# What the board and Camp look like on screen. The rules are in test_expedition.
+func _test_board_and_camp() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(5)
+	await _until_roll(screen)
+	var trip := screen.trip
+	for id in trip.map.spaces():
+		_expect(screen.board.get_board_node(id).node_type == trip.type_at(id), "the board shows this trip's spaces")
+	var monster := -1
+	for id in trip.map.spaces():
+		if trip.type_at(id) == BoardNode.NodeType.BATTLE:
+			monster = id
+	_expect(SpaceNotes.of(trip, monster)["text"].contains("blocks"), "the detail box tells of the monster")
+	trip._clear_space(monster)
+	_expect(screen.board.get_board_node(monster).node_type == BoardNode.NodeType.NORMAL, "a used space turns empty on the board")
+	_expect(SpaceNotes.of(trip, monster)["title"] == "Normal", "and in the detail box")
+
+	_expect(screen.camp_button.visible and screen.camp_button.disabled, "Camp is offered, and rested people can't use it")
+	await _tap("ui_up")
+	_expect(_focused() == screen.camp_button, "up from Roll reaches Camp")
+	await _tap("ui_down")
+	_expect(_focused() == screen.roll_button, "and down comes back")
+	await _leave_and_reopen_hurt()
+
+
+func _leave_and_reopen_hurt() -> void:
+	await _leave()
+	_hire(Database.get_adventurer("bram"))
+	var screen := await _open_trip(5)
+	await _until_roll(screen)
+	# Hurt them, and let the next morning offer Camp.
+	var trip := screen.trip
+	var player := trip.player
+	await _tap("ui_accept")
+	while not (screen.roll_button.visible and trip.day >= 2):
+		await _make_a_choice_but_not_roll(screen)
+		await get_tree().process_frame
+	await _hurt_and_camp(screen)
+	await _leave_if_going(screen)
+	_expect(player != null, "the trip ended cleanly")
+
+
+func _make_a_choice_but_not_roll(screen: ExpeditionScreen) -> void:
+	if not screen.roll_button.visible:
+		await _make_a_choice(screen, Hand.KEYS)
+
+
+# Rests by every hand, one day each.
+func _hurt_and_camp(screen: ExpeditionScreen) -> void:
+	var trip := screen.trip
+	var player := trip.player
+	for hand in [Hand.KEYS, Hand.PAD, Hand.MOUSE]:
+		player.hp = 1
+		screen._offer_camp()
+		_expect(not screen.camp_button.disabled, "someone hurt can camp")
+		var food := trip.food_left
+		var day := trip.day
+		var spot := trip.space_id
+		await _press(screen.camp_button, hand)
+		while trip.day == day or not screen.roll_button.visible:
+			await get_tree().process_frame
+		_expect(player.hp > 1, "Camp heals, hand %d" % hand)
+		_expect(trip.space_id == spot, "and they stay put")
+		_expect(trip.food_left == food - 1, "and a day of food is gone")
+		var said := trip.diary.filter(func(line: Dictionary) -> bool: return line["kind"] == "camp")
+		_expect(not said.is_empty(), "and the trip says so")
+	trip.food_left = 0
+	trip._fed_today = false
+	screen._offer_camp()
+	_expect(screen.camp_button.disabled, "with no food there is no Camp")
+
 
 func _test_bag_panel() -> void:
 	_hire(Database.get_adventurer("bram"))

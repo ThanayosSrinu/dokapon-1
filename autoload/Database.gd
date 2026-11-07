@@ -68,7 +68,7 @@ func sizes_of(place: String) -> Array[Stage]:
 	for id: String in stages:
 		if stages[id].place == place:
 			found.append(stages[id])
-	found.sort_custom(func(a: Stage, b: Stage) -> bool: return a.food_days < b.food_days)
+	found.sort_custom(func(a: Stage, b: Stage) -> bool: return a.food_scale < b.food_scale)
 	return found
 
 
@@ -218,8 +218,8 @@ func _check_adventurer(person: Adventurer, problems: PackedStringArray) -> void:
 		problems.append("adventurer %s has a bad level" % person.id)
 	if not DIE_TOPS.has(person.die_top):
 		problems.append("adventurer %s has a die that does not exist: %d" % [person.id, person.die_top])
-	if person.bonus_food < 0:
-		problems.append("adventurer %s has negative food" % person.id)
+	if person.max_food <= 0:
+		problems.append("adventurer %s needs Max Food above 0" % person.id)
 	if person.fee <= 0:
 		problems.append("adventurer %s needs a fee above 0" % person.id)
 	if person.lines.is_empty() or person.hired_line == "" or person.send_line == "" or person.arrive_line == "":
@@ -231,8 +231,14 @@ func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
 		problems.append("stage %s has no map at '%s'" % [stage.id, stage.map_file])
 	if stage.picture == null:
 		problems.append("stage %s needs a picture" % stage.id)
-	if stage.food_days <= 0:
-		problems.append("stage %s needs food above 0" % stage.id)
+	if stage.food_scale <= 0.0:
+		problems.append("stage %s needs a food scale above 0" % stage.id)
+	if FileAccess.file_exists(stage.map_file):
+		var map := IslandMap.open(stage.map_file)
+		if stage.monsters < 0 or stage.chests < map.fixed_chests():
+			problems.append("stage %s has fewer chests than its map fixes in place" % stage.id)
+		if stage.monsters + stage.chests >= map.spaces().size():
+			problems.append("stage %s has more monsters and chests than its map has room for" % stage.id)
 	if stage.place == "" or stage.size_name == "":
 		problems.append("stage %s needs a place and a size name" % stage.id)
 

@@ -1,7 +1,7 @@
 class_name MiniMap
 extends Control
 ## The whole island small enough to fit in a panel, because the larger islands do not fit
-## on screen. Each space wears the color of its type. The gold square is the Portal, and the
+## on screen. Each space wears the color of what is on it now. The gold square is the Portal, and the
 ## white one is the adventurer. Click a space to look at it on the board.
 
 signal space_clicked(id: int)
@@ -45,7 +45,7 @@ func _draw() -> void:
 			if other > id:
 				draw_line(_place(id), _place(other), GameArt.PARCHMENT, ROAD)
 	for id: int in _points:
-		_square(_place(id), SPACE, BoardNode.TYPE_INFO[_trip.map.type_of(id)]["color"])
+		_square(_place(id), SPACE, BoardNode.TYPE_INFO[_trip.type_at(id)]["color"])
 	_mark(_trip.map.portal, Kit.GOLD)
 	_mark(_trip.space_id, Color.WHITE)
 

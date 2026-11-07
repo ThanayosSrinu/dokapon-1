@@ -1,7 +1,7 @@
 extends Node
 ## Runs many expeditions with no window and prints how they went. Run from the project root:
 ##   godot --headless --path . res://tools/sim_expedition.tscn -- <trips> <seed> [food] [person] [stage] [lord]
-## `food` replaces the stage's days of food, 0 keeps it. `person` is one adventurer's id
+## `food` is the days of food bought, and 0 means all they can carry. `person` is one adventurer's id
 ## or "all". `stage` is a stage id, or "old" for the old map of E5, which has no spurs and
 ## big loops. Without it every stage runs. Prints one block per adventurer on each stage,
 ## then how long it all took. `lord` is "listens", which calls them home the day after they
@@ -9,7 +9,7 @@ extends Node
 ## never calls them home.
 
 const OLD_MAP := "res://maps/world_map.json"
-const OLD_FOOD := 21
+const OLD_FOOD_SCALE := 4.0
 
 var _lord := "listens"
 
@@ -41,7 +41,7 @@ func _stages(id: String) -> Array[Stage]:
 	if id == "old":
 		var old := Stage.new()
 		old.map_file = OLD_MAP
-		old.food_days = OLD_FOOD
+		old.food_scale = OLD_FOOD_SCALE
 		found.append(old)
 	elif id != "":
 		found.append(Database.get_stage(id))
@@ -62,9 +62,7 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 	var seen_share := 0.0
 	var deep_trips := 0
 	for index in trips:
-		var trip := Expedition.new(person, stage, first_seed + index)
-		if food > 0:
-			trip.food_left = food + person.bonus_food
+		var trip := Expedition.new(person, stage, first_seed + index, false, food if food > 0 else -1)
 		trip_food = trip.food_left
 		_play(trip)
 		days.append(trip.day)

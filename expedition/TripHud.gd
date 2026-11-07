@@ -43,10 +43,10 @@ var _food_full := 1
 var _debt_words := ""
 
 
-func _init(trip: Expedition, stage: Stage) -> void:
+func _init(trip: Expedition) -> void:
 	super()
 	_trip = trip
-	_food_full = maxi(stage.food_for(trip.person), 1)
+	_food_full = maxi(trip.food_taken, 1)
 	warning = Kit.text("")
 	warning.modulate = WARNING
 	warning.hide()

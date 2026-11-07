@@ -14,6 +14,8 @@ enum Alert { NONE, WARN, ALARM }
 enum Forecast { SAFE, TIGHT, LATE }
 
 const START_GOLD := 300
+## Gold for one day of food.
+const FOOD_PRICE := 5
 ## Where the Portal leads in a new game. A stage id from data/stages.
 const FIRST_STAGE := "grass_s"
 const ROSTER_ROOM := 3
@@ -51,6 +53,8 @@ var roster: Array[Member] = []
 var going: Adventurer
 ## Where the Portal leads, and how big a trip. The Portal screen changes this.
 var stage: Stage = Database.get_stage(FIRST_STAGE)
+## Days of food to buy for the next trip. The Portal screen changes this.
+var food := 0
 ## How many months of bills have been paid.
 var months_paid := 0
 ## What the current loan must repay, or 0 with no loan.
@@ -236,6 +240,27 @@ func bring_home(trip: Expedition) -> void:
 	_pick_going()
 
 
+## The most days of food `person` can take to `trip_stage`, by what they carry and what
+## the town can pay.
+func food_limit(trip_stage: Stage, person: Adventurer) -> int:
+	return mini(trip_stage.most_food(person), gold / FOOD_PRICE)
+
+
+## Sets the food to all that the trip can take.
+func fill_food() -> void:
+	food = 0 if going == null else food_limit(stage, going)
+
+
+## Sets the food to `amount`, or as near as the trip allows.
+func choose_food(amount: int) -> void:
+	food = 0 if going == null else clampi(amount, 0, food_limit(stage, going))
+
+
+## Pays for the food. Leftovers are lost, so this is never paid back.
+func buy_food() -> void:
+	gold -= food * FOOD_PRICE
+
+
 ## Notes that the adventurer has left, for the game over screen.
 func remember_leaving() -> void:
 	remember("%s left, with %d gold in town." % [going.display_name, gold])
@@ -397,11 +422,12 @@ func final_story(lines: int) -> Array[Dictionary]:
 
 ## What a trip by `person` to `trip_stage` looks like against the next due day:
 ## {"home", "whole", "due", "fit"}. "home" is about the first day they could be back,
-## "whole" is the day the last of their food is eaten, and "fit" is a Forecast.
-func forecast(trip_stage: Stage, person: Adventurer) -> Dictionary:
+## "whole" is the day the last of their food is eaten, or "home" if that is later, and
+## "fit" is a Forecast. `bought` is the days of food bought, or -1 for all they could take.
+func forecast(trip_stage: Stage, person: Adventurer, bought := -1) -> Dictionary:
 	var map := IslandMap.open(trip_stage.map_file)
 	var home: int = day + ceili(map.days_around(map.portal, person.die_top))
-	var whole: int = day + trip_stage.food_for(person)
+	var whole: int = maxi(day + (food_limit(trip_stage, person) if bought < 0 else bought), home)
 	var due := next_due()
 	var fit := Forecast.SAFE
 	if home > due:

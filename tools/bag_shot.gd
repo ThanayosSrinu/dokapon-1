@@ -12,6 +12,7 @@ func _ready() -> void:
 	TownData.current().gold = 1000
 	TownData.current().months_paid = 1000
 	TownData.current().hire(Database.get_adventurer("bram"))
+	TownData.current().fill_food()
 	ExpeditionScreen.next_seed = 4
 	Screens.go("res://expedition/ExpeditionScreen.tscn")
 	while not (get_tree().current_scene is ExpeditionScreen):

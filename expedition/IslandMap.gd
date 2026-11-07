@@ -66,6 +66,11 @@ func neighbors(id: int) -> Array[int]:
 	return _links[id]
 
 
+## How many spaces the file itself marks as chests.
+func fixed_chests() -> int:
+	return _types.values().count(BoardNode.NodeType.TREASURE)
+
+
 ## The id of the zone that holds space `id`, or "" if none does. The Portal is in none.
 func zone_of(id: int) -> String:
 	for zone in zones:
@@ -92,17 +97,21 @@ func exits(id: int, came_from := -1) -> Array[int]:
 	return options.filter(func(other: int) -> bool: return other != came_from)
 
 
-## The exits of `id` that leave room to walk all of the `steps` left.
-func ways(id: int, came_from: int, steps: int) -> Array[int]:
+## The exits of `id` that leave room to walk all of the `steps` left. See landings() for
+## `stops`.
+func ways(id: int, came_from: int, steps: int, stops := {}) -> Array[int]:
 	return exits(id, came_from).filter(func(next: int) -> bool:
-		return not landings(next, id, steps - 1).is_empty())
+		return not landings(next, id, steps - 1, stops).is_empty())
 
 
 ## Every space someone on `id` can stop on after walking exactly `steps` spaces. A road
-## that ends too soon gives none, so a dead end needs the exact number.
-func landings(id: int, came_from: int, steps: int) -> Array[int]:
-	if steps == 0:
+## that ends too soon gives none, so a dead end needs the exact number. `stops` holds spaces
+## as keys that end a walk early, such as monsters. The space a walk starts on doesn't count.
+func landings(id: int, came_from: int, steps: int, stops := {}) -> Array[int]:
+	if steps == 0 or (came_from != -1 and stops.has(id)):
 		return [id]
+	if not stops.is_empty():
+		return _landings_around(id, came_from, steps, stops)
 	var key := Vector3i(id, came_from, steps)
 	if not _landings.has(key):
 		var found: Array[int] = []
@@ -112,6 +121,16 @@ func landings(id: int, came_from: int, steps: int) -> Array[int]:
 					found.append(landing)
 		_landings[key] = found
 	return _landings[key]
+
+
+# landings() with `stops`, which change as the trip goes on, so nothing is kept.
+func _landings_around(id: int, came_from: int, steps: int, stops: Dictionary) -> Array[int]:
+	var found: Array[int] = []
+	for next in exits(id, came_from):
+		for landing in landings(next, id, steps - 1, stops):
+			if not found.has(landing):
+				found.append(landing)
+	return found
 
 
 ## Space id -> how many days it takes, on average, to land exactly on `target` with a

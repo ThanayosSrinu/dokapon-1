@@ -8,10 +8,10 @@ const LINE := {"spaces": [
 	{"id": 0, "type": "PORTAL", "to": [1]},
 	{"id": 1, "type": "NORMAL", "to": [2, 4]},
 	{"id": 2, "type": "NORMAL", "to": [3]},
-	{"id": 3, "type": "GOLD"},
+	{"id": 3, "type": "TREASURE"},
 	{"id": 4, "type": "NORMAL", "to": [5]},
 	{"id": 5, "type": "NORMAL", "to": [6]},
-	{"id": 6, "type": "GOLD"},
+	{"id": 6, "type": "TREASURE"},
 ]}
 const TRIPS := 60
 ## How much more often a call must succeed, in share of trips, to count as "far more".
@@ -44,6 +44,10 @@ func _trip_on(data: Dictionary) -> Expedition:
 	trip.map = IslandMap.new(data)
 	trip.space_id = trip.map.portal
 	trip._depth = trip.map.steps_from(trip.map.portal)
+	trip._monsters = {}
+	trip._board = {}
+	for id in trip.map.spaces():
+		trip._board[id] = trip.map.type_of(id)
 	trip.day = 2
 	trip.food_left = 99
 	return trip

@@ -26,8 +26,8 @@ const FEWEST_ZONE_SPACES := 3
 const FEWEST_ZONE_ROADS := 2
 ## No two zones may share more roads than this, so each stays a place of its own.
 const MOST_ROADS_BETWEEN_ZONES := 2
-## These do nothing on a trip, so a trip map has no use for them.
-const NOT_ON_TRIPS := [BoardNode.NodeType.CASTLE, BoardNode.NodeType.TOWN, BoardNode.NodeType.SHOP]
+## All that a trip map may hold. The stage places most monsters and chests each trip.
+const ON_TRIPS := [BoardNode.NodeType.PORTAL, BoardNode.NodeType.NORMAL, BoardNode.NodeType.BATTLE, BoardNode.NodeType.TREASURE]
 
 var map: IslandMap
 ## Each loop, as its space ids in the order walked around it. Sorted by size.
@@ -116,8 +116,8 @@ func problems() -> PackedStringArray:
 	if not _on_a_loop(map.portal):
 		found.append("The Portal is not on a loop, so there is one way back and one number to land on it.")
 	for id in map.spaces():
-		if NOT_ON_TRIPS.has(map.type_of(id)):
-			found.append("Space %d does nothing on a trip." % id)
+		if not ON_TRIPS.has(map.type_of(id)):
+			found.append("Space %d is a kind of space trips don't have." % id)
 	for spur in spurs:
 		_check_spur_end(spur, found)
 	found.append_array(_zone_problems())
@@ -132,13 +132,13 @@ func deepest_spur() -> int:
 	return deepest
 
 
-# The end of a long spur is what it is walked for, so it must hold something.
+# The end of a long spur is what it is walked for, so a chest is always there.
 func _check_spur_end(spur: Dictionary, found: PackedStringArray) -> void:
 	if spur["depth"] < 2:
 		return
 	for id: int in spur["spaces"]:
-		if map.neighbors(id).size() == 1 and map.type_of(id) == BoardNode.NodeType.NORMAL:
-			found.append("The spur end at space %d is empty, so nothing is worth the walk." % id)
+		if map.neighbors(id).size() == 1 and map.type_of(id) != BoardNode.NodeType.TREASURE:
+			found.append("The spur end at space %d needs to be TREASURE." % id)
 
 
 func _zone_problems() -> PackedStringArray:

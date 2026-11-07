@@ -17,10 +17,14 @@ extends Resource
 @export_file("*.json") var map_file := ""
 ## Its small view, from assets/custom/portal/. tools/art_portal.py draws these.
 @export var picture: Texture2D
-## Days of food a trip here gives. tools/sim_expedition.tscn shows what a number does.
-@export var food_days := 14
+## How many times their Max Food someone can carry here.
+@export var food_scale := 1.0
+## How many monsters a trip here meets on the board, placed anew each trip.
+@export var monsters := 0
+## How many chests a trip here finds, counting the ones the map file fixes in place.
+@export var chests := 0
 
 
-## Days of food `person` carries on a trip here.
-func food_for(person: Adventurer) -> int:
-	return food_days + person.bonus_food
+## The most days of food `person` can carry on a trip here.
+func most_food(person: Adventurer) -> int:
+	return floori(person.max_food * food_scale)

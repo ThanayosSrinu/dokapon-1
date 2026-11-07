@@ -18,8 +18,8 @@ extends Resource
 @export var level := 1
 ## The highest number on their movement die. It always starts from 0.
 @export var die_top := 6
-## Days of food they bring on top of what the trip gives.
-@export var bonus_food := 0
+## Days of food they can carry on a small trip. Stage.food_scale multiplies it.
+@export var max_food := 5
 ## Gold to hire them.
 @export var fee := 100
 ## Gold a month while they are on the roster.

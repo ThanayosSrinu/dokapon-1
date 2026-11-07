@@ -1,12 +1,12 @@
 class_name PortalCard
 extends PanelContainer
-## What the Portal offers: where it leads, how big a trip, who is going, the food they
-## carry and the one main button. It holds no rules: PortalScreen tells it what to show.
+## What the Portal offers, in the order it is chosen: who is going, how big a trip, how much
+## food, and the one main button. It holds no rules: PortalScreen tells it what to show.
 
 const WIDTH := 440.0
 const PORTRAIT_SIZE := Vector2(112, 112)
 
-var food: FoodDays
+var food: FoodPicker
 var enter: KitButton
 ## One button for each size of trip, the shortest first.
 var sizes: Array[KitButton] = []
@@ -17,6 +17,8 @@ var _picture: TextureRect
 var _name: Label
 var _about: Label
 var _food_words: Label
+var _food_cost: Label
+var _food_warning: Label
 var _portrait: TextureRect
 var _person: Label
 var _class: Label
@@ -43,6 +45,7 @@ func _init() -> void:
 	place.add_child(_name)
 	_about = Kit.text("", 0.0, &"PaperLabel")
 	place.add_child(_about)
+	_build_person(column)
 	_size_row = HBoxContainer.new()
 	_size_row.add_theme_constant_override("separation", 8)
 	var sizes_and_days := VBoxContainer.new()
@@ -53,13 +56,20 @@ func _init() -> void:
 	_forecast_row.add_theme_constant_override("separation", 8)
 	sizes_and_days.add_child(_forecast_row)
 	var supplies := VBoxContainer.new()
-	supplies.add_theme_constant_override("separation", 6)
+	supplies.add_theme_constant_override("separation", 4)
 	column.add_child(supplies)
+	var food_row := HBoxContainer.new()
+	supplies.add_child(food_row)
 	_food_words = Kit.text("", 0.0, &"PaperTitle")
-	supplies.add_child(_food_words)
-	food = FoodDays.new()
+	_food_words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	food_row.add_child(_food_words)
+	_food_cost = Kit.text("", 0.0, &"PaperLabel")
+	food_row.add_child(_food_cost)
+	food = FoodPicker.new()
 	supplies.add_child(food)
-	_build_person(column)
+	_food_warning = Kit.text("", 0.0, &"PaperLabel")
+	_food_warning.add_theme_color_override("font_color", Kit.BLOOD)
+	supplies.add_child(_food_warning)
 	enter = KitButton.new()
 	enter.kind = KitButton.Kind.PRIMARY
 	enter.press_sound = "magic"
@@ -122,12 +132,17 @@ func show_stage(stage: Stage) -> void:
 	_about.text = stage.description
 
 
+## Shows the food: how much is bought, what that costs of what the town has, and how much
+## could be. A `warning` shows in red, and "" clears it.
+func show_food(amount: int, carry: int, afford: int, cost: int, gold: int, warning: String) -> void:
+	_food_words.text = "Food for %s" % Expedition.turns_words(amount)
+	_food_cost.text = "%d of your %d gold" % [cost, gold]
+	_food_warning.text = warning
+	food.show_food(amount, carry, afford)
+
+
 ## Shows who is going. With nobody, it says where to find someone instead.
-func show_person(stage: Stage, person: Adventurer) -> void:
-	var days := stage.food_days if person == null else stage.food_for(person)
-	_food_words.text = "Food for %s" % Expedition.turns_words(days)
-	var extra := 0 if person == null else person.bonus_food
-	food.show_days(stage.food_days, extra)
+func show_person(person: Adventurer) -> void:
 	_portrait.visible = person != null
 	if person == null:
 		_person.text = "Nobody yet"
@@ -142,6 +157,14 @@ func show_person(stage: Stage, person: Adventurer) -> void:
 
 func shown_food() -> String:
 	return _food_words.text
+
+
+func shown_food_cost() -> String:
+	return _food_cost.text
+
+
+func shown_food_warning() -> String:
+	return _food_warning.text
 
 
 func shown_person() -> String:

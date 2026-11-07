@@ -52,7 +52,7 @@ func _init() -> void:
 ## Fills the card with a stranger, sliding the bars from the last person's numbers.
 func show_recruit(person: Adventurer) -> void:
 	_show_person(person)
-	_set_fact(0, "food", "Brings food for %s more" % Expedition.turns_words(person.bonus_food) if person.bonus_food > 0 else "Brings no extra food")
+	_set_fact(0, "food", "Carries food for %s" % Expedition.turns_words(person.max_food))
 	_set_fact(1, "coin", "Asks for %d gold to join" % person.fee)
 	_set_fact(2, "coin", "Wage: %d gold a month" % person.wage)
 	_set_fact(3, "sword", "Gear: %s" % _gear(person))

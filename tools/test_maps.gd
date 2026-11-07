@@ -55,7 +55,7 @@ func _good_map(ringed := false) -> IslandMap:
 		for id in range(16, 21):
 			links[id] = [id + 1]
 		links[21] = [1]
-	var types := {0: "PORTAL", 11: "TREASURE", 13: "GOLD"}
+	var types := {0: "PORTAL", 11: "TREASURE", 13: "TREASURE"}
 	var zones := [{"id": "a", "name": "A", "spaces": [1, 2, 3, 12, 13]},
 			{"id": "b", "name": "B", "spaces": [4, 5, 6, 7, 8, 14, 9, 10, 11] + (range(15, 22) if ringed else [])}]
 	return _map(links, types, zones)
@@ -98,7 +98,7 @@ func _test_shape_rules() -> void:
 	var words := "\n".join(old.problems())
 	_expect(words.contains("loop of 4") and words.contains("loop of 5"), "the old map has no small loops")
 	_expect(words.contains("spurs"), "and no spurs")
-	_expect(words.contains("does nothing on a trip"), "and spaces a trip can't use")
+	_expect(words.contains("kind of space trips don't have"), "and spaces a trip can't use")
 
 	var no_five := {0: [1, 3], 1: [2], 2: [3], 3: [4], 4: [5], 5: []}
 	_expect("\n".join(MapReport.new(_map(no_five, {0: "PORTAL"})).problems()).contains("loop of 5"), "a missing size is named")
@@ -116,7 +116,7 @@ func _test_shape_rules() -> void:
 	var links := {0: [1, 3], 1: [2], 2: [3], 3: [4], 4: [5], 5: [6], 6: [7, 9], 7: [8], 8: [14], 14: [5],
 			9: [10], 10: [11], 11: [], 12: [2], 13: [12]}
 	var empty_end := _map(links, {0: "PORTAL", 11: "TREASURE"})
-	_expect("\n".join(MapReport.new(empty_end).problems()).contains("empty"), "an empty spur end is a problem")
+	_expect("\n".join(MapReport.new(empty_end).problems()).contains("TREASURE"), "an empty spur end is a problem")
 
 
 func _test_zone_rules() -> void:

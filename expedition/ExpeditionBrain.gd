@@ -22,12 +22,8 @@ const FORESIGHT := 0.5
 const ROAM_VALUE := 2.0
 ## How much of a fight's worth is lost if it goes wrong, on top of the gold carried.
 const LOST_TRIP_VALUE := 150.0
-## Full HP back is worth this at death's door, and less the less it's hurt.
-const REST_VALUE := 400.0
-## Full MP back is worth this to someone who fights with spells.
-const MANA_VALUE := 150.0
-const TRAP_VALUE := -80.0
-const EVENT_VALUE := 40.0
+## It camps below this share of HP, if the food can spare the day.
+const CAMP_BELOW := 0.4
 
 ## The trip being played.
 var trip: Expedition:
@@ -62,13 +58,20 @@ func refresh() -> void:
 	_values = _home_values() if trip.heading_home else _roaming_values()
 
 
+## True if today is better spent at camp, which it only thinks about while it has food to
+## get home on.
+func wants_camp() -> bool:
+	var hurt := trip.player.hp < trip.player.get_stat("max_hp") * CAMP_BELOW
+	return hurt and trip.can_camp() and trip.food_left > trip.days_home()
+
+
 ## Picks one of `options` at a fork, with `steps_left` steps to walk from `from`.
 func choose_path(options: Array[int], from: int, steps_left: int) -> int:
 	var best := options[0]
 	var best_score := -INF
 	for option in options:
 		var score := -INF
-		for landing in trip.map.landings(option, from, steps_left - 1):
+		for landing in trip.landings_from(option, from, steps_left - 1):
 			score = maxf(score, _values[landing])
 		if score > best_score:
 			best = option
@@ -111,24 +114,9 @@ func _space_value(id: int) -> float:
 
 
 func _type_value(id: int) -> float:
-	var player := trip.player
-	match trip.map.type_of(id):
-		BoardNode.NodeType.GOLD:
-			return SpaceEffects.GOLD_BASE + SpaceEffects.GOLD_PER_LEVEL * player.level
-		BoardNode.NodeType.ITEM:
-			var worth := SpaceEffects.ITEM_VALUE_BASE + SpaceEffects.ITEM_VALUE_PER_LEVEL * player.level
-			return 0.0 if player.inventory.size() >= player.bag_size else worth * 0.5
-		BoardNode.NodeType.EVENT:
-			return EVENT_VALUE
-		BoardNode.NodeType.TRAP:
-			return TRAP_VALUE
-		BoardNode.NodeType.SHRINE:
-			return REST_VALUE * (1.0 - float(player.hp) / player.get_stat("max_hp"))
-		BoardNode.NodeType.MAGIC:
-			var caster := player.get_stat("magic") > player.get_stat("attack")
-			return MANA_VALUE * (1.0 - float(player.mp) / player.get_stat("max_mp")) if caster else 0.0
+	match trip.type_at(id):
 		BoardNode.NodeType.TREASURE:
-			return _chest_worth if SpaceEffects.chest_is_full(id) else 0.0
+			return _chest_worth
 		BoardNode.NodeType.BATTLE:
 			return _fight_worth
 	return 0.0

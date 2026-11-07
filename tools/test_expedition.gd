@@ -11,8 +11,17 @@ const LINE := {"spaces": [
 	{"id": 0, "type": "CASTLE", "to": [1]},
 	{"id": 1, "type": "NORMAL", "to": [2, 4]},
 	{"id": 2, "type": "NORMAL", "to": [3]},
-	{"id": 3, "type": "GOLD"},
-	{"id": 4, "type": "TRAP"},
+	{"id": 3, "type": "TREASURE"},
+	{"id": 4, "type": "NORMAL"},
+]}
+## A row with a side road: portal 0 - 1 - 2 - 3 - 4, and 1 - 5.
+const ROADS := {"spaces": [
+	{"id": 0, "type": "CASTLE", "to": [1]},
+	{"id": 1, "type": "NORMAL", "to": [2, 5]},
+	{"id": 2, "type": "NORMAL", "to": [3]},
+	{"id": 3, "type": "NORMAL", "to": [4]},
+	{"id": 4, "type": "NORMAL"},
+	{"id": 5, "type": "NORMAL"},
 ]}
 
 var _failures := 0
@@ -26,6 +35,12 @@ func _ready() -> void:
 	_test_map_matches_the_board()
 	_test_days_to()
 	_test_new_trip()
+	_test_board_is_made_each_trip()
+	_test_used_spaces_turn_empty()
+	_test_monsters_stop_the_walk()
+	_test_chests_take_an_exact_landing()
+	_test_camp()
+	_test_food_by_size()
 	_test_same_seed_same_trip()
 	_test_every_trip_ends()
 	_test_food()
@@ -90,15 +105,173 @@ func _test_days_to() -> void:
 func _test_new_trip() -> void:
 	var trip := Expedition.new(_bram, _grass, 1)
 	_expect(trip.space_id == trip.map.portal, "they start on the Portal")
-	_expect(trip.food_left == _grass.food_for(_bram), "they carry the stage's food")
+	_expect(trip.food_left == _grass.most_food(_bram), "with no food named they carry all they can")
 	_expect(trip.player.gold == 0, "they set out with no gold")
 	_expect(trip.player.hp == trip.player.get_stat("max_hp"), "they set out at full health")
 	_expect(GameState.players == [trip.player], "they are alone on the board")
+	_expect(Expedition.new(_bram, _grass, 1, true, 3).food_left == 3, "they carry the food bought")
+	_expect(Expedition.new(_bram, _grass, 1, true, 0).food_left == 0, "a trip with no food is allowed")
 	var maren := Database.get_adventurer("maren")
 	var old_hand := Expedition.new(maren, _grass, 1)
 	_expect(old_hand.player.level == maren.level, "they start at their own level")
-	_expect(old_hand.food_left == _grass.food_for(maren), "their bonus food comes too")
+	_expect(old_hand.food_left == _grass.most_food(maren), "their own Max Food counts")
 	_expect(old_hand.player.get_stat("attack") >= maren.stat("attack"), "their level gives their stats")
+
+
+func _test_board_is_made_each_trip() -> void:
+	for id in ["grass_s", "grass_m", "grass_l"]:
+		var stage := Database.get_stage(id)
+		var trip := Expedition.new(_bram, stage, 3)
+		_expect(_board_of(trip) == _board_of(Expedition.new(_bram, stage, 3)), "%s: a seed gives the same board" % id)
+		_expect(_board_of(trip) != _board_of(Expedition.new(_bram, stage, 4)), "%s: another seed gives another board" % id)
+		_expect(_count(trip, BoardNode.NodeType.BATTLE) == stage.monsters, "%s has the stage's monsters" % id)
+		_expect(_count(trip, BoardNode.NodeType.TREASURE) == stage.chests, "%s has the stage's chests" % id)
+		_expect(trip.type_at(trip.map.portal) == BoardNode.NodeType.PORTAL, "%s keeps its Portal" % id)
+		var kinds := [BoardNode.NodeType.PORTAL, BoardNode.NodeType.NORMAL, BoardNode.NodeType.BATTLE, BoardNode.NodeType.TREASURE]
+		for space in trip.map.spaces():
+			_expect(kinds.has(trip.type_at(space)), "%s: space %d is one of the kinds trips have" % [id, space])
+		for spur in MapReport.new(trip.map).spurs:
+			if spur["depth"] >= 2:
+				for space: int in spur["spaces"]:
+					if trip.map.neighbors(space).size() == 1:
+						for seed_value in 20:
+							var other := Expedition.new(_bram, stage, seed_value + 1)
+							_expect(other.type_at(space) == BoardNode.NodeType.TREASURE, "%s: a deep spur always ends in a chest" % id)
+
+
+func _test_used_spaces_turn_empty() -> void:
+	var trip := Expedition.new(_bram, _grass, 1, true)
+	var told: Array[int] = []
+	trip.space_emptied.connect(func(id: int) -> void: told.append(id))
+	var spot := _space_of(trip, BoardNode.NodeType.BATTLE)
+	_land_on(trip, spot)
+	_expect(trip.fight != null, "landing on a monster starts a fight")
+	_win(trip)
+	_expect(trip.type_at(spot) == BoardNode.NodeType.NORMAL, "a beaten monster leaves an empty space")
+	_expect(told == ([spot] as Array[int]), "and the board is told")
+	_land_on(trip, spot)
+	_expect(trip.fight == null, "an empty space does nothing")
+
+	trip = Expedition.new(_bram, _grass, 1, true)
+	spot = _space_of(trip, BoardNode.NodeType.BATTLE)
+	_land_on(trip, spot)
+	trip.finish_fight(PackedStringArray(["They ran."]))
+	_expect(trip.type_at(spot) == BoardNode.NodeType.BATTLE, "a monster stays if they flee")
+	_land_on(trip, spot)
+	trip.finish_fight(PackedStringArray(["A draw."]))
+	_expect(trip.type_at(spot) == BoardNode.NodeType.BATTLE and not trip.is_over(), "a monster stays after a draw")
+
+	var chest_trip := Expedition.new(_bram, _grass, 1, true)
+	var chest := _space_of(chest_trip, BoardNode.NodeType.TREASURE)
+	for seed_value in range(1, 40):
+		chest_trip = Expedition.new(_bram, _grass, seed_value, true)
+		_land_on(chest_trip, chest)
+		if chest_trip.fight == null:
+			_expect(chest_trip.type_at(chest) == BoardNode.NodeType.NORMAL, "an opened chest leaves an empty space")
+		else:
+			_expect(chest_trip.type_at(chest) == BoardNode.NodeType.TREASURE, "a guarded chest stays until it is won")
+			_win(chest_trip)
+			_expect(chest_trip.type_at(chest) == BoardNode.NodeType.NORMAL, "beating its guardian empties it")
+
+
+func _test_monsters_stop_the_walk() -> void:
+	var trip := _trip_on_map(IslandMap.new(ROADS), [2])
+	trip.day = 2
+	trip.begin_walk(3)
+	_expect(trip.landing_spaces() == ([2] as Array[int]), "a monster is where the walk ends")
+	trip.step_to(1)
+	trip.step_to(trip.next_spaces()[0])
+	_expect(trip.space_id == 2 and trip.steps_left == 0, "walking onto a monster loses the steps left")
+	_expect(trip.player.space_id == 2, "and they stand on it")
+	trip.land()
+	_expect(trip.fight != null, "and the fight starts")
+
+	# With the monster gone, the same roll walks on.
+	trip = _trip_on_map(IslandMap.new(ROADS), [2])
+	trip._clear_space(2)
+	trip.begin_walk(3)
+	_expect(trip.landing_spaces() == ([3] as Array[int]), "a beaten monster stops nobody")
+
+	# No road is 9 long, but a monster ends the walk first, so the turn is not void.
+	trip = _trip_on_map(IslandMap.new(ROADS), [2])
+	_expect(trip.begin_walk(9), "a monster makes a roll too long to walk possible")
+	_expect(trip.next_spaces() == ([1] as Array[int]), "the road to it is open")
+	trip = _trip_on_map(IslandMap.new(ROADS))
+	_expect(not trip.begin_walk(9), "with no monster the same roll is void")
+
+	# The road with the monster is the only one long enough, so it is the only one offered.
+	trip = _trip_on_map(IslandMap.new(ROADS), [4])
+	trip.space_id = 1
+	trip.begin_walk(3)
+	_expect(trip.next_spaces() == ([2] as Array[int]), "a fork offers only roads that can hold the roll")
+
+	# Standing on one does not hold them back.
+	trip = _trip_on_map(IslandMap.new(ROADS), [2])
+	trip.space_id = 2
+	trip.begin_walk(2)
+	_expect(trip.landing_spaces().has(4), "a monster they stand on doesn't stop them leaving")
+	trip.begin_walk(0)
+	trip.land()
+	_expect(trip.fight != null, "a 0 on a monster fights it again")
+
+
+func _test_chests_take_an_exact_landing() -> void:
+	var trip := _trip_on_map(IslandMap.new(ROADS))
+	trip._board[3] = BoardNode.NodeType.TREASURE
+	trip.day = 2
+	trip.begin_walk(4)
+	trip.step_to(1)
+	trip.step_to(2)
+	trip.step_to(3)
+	_expect(trip.steps_left == 1, "a chest doesn't stop the walk")
+	trip.step_to(4)
+	trip.land()
+	_expect(trip.type_at(3) == BoardNode.NodeType.TREASURE, "walking past a chest leaves it shut")
+
+
+func _test_camp() -> void:
+	var trip := Expedition.new(_bram, _grass, 1, true)
+	var player := trip.player
+	trip.start_day()
+	_expect(not trip.can_camp(), "someone fully rested has no need to camp")
+	player.hp = 1
+	player.mp = 0
+	var food := trip.food_left
+	var spot := trip.space_id
+	trip.camp()
+	_expect(player.hp == 1 + ceili(player.get_stat("max_hp") * Expedition.CAMP_SHARE), "camp gives back 20% of HP")
+	_expect(player.mp == ceili(player.get_stat("max_mp") * Expedition.CAMP_SHARE), "and 20% of MP")
+	_expect(trip.food_left == food, "camp uses the food of the day, and no more")
+	_expect(trip.space_id == spot, "camp stays put")
+	trip.end_day()
+	var before := trip.food_left
+	trip.start_day()
+	_expect(trip.food_left == before - 1, "the next day eats as usual")
+	player.hp = player.get_stat("max_hp") - 1
+	trip.camp()
+	_expect(player.hp == player.get_stat("max_hp"), "camp never goes past full")
+
+	var hungry := Expedition.new(_bram, _grass, 1, true, 1)
+	hungry.player.hp = 5
+	hungry.start_day()
+	_expect(hungry.food_left == 0 and hungry.can_camp(), "the last day of food still pays for camp")
+	hungry.end_day()
+	hungry.start_day()
+	var hp := hungry.player.hp
+	_expect(not hungry.can_camp(), "with no food there is no camp")
+	hungry.camp()
+	_expect(hungry.player.hp == hp, "and camp does nothing")
+
+
+func _test_food_by_size() -> void:
+	var person := Database.get_adventurer("maren")
+	_expect(Database.get_stage("grass_s").most_food(person) == person.max_food, "Small is Max Food x1")
+	_expect(Database.get_stage("grass_m").most_food(person) == floori(person.max_food * 2.5), "Medium is x2.5")
+	_expect(Database.get_stage("grass_l").most_food(person) == person.max_food * 5, "Large is x5")
+	_expect(Database.get_stage("grass_m").most_food(_bram) == 12, "rounded down")
+	for id in Database.sorted_ids(Database.adventurers):
+		var food := Database.get_adventurer(id).max_food
+		_expect(food >= 5 and food <= 8, "%s starts between 5 and 8 Max Food" % id)
 
 
 func _test_same_seed_same_trip() -> void:
@@ -194,13 +367,12 @@ func _test_exact_landing() -> void:
 
 func _test_rolling_zero() -> void:
 	var trip := Expedition.new(_bram, _grass, 1)
-	var gold := _space_of(trip, BoardNode.NodeType.GOLD)
+	var quiet := _space_of(trip, BoardNode.NodeType.NORMAL)
 	trip.day = 2
-	_land_on(trip, gold)
-	var paid := trip.player.gold
+	_land_on(trip, quiet)
 	trip.walk(0)
 	trip.land()
-	_expect(trip.player.gold > paid and trip.visits[gold] == 2, "a 0 lands on the same space again")
+	_expect(trip.visits[quiet] == 2, "a 0 lands on the same space again")
 
 	# Told to go home on the first turn, a 0 on the Portal still doesn't count.
 	trip = _trip_on_line()
@@ -219,16 +391,14 @@ func _test_rolling_zero() -> void:
 	trip.day = 1
 	trip.walk(0)
 	trip.land()
-	_expect(trip.player.gold > 0, "only the Portal is spared on the first turn")
+	_expect(trip.type_at(3) == BoardNode.NodeType.NORMAL or trip.fight != null, "only the Portal is spared on the first turn")
 
 
 func _test_by_hand() -> void:
 	var trip := Expedition.new(_bram, _grass, 1, true)
 	_expect(trip.brain == null and not trip.player.is_cpu, "by hand, nobody else decides")
 	var hand_map := IslandMap.new(LINE)
-	trip.map = hand_map
-	trip.space_id = hand_map.portal
-	trip._depth = hand_map.steps_from(hand_map.portal)
+	_use_map(trip, hand_map)
 	trip.day = 1
 	_expect(trip.begin_walk(0) and trip.steps_left == 0, "a 0 is a walk of nothing")
 	trip.land()
@@ -267,7 +437,7 @@ func _test_by_hand() -> void:
 	var spot := _space_of(chest, BoardNode.NodeType.TREASURE)
 	chest.player.hp = 1
 	_land_on(chest, spot)
-	_expect(not SpaceEffects.chest_is_full(spot) or chest.fight != null, "a player always opens a chest")
+	_expect(chest.type_at(spot) != BoardNode.NodeType.TREASURE or chest.fight != null, "a player always opens a chest")
 
 
 func _test_warnings() -> void:
@@ -305,7 +475,7 @@ func _test_dead_ends() -> void:
 	var said := trip.diary.size()
 	_expect(trip.walk(4).is_empty(), "a roll no road can hold walks nowhere")
 	trip.land()
-	_expect(trip.space_id == 1 and trip.player.gold == 0 and trip.visits.is_empty(), "they stay put and nothing happens")
+	_expect(trip.space_id == 1 and trip.visits.is_empty(), "they stay put and nothing happens")
 	_expect(trip.diary[said]["kind"] == "stuck", "the lost turn is told")
 
 	_expect(map.days_to(0, 10)[3] < INF, "a big die on a small map still gets home")
@@ -350,33 +520,23 @@ func _test_turning_for_home() -> void:
 
 
 func _test_forks() -> void:
-	var trip := _trip_on_line()
-	trip.space_id = 1
-	trip.brain.plan_day()
-	_expect(trip.brain.choose_path([2, 4], 1, 1) == 2, "it steps around a trap")
-
 	var map := IslandMap.new({"spaces": [
 		{"id": 0, "type": "CASTLE", "to": [1, 3]},
 		{"id": 1, "type": "NORMAL", "to": [2]},
 		{"id": 2, "type": "NORMAL"},
-		{"id": 3, "type": "SHRINE", "to": [4]},
-		{"id": 4, "type": "GOLD"},
+		{"id": 3, "type": "NORMAL", "to": [4]},
+		{"id": 4, "type": "TREASURE"},
 	]})
-	trip = _trip_on_map(map)
+	var trip := _trip_on_map(map)
 	trip.day = 2
 	trip.food_left = 99
 	trip.brain.plan_day()
-	_expect(trip.brain.choose_path([1, 3], 0, 2) == 3, "it walks toward gold")
-	trip.visits[4] = 9
-	trip.player.hp = 1
-	trip.player.inventory.append("herb")
-	trip.brain.plan_day()
-	_expect(trip.brain.choose_path([1, 3], 0, 1) == 3, "someone hurt goes to a shrine")
+	_expect(trip.brain.choose_path([1, 3], 0, 2) == 3, "it walks toward a chest")
 
 	var home := IslandMap.new({"spaces": [
 		{"id": 0, "type": "CASTLE", "to": [1, 3]},
 		{"id": 1, "type": "NORMAL", "to": [2]},
-		{"id": 2, "type": "GOLD", "to": [3]},
+		{"id": 2, "type": "TREASURE", "to": [3]},
 		{"id": 3, "type": "NORMAL"},
 	]})
 	trip = _trip_on_map(home)
@@ -388,39 +548,11 @@ func _test_forks() -> void:
 
 func _test_spaces() -> void:
 	var trip := Expedition.new(_bram, _grass, 1)
-	var gold := _space_of(trip, BoardNode.NodeType.GOLD)
-	var shrine := _space_of(trip, BoardNode.NodeType.SHRINE)
-	_land_on(trip, gold)
-	_expect(trip.player.gold > 0, "a Gold space pays")
-
-	trip.player.hp = 1
-	_land_on(trip, shrine)
-	var rested := ceili(trip.player.get_stat("max_hp") * Expedition.REST_SHARE)
-	_expect(trip.player.hp == 1 + rested, "a Shrine gives back only part of their HP")
-
 	_land_on(trip, _space_of(trip, BoardNode.NodeType.BATTLE))
 	_expect(trip.fight != null, "a Battle space starts a fight")
 	trip.auto_fight()
 	_expect(trip.fight == null and trip.fights == 1, "the fight plays out")
 	_expect(trip.diary.size() > 0, "the diary remembers")
-
-	# Every event works for someone alone, with nothing left waiting.
-	for event: String in Expedition.EVENT_WEIGHTS:
-		var other := Expedition.new(_bram, _grass, 1)
-		other.space_id = gold
-		other.player.space_id = gold
-		other._take(Events.run(event, other.player, other.map.spaces()))
-		if other.fight != null:
-			other.auto_fight()
-		_expect(other.map.neighbors(other.space_id).size() > 0, "the %s event leaves them on the board" % event)
-
-	var fall := Expedition.new(_bram, _grass, 1)
-	fall.space_id = gold
-	fall.heading_home = true
-	var trapdoor := SpaceEffects.Result.new("A trapdoor!")
-	trapdoor.to_castle = true
-	fall._take(trapdoor)
-	_expect(fall.ending == Expedition.Ending.HOME, "a trapdoor to the Portal gets them home")
 
 
 func _test_chest_guardian() -> void:
@@ -448,7 +580,7 @@ func _test_chest_guardian() -> void:
 	trip._meet(prize.guardian)
 	trip.auto_fight()
 	_expect(trip.player.gold >= 500, "beating the guardian pays the prize")
-	_expect(not SpaceEffects.chest_is_full(chest), "the chest is now empty")
+	_expect(trip.type_at(chest) == BoardNode.NodeType.NORMAL, "the chest is now empty")
 
 	trip = Expedition.new(_bram, _grass, 1)
 	trip.space_id = chest
@@ -460,7 +592,7 @@ func _test_chest_guardian() -> void:
 	trip.player.hp = 1
 	trip.auto_fight()
 	_expect(trip.gold_home() == 0, "losing to the guardian pays nothing")
-	_expect(SpaceEffects.chest_is_full(chest), "the chest stays full")
+	_expect(trip.type_at(chest) == BoardNode.NodeType.TREASURE, "the chest stays full")
 
 
 func _test_defeat() -> void:
@@ -495,13 +627,40 @@ func _trip_on_line() -> Expedition:
 	return _trip_on_map(IslandMap.new(LINE))
 
 
-func _trip_on_map(map: IslandMap) -> Expedition:
+# `monsters` are the spaces that start with one.
+func _trip_on_map(map: IslandMap, monsters: Array[int] = []) -> Expedition:
 	var trip := Expedition.new(_bram, _grass, 1)
+	_use_map(trip, map)
+	for id in monsters:
+		trip._board[id] = BoardNode.NodeType.BATTLE
+		trip._monsters[id] = true
+	return trip
+
+
+# Puts a trip on `map`, with what the file holds and nothing else.
+func _use_map(trip: Expedition, map: IslandMap) -> void:
 	trip.map = map
 	trip.space_id = map.portal
 	trip._depth = map.steps_from(map.portal)
+	trip._monsters = {}
+	trip._board = {}
+	for id in map.spaces():
+		trip._board[id] = map.type_of(id)
 	GameState.castle_id = map.portal
-	return trip
+
+
+func _board_of(trip: Expedition) -> Dictionary:
+	return trip._board
+
+
+func _count(trip: Expedition, type: BoardNode.NodeType) -> int:
+	return trip._board.values().count(type)
+
+
+# Ends the fight as a win, however strong the monster is.
+func _win(trip: Expedition) -> void:
+	trip.fight.opponent.hp = 1
+	trip.auto_fight()
 
 
 func _test_report() -> void:
@@ -562,7 +721,7 @@ func _test_report() -> void:
 
 func _space_of(trip: Expedition, type: BoardNode.NodeType) -> int:
 	for id in trip.map.spaces():
-		if trip.map.type_of(id) == type:
+		if trip.type_at(id) == type:
 			return id
 	return -1
 

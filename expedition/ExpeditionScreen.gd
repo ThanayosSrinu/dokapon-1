@@ -3,12 +3,14 @@ extends Node2D
 ## One trip on screen, from the far side of the Portal to the report, played by the person
 ## at the keys. The rules stay in Expedition.gd: this script runs the steps of a day in
 ## order, asks for each choice, and shows what came back. Every choice waits for the player:
-## the roll, the road at a fork, each move of a fight, and going home at the Portal.
+## roll or camp, the road at a fork, each move of a fight, and going home at the Portal.
 ##
 ## A road is picked by clicking a green space, or with the arrow keys or the controller,
 ## because every link on a map runs straight along the grid, so each road has its own
 ## direction.
 
+## The day's choice was made.
+signal _day_chosen(to_camp: bool)
 ## A road was picked at a fork.
 signal _road_picked(id: int)
 ## The Portal's question was answered.
@@ -32,6 +34,8 @@ const NEWS_TOP := 24.0
 const NEWS_WIDTH := 600.0
 ## Where Roll stands: beside the strip, in the gap before the bag, so it hides no road.
 const ROLL_LEFT := 738.0
+## Where Camp stands, above Roll.
+const CAMP_ABOVE := 96.0
 ## How far right of the adventurer the camera looks with the map open, so the panel covers
 ## less of them.
 const MAP_VIEW_SHIFT := Vector2(240, 0)
@@ -72,6 +76,10 @@ const PORTAL_NOTHING := "nothing"
 const GO_HOME_TEXT := "Go home"
 const STAY_OUT_TEXT := "Stay out"
 const FORK_WORDS := "Which way?"
+const CAMP_TEXT := "Camp"
+const CAMP_WORDS := "Spend this turn's food to rest, and get back %d%% of HP and MP."
+const CAMP_FULL := "They are fully rested."
+const CAMP_HUNGRY := "There is no food to camp on."
 const WARP_LINE := "Warp Stone, take me home!"
 const WARP_CAMERA_SECONDS := 0.4
 const WARP_LOSS_DELAY := 0.5
@@ -110,6 +118,8 @@ var arrow: KitArrow
 var bubble: TavernBubble
 ## The main action of each day.
 var roll_button: KitButton
+## Rests instead of rolling.
+var camp_button: KitButton
 ## Points at Roll on the first day.
 var roll_arrow: KitArrow
 ## What just happened, in a line.
@@ -151,7 +161,7 @@ var _zoom_before := 1
 
 func _ready() -> void:
 	var town := TownData.current()
-	trip = Expedition.new(town.going, town.stage, next_seed, true)
+	trip = Expedition.new(town.going, town.stage, next_seed, true, town.food)
 	_build_world(town)
 	_build_ui(town)
 	EventBus.space_clicked.connect(_on_space_clicked)
@@ -199,6 +209,13 @@ func _road_toward(way: Vector2) -> int:
 		if road.dot(way) >= ROAD_AIM:
 			return id
 	return -1
+
+
+func _on_space_emptied(id: int) -> void:
+	var node := board.get_board_node(id)
+	node.node_type = trip.type_at(id)
+	node.bump()
+	_refresh_map()
 
 
 func _on_space_clicked(node: BoardNode) -> void:
@@ -249,8 +266,9 @@ func _play_day() -> void:
 	hud.refresh()
 	_refresh_map()
 	await _show_news(read_from)
-	if can_move:
-		await _wait_for_roll()
+	if can_move and await _wait_for_choice():
+		await _camp()
+	elif can_move:
 		read_from = trip.diary.size()
 		await _walk()
 		var before := _purse()
@@ -265,17 +283,47 @@ func _play_day() -> void:
 	trip.end_day()
 
 
-func _wait_for_roll() -> void:
+# Puts focus on what the day now asks. An open leave panel keeps it until it closes, or
+# the arrow keys would walk off the panel.
+func _ask_with(part: Control) -> void:
+	if leave_panel.visible:
+		_focus_before = part
+	else:
+		part.grab_focus()
+
+
+# Waits for the day's choice, and returns true if it is to camp.
+func _wait_for_choice() -> bool:
+	_offer_camp()
 	roll_button.show()
-	roll_button.grab_focus()
+	camp_button.show()
+	_ask_with(roll_button)
 	if trip.day == 1:
-		roll_arrow = KitArrow.new(roll_button, KitArrow.Side.ABOVE)
+		roll_arrow = KitArrow.new(roll_button, KitArrow.Side.RIGHT)
 		_layer.get_parent().add_child(roll_arrow)
-	await roll_button.pressed
+	var to_camp: bool = await _day_chosen
 	roll_button.hide()
+	camp_button.hide()
 	_drop_roll_arrow()
 	_close_map(false)
 	_set_news("")
+	return to_camp
+
+
+func _offer_camp() -> void:
+	if trip.can_camp():
+		camp_button.block("")
+		Tips.attach(camp_button, CAMP_TEXT, CAMP_WORDS % roundi(Expedition.CAMP_SHARE * 100.0))
+	else:
+		camp_button.block(CAMP_HUNGRY if trip.food_left == 0 else CAMP_FULL)
+
+
+func _camp() -> void:
+	var read_from := trip.diary.size()
+	trip.camp()
+	Sound.play("heal")
+	hud.refresh()
+	await _show_news(read_from)
 
 
 func _drop_roll_arrow() -> void:
@@ -369,7 +417,7 @@ func _ask_about_portal() -> void:
 	back.hide()
 	portal_panel.show()
 	portal_panel.play_open()
-	home_button.grab_focus()
+	_ask_with(home_button)
 	var going_home: bool = await _portal_answered
 	portal_panel.hide()
 	_dim.hide()
@@ -442,6 +490,7 @@ func _clear_for_ending() -> void:
 	bag_panel.hide()
 	map_button.hide()
 	roll_button.hide()
+	camp_button.hide()
 	portal_panel.hide()
 	bag_prompt.hide()
 	_drop_roll_arrow()
@@ -684,6 +733,9 @@ func _build_world(town: TownData) -> void:
 	board.map_file = town.stage.map_file
 	board.print_on_ready = false
 	add_child(board)
+	for id in trip.map.spaces():
+		board.get_board_node(id).node_type = trip.type_at(id)
+	trip.space_emptied.connect(_on_space_emptied)
 	var start := board.get_starting_node().global_position
 	camera = BoardCamera.new()
 	camera.world_limit = board.get_world_rect()
@@ -733,7 +785,7 @@ func _build_ui(town: TownData) -> void:
 	_build_die()
 	bubble = TavernBubble.new()
 	_layer.add_child(bubble)
-	_build_strip(town)
+	_build_strip()
 	_build_bag_panel()
 	_build_news()
 	_build_roll_button()
@@ -756,8 +808,8 @@ func _build_die() -> void:
 	_layer.add_child(die)
 
 
-func _build_strip(town: TownData) -> void:
-	hud = TripHud.new(trip, town.stage)
+func _build_strip() -> void:
+	hud = TripHud.new(trip)
 	_layer.add_child(hud)
 	hud.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	hud.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE)
@@ -792,6 +844,7 @@ func _build_roll_button() -> void:
 	roll_button.kind = KitButton.Kind.PRIMARY
 	roll_button.text = "Roll"
 	roll_button.icon = Kit.icon("die")
+	roll_button.pressed.connect(func() -> void: _day_chosen.emit(false))
 	_layer.add_child(roll_button)
 	roll_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	roll_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE)
@@ -800,6 +853,19 @@ func _build_roll_button() -> void:
 	roll_button.offset_left += ROLL_LEFT
 	roll_button.offset_right += ROLL_LEFT
 	roll_button.hide()
+	camp_button = KitButton.new()
+	camp_button.kind = KitButton.Kind.SMALL
+	camp_button.text = CAMP_TEXT
+	camp_button.icon = Kit.icon("food")
+	camp_button.pressed.connect(func() -> void: _day_chosen.emit(true))
+	_layer.add_child(camp_button)
+	camp_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	camp_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE)
+	camp_button.offset_top -= STRIP_FROM_BOTTOM + CAMP_ABOVE
+	camp_button.offset_bottom -= STRIP_FROM_BOTTOM + CAMP_ABOVE
+	camp_button.offset_left += ROLL_LEFT
+	camp_button.offset_right += ROLL_LEFT
+	camp_button.hide()
 
 
 func _build_map() -> void:
@@ -934,7 +1000,8 @@ func _link_focus() -> void:
 	var slot: Control = bag_panel.slots[0]
 	_link(back, back, roll_button, back, map_button)
 	_link(map_button, map_button, slot, back, map_button)
-	_link(roll_button, back, hud.hp_bar, roll_button, slot)
+	_link(roll_button, camp_button, hud.hp_bar, roll_button, slot)
+	_link(camp_button, back, roll_button, camp_button, slot)
 	_link_strip()
 	_link(stay_button, stay_button, leave_button, stay_button, stay_button)
 	_link(leave_button, stay_button, leave_button, leave_button, leave_button)
