@@ -38,6 +38,8 @@ extends RefCounted
 
 ## A monster was beaten or a chest was opened on space `id`, which is now empty.
 signal space_emptied(id: int)
+## The materials bag changed.
+signal materials_changed
 
 enum Ending { NONE, HOME, BEATEN, STARVED, WARPED }
 
@@ -60,6 +62,10 @@ const FIGHT_MOMENT := 1.0
 const LEVEL_MOMENT := 150
 ## A win with this share of HP gone is worth telling as a close call.
 const CLOSE_CALL := 0.7
+## How many materials the materials bag holds. It is apart from the bag for items.
+const MATERIAL_ROOM := 8
+## The chance that a beaten monster leaves a material behind. Every chest holds one.
+const MATERIAL_DROP_CHANCE := 0.5
 
 ## Who is on the trip, and their sheet for the road.
 var person: Adventurer
@@ -92,6 +98,10 @@ var recall_day := 0
 var fight: Battle
 ## An item found with the bag full, waiting for the player to choose, or "".
 var found_item := ""
+## The materials they carry, one id for each, at most MATERIAL_ROOM.
+var materials: Array[String] = []
+## A material found with the materials bag full, waiting for the player to choose, or "".
+var found_material := ""
 ## Each thing that happened: {"day", "kind", "text"}. The report is written from this.
 var diary: Array[Dictionary] = []
 ## Space id -> how many times they landed there.
@@ -135,7 +145,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	person = new_person
 	by_hand = hand
 	map = IslandMap.open(stage.map_file)
-	player = _make_player(person, hand, kept)
+	player = make_player(person, hand, kept)
 	level_at_start = player.level
 	food_taken = stage.most_food(person) if food < 0 else food
 	food_left = food_taken
@@ -393,6 +403,8 @@ func finish_fight(lines: PackedStringArray) -> void:
 		fights_won += 1
 		_remember_win(monster, level_before)
 		_clear_space(space_id)
+		if monster != null and _prize == null and GameState.rng.randf() < MATERIAL_DROP_CHANCE:
+			_gain_material(_common_material())
 		if _prize != null:
 			_prize.guardian = null
 			_take(_prize)
@@ -540,13 +552,74 @@ func _remember_win(monster: MonsterData, level_before: int) -> void:
 	_remember(text + ".", worth)
 
 
-# Pays out what a chest held.
+# Pays out what a chest held. Every chest holds a material too, and the chest at the deep
+# end of a spur, which the map fixes in place, also holds a rare one.
 func _take(result: SpaceEffects.Result) -> void:
 	note("find", result.text)
 	_remember(result.text.replace("the castle", "the Portal"), _worth_of(result))
 	player.add_gold(result.gold)
 	if result.item_id != "":
 		_give(result.item_id)
+	if is_deep_chest(space_id):
+		var rare := Database.material_ids(true)
+		var id := rare[GameState.rng.randi_range(0, rare.size() - 1)]
+		_remember("%s found %s at the end of the road." % [player.player_name, Database.get_material(id).display_name],
+				Database.get_material(id).price)
+		_gain_material(id)
+	_gain_material(_common_material())
+
+
+## True if space `id` is a chest at the deep end of a spur, which holds a rare material.
+## The map fixes those in place, and they are the ends of dead-end roads.
+func is_deep_chest(id: int) -> bool:
+	return map.type_of(id) == BoardNode.NodeType.TREASURE and map.neighbors(id).size() == 1
+
+
+## What the materials they carry would sell for, in gold.
+func materials_worth() -> int:
+	var worth := 0
+	for id in materials:
+		worth += TownData.material_price(id)
+	return worth
+
+
+## The player answers a material found with the materials bag full: `dropped` is the one to
+## leave behind to make room, or "" to leave the new one.
+func keep_material(dropped: String) -> void:
+	if found_material == "":
+		return
+	if dropped != "" and materials.has(dropped):
+		materials.erase(dropped)
+		materials.append(found_material)
+		note("item", "%s leaves the %s behind." % [player.player_name, Database.get_material(dropped).display_name])
+	found_material = ""
+	materials_changed.emit()
+
+
+func _common_material() -> String:
+	var common := Database.material_ids()
+	return common[GameState.rng.randi_range(0, common.size() - 1)]
+
+
+# Puts a material in the materials bag. With it full, the player chooses, and the bot drops
+# the cheapest if the new one is worth more.
+func _gain_material(id: String) -> void:
+	note("material", "%s picks up %s." % [player.player_name, Database.get_material(id).display_name])
+	if materials.size() < MATERIAL_ROOM:
+		materials.append(id)
+		materials_changed.emit()
+		return
+	if by_hand:
+		found_material = id
+		return
+	var cheapest := materials[0]
+	for held in materials:
+		if Database.get_material(held).price < Database.get_material(cheapest).price:
+			cheapest = held
+	if Database.get_material(cheapest).price < Database.get_material(id).price:
+		materials.erase(cheapest)
+		materials.append(id)
+		materials_changed.emit()
 
 
 func _worth_of(result: SpaceEffects.Result) -> float:
@@ -592,7 +665,9 @@ func _give(item_id: String) -> void:
 		player.add_item(item_id)
 
 
-static func _make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerData:
+## Who `who` is on the road: their class, with the level, gear, moves and pack that `kept`
+## holds, if they are on the roster.
+static func make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerData:
 	var made := PlayerData.new(who.display_name, Color.WHITE, not hand)
 	made.character_sheet = who.sheet
 	made.learns_by_level = false
@@ -600,10 +675,11 @@ static func _make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerDat
 	var level := who.level if kept == null else kept.level
 	while made.level < level:
 		made.add_experience(made.exp_to_next_level())
-	if kept != null and kept.has_kit():
+	if kept != null:
 		made.experience = kept.experience
 		made.equipment = kept.equipment.duplicate()
 		made.learned = kept.learned.duplicate()
+		made.inventory = kept.pack.duplicate()
 	made.gold = 0
 	made.gold_share = GOLD_SHARE
 	made.rest_share = CAMP_SHARE

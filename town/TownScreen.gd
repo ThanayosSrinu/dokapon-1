@@ -7,6 +7,7 @@ const MENU := "res://ui/menu/MainMenu.tscn"
 const TAVERN := "res://tavern/TavernScreen.tscn"
 const PORTAL := "res://portal/PortalScreen.tscn"
 const BANK := "res://bank/BankScreen.tscn"
+const SHOP := "res://shop/ShopScreen.tscn"
 ## How far the resources stand from the screen's edge. Back has the other corner.
 const BAR_MARGIN := 24.0
 ## Where a hired adventurer waits, from the Portal's feet.
@@ -19,6 +20,8 @@ var back: KitBackButton
 var art: TownArt
 var gold_chip: KitChip
 var date_chip: DateChip
+## Material id -> its chip on the top bar. Only materials the town has get one.
+var material_chips := {}
 var arrow: KitArrow
 ## Who goes next, waiting by the Portal, if there is one.
 var waiting: CharacterFigure
@@ -110,6 +113,16 @@ func _build_ui(town: TownData) -> void:
 	bar.offset_top = BAR_MARGIN
 	bar.add_theme_constant_override("separation", BAR_GAP)
 	_ui.add_child(bar)
+	for id in Database.sorted_ids(town.materials):
+		if town.materials[id] <= 0:
+			continue
+		var material := Database.get_material(id)
+		var chip := KitChip.new("coin", town.materials[id])
+		chip.set_picture(GameArt.material_icon(material))
+		chip.mouse_filter = Control.MOUSE_FILTER_PASS
+		Tips.attach(chip, material.display_name, "Brought home by trips. The town will build with it, or the Shop buys it.")
+		bar.add_child(chip)
+		material_chips[id] = chip
 	date_chip = DateChip.new()
 	bar.add_child(date_chip)
 	gold_chip = KitChip.new("coin", town.gold)
@@ -148,7 +161,7 @@ func _refresh_signs() -> void:
 
 
 func _visit(place: TownBuilding) -> void:
-	Screens.go({"tavern": TAVERN, "bank": BANK, "portal": PORTAL}[place.id])
+	Screens.go({"tavern": TAVERN, "bank": BANK, "portal": PORTAL, "shop": SHOP}[place.id])
 
 
 func _on_back() -> void:

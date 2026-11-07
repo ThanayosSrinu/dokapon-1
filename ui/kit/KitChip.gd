@@ -9,6 +9,7 @@ const FLASH := Color(1.0, 0.85, 0.42)
 var amount := 0
 
 var _label: Label
+var _picture: TextureRect
 var _tween: Tween
 
 
@@ -19,12 +20,18 @@ func _init(icon_name := "coin", start := 0) -> void:
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(row)
-	row.add_child(Kit.picture(icon_name))
+	_picture = Kit.picture(icon_name)
+	row.add_child(_picture)
 	_label = Kit.text(str(start))
 	_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_label)
 	focus_entered.connect(queue_redraw)
 	focus_exited.connect(queue_redraw)
+
+
+## Shows `texture` in place of the kit icon, such as a material's picture.
+func set_picture(texture: Texture2D) -> void:
+	_picture.texture = texture
 
 
 func _draw() -> void:

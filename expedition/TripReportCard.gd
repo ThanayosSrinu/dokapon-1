@@ -35,6 +35,8 @@ func _init(person: Adventurer, report: TripReport) -> void:
 			body.add_child(_loss(report.loss))
 	elif report.best != "":
 		body.add_child(_best_moment(report.best))
+	if not report.items_home.is_empty() or not report.materials_home.is_empty():
+		body.add_child(_loot(report))
 	body.add_child(_stats(report))
 
 
@@ -57,6 +59,28 @@ func _best_moment(words: String) -> Control:
 	row.add_child(star)
 	row.add_child(Kit.text(words, WIDTH - Kit.ICON_SIZE - 48.0, &"PaperLabel"))
 	return row
+
+
+# What came home for the town, a tile for each kind, materials last.
+func _loot(report: TripReport) -> Control:
+	var row := HFlowContainer.new()
+	row.alignment = FlowContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("h_separation", 8)
+	row.add_theme_constant_override("v_separation", 8)
+	var words := Kit.text("Brought home", 0.0, &"PaperLabel")
+	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(words)
+	for id: String in Database.sorted_ids(report.items_home):
+		row.add_child(_loot_tile(ShopTile.new(id, false, report.items_home[id])))
+	for id: String in Database.sorted_ids(report.materials_home):
+		row.add_child(_loot_tile(ShopTile.new(id, true, report.materials_home[id])))
+	return row
+
+
+func _loot_tile(tile: ShopTile) -> ShopTile:
+	tile.focus_mode = Control.FOCUS_NONE
+	Tips.attach(tile, tile.shown_name(), "Goes to the town. Sell it at the Shop.")
+	return tile
 
 
 func _stats(report: TripReport) -> Control:

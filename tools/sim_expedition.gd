@@ -61,6 +61,12 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 	var alike := 0.0
 	var seen_share := 0.0
 	var deep_trips := 0
+	# What reached town, in gold the Shop would pay: [trips, total, lost] for trips that
+	# reached a deep spur end, and for the rest.
+	var haul := {true: [0, 0, 0], false: [0, 0, 0]}
+	var materials_home := 0
+	var materials_worth := 0
+	var items_worth := 0
 	for index in trips:
 		var trip := Expedition.new(person, stage, first_seed + index, false, food if food > 0 else -1)
 		trip_food = trip.food_left
@@ -69,7 +75,19 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 		alike += _overlap(last_seen, trip.visits) if index > 0 else 0.0
 		last_seen = trip.visits
 		seen_share += float(trip.visits.size()) / trip.map.spaces().size()
-		deep_trips += 1 if _reached_spur_end(trip, report) else 0
+		var deep := _reached_spur_end(trip, report)
+		deep_trips += 1 if deep else 0
+		var worth := 0
+		if trip.ending == Expedition.Ending.HOME:
+			for id in trip.player.inventory:
+				worth += TownData.sell_price(id)
+			items_worth += worth
+			materials_home += trip.materials.size()
+			materials_worth += trip.materials_worth()
+			worth += trip.gold_home() + trip.materials_worth()
+		haul[deep][0] += 1
+		haul[deep][1] += worth
+		haul[deep][2] += 0 if trip.ending == Expedition.Ending.HOME else 1
 		endings[trip.ending] = endings.get(trip.ending, 0) + 1
 		totals["levels"] += trip.player.level - person.level
 		totals["fights"] += trip.fights
@@ -99,6 +117,12 @@ func _run(person: Adventurer, stage: Stage, trips: int, first_seed: int, food: i
 	print("Map seen      %d%% per trip" % roundi(100.0 * seen_share / trips))
 	print("Like last trip %d%% of the same spaces" % roundi(100.0 * alike / maxi(trips - 1, 1)))
 	print("Deep spur end  %d%% of trips" % roundi(100.0 * deep_trips / trips))
+	print("Items home     %.0f gold at the Shop per trip" % (float(items_worth) / trips))
+	print("Materials home %.1f per trip, %.0f gold at the Shop" % [float(materials_home) / trips, float(materials_worth) / trips])
+	for deep: bool in [true, false]:
+		var line: Array = haul[deep]
+		print("Haul, %s  %.0f gold a trip over %d trips, %d%% lost" % ["deep end" if deep else "the rest",
+				float(line[1]) / maxi(line[0], 1), line[0], roundi(100.0 * line[2] / maxi(line[0], 1))])
 
 
 func _play(trip: Expedition) -> void:

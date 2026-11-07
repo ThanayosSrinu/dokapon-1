@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MaterialData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MaterialData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ore"
+display_name = "Ore"
+description = "Rock with copper running through it."
+price = 30
+icon = 23
+rare = false

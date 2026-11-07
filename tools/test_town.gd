@@ -98,7 +98,7 @@ func _test_what_can_be_visited() -> void:
 		_expect(button is TownBuilding or button == town.back, "%s belongs here" % button.name)
 	var ids: Array = town.buildings.keys()
 	ids.sort()
-	_expect(ids == ["bank", "portal", "tavern"], "the Tavern, the Bank and the Portal can be visited")
+	_expect(ids == ["bank", "portal", "shop", "tavern"], "the Tavern, the Bank, the Shop and the Portal can be visited")
 
 
 func _collect_any_buttons(node: Node, into: Array[BaseButton]) -> void:
@@ -115,6 +115,8 @@ func _test_keys() -> void:
 	await _tap("ui_right")
 	_expect(_focused() == town.building("bank"), "right reaches the Bank")
 	await _tap("ui_right")
+	_expect(_focused() == town.building("shop"), "right reaches the Shop")
+	await _tap("ui_right")
 	_expect(_focused() == portal, "right reaches the Portal")
 	_expect(town.signs["portal"].is_open() and not town.signs["tavern"].is_open(), "the signs follow the focus")
 	await _tap("ui_right")
@@ -125,8 +127,7 @@ func _test_keys() -> void:
 	_expect(_focused() == town.back, "up reaches Back")
 	await _tap("ui_down")
 	_expect(_focused() == tavern, "down leaves Back for the buildings")
-	await _tap("ui_right")
-	await _tap("ui_right")
+	await _tap("ui_left")
 	await _tap("ui_accept")
 	await _until_settled()
 	_expect(get_tree().current_scene is PortalScreen, "Enter visits the Portal")
@@ -140,8 +141,7 @@ func _test_keys() -> void:
 
 func _test_controller() -> void:
 	var town := await _open_town()
-	await _pad(JOY_BUTTON_DPAD_RIGHT)
-	await _pad(JOY_BUTTON_DPAD_RIGHT)
+	await _pad(JOY_BUTTON_DPAD_LEFT)
 	_expect(_focused() == town.building("portal"), "the pad reaches the Portal")
 	await _pad(JOY_BUTTON_A)
 	await _until_settled()

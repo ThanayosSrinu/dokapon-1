@@ -77,6 +77,14 @@ static func item_icon(item: ItemData) -> AtlasTexture:
 	return texture
 
 
+## The picture of a material, from the same sheet as the items.
+static func material_icon(material: MaterialData) -> AtlasTexture:
+	var texture := AtlasTexture.new()
+	texture.atlas = ITEM_ICONS
+	texture.region = Rect2(material.icon * ITEM_ICON_SIZE, 0, ITEM_ICON_SIZE, ITEM_ICON_SIZE)
+	return texture
+
+
 ## A texture holding one frame of a character.
 static func character_frame(sheet: Texture2D, column: int, row: int) -> AtlasTexture:
 	var texture := AtlasTexture.new()

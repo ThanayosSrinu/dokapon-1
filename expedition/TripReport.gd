@@ -21,6 +21,10 @@ var levels_gained := 0
 var gold_home := 0
 ## The gold found and then lost.
 var gold_lost := 0
+## What reached the town's stock: item id -> how many.
+var items_home := {}
+## What reached the town's materials: material id -> how many.
+var materials_home := {}
 ## True for any trip that didn't reach the Portal.
 var failed := false
 ## True if they died. An Emergency Warp fails the trip, but nobody dies.
@@ -41,8 +45,13 @@ func _init(trip: Expedition) -> void:
 	failed = trip.ending != Expedition.Ending.HOME
 	died = failed and trip.ending != Expedition.Ending.WARPED
 	if failed:
-		var what := TripReport.lost_words(gold_lost, trip.player.inventory.size())
+		var what := TripReport.lost_words(gold_lost, trip.player.inventory.size(), trip.materials.size())
 		loss = "Lost: " + what if what != "" else ""
+	else:
+		for id in trip.player.inventory:
+			items_home[id] = items_home.get(id, 0) + 1
+		for id in trip.materials:
+			materials_home[id] = materials_home.get(id, 0) + 1
 	title = _title_for(trip, who)
 	story.append(_how_it_went(who))
 	story.append(_how_it_ended(trip, who))
@@ -50,13 +59,17 @@ func _init(trip: Expedition) -> void:
 		best = "Day %d: %s" % [trip.best_moment["day"], trip.best_moment["text"]]
 
 
-## `gold` and `items` in words, or "" if both are 0.
-static func lost_words(gold: int, items: int) -> String:
+## `gold`, `items` and `materials` in words, or "" if all are 0.
+static func lost_words(gold: int, items: int, materials := 0) -> String:
 	var parts := PackedStringArray()
 	if gold > 0:
 		parts.append("%d gold" % gold)
 	if items > 0:
 		parts.append("1 item" if items == 1 else "%d items" % items)
+	if materials > 0:
+		parts.append("1 material" if materials == 1 else "%d materials" % materials)
+	if parts.size() > 2:
+		return "%s and %s" % [", ".join(parts.slice(0, -1)), parts[-1]]
 	return " and ".join(parts)
 
 

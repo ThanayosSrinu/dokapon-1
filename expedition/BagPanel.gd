@@ -15,7 +15,7 @@ const PANEL_MARGIN := 14.0
 ## Tiles in a row of the bag.
 const COLUMNS := 4
 ## Rows shown before the bag scrolls, so that any size of bag stays on screen.
-const MOST_ROWS := 4
+const MOST_ROWS := 3
 const DETAIL_HEIGHT := 252.0
 const DETAIL_WIDTH := 228.0
 const SLOTS := [ItemData.Kind.WEAPON, ItemData.Kind.ARMOR, ItemData.Kind.ACCESSORY]
@@ -29,6 +29,9 @@ const KNOWN_HINT := "They know this already."
 var slots: Array[BagTile] = []
 ## One per place in the bag.
 var tiles: Array[BagTile] = []
+## One tile for each kind of material carried, with how many.
+var material_tiles: Array[ShopTile] = []
+var materials_words: Label
 var bag_words: Label
 var detail_title: Label
 var detail_words: Label
@@ -45,6 +48,7 @@ var locked := false:
 var _trip: Expedition
 # The bag's grid, and what scrolls it.
 var _grid: GridContainer
+var _material_row: HBoxContainer
 var _bag_view: ScrollContainer
 # The item being pointed at, or "".
 var _pointed := ""
@@ -79,12 +83,20 @@ func _init(trip: Expedition) -> void:
 	_grid.add_theme_constant_override("h_separation", GAP)
 	_grid.add_theme_constant_override("v_separation", GAP)
 	_bag_view.add_child(_grid)
+	materials_words = Kit.text("")
+	materials_words.modulate = Kit.GOLD
+	gear.body.add_child(materials_words)
+	_material_row = HBoxContainer.new()
+	_material_row.add_theme_constant_override("separation", GAP)
+	_material_row.custom_minimum_size.y = BagTile.SIZE
+	gear.body.add_child(_material_row)
 	_build_detail()
 
 
 func _ready() -> void:
 	refresh()
 	_trip.player.changed.connect(refresh)
+	_trip.materials_changed.connect(refresh)
 
 
 func _process(_delta: float) -> void:
@@ -116,6 +128,7 @@ func refresh() -> void:
 		tile.icon = null if item_id == "" else GameArt.item_icon(Database.get_item(item_id))
 		tile.disabled = item_id == ""
 		tile.focus_mode = Control.FOCUS_NONE if item_id == "" else Control.FOCUS_ALL
+	_show_materials()
 	_keep_shown_real()
 	_show_detail()
 
@@ -125,6 +138,31 @@ func point_at_space(id: int) -> void:
 	if id != _space:
 		_space = id
 		_show_detail()
+
+
+# The materials bag: one tile for each kind, in a row of its own.
+func _show_materials() -> void:
+	materials_words.text = "Materials %d/%d" % [_trip.materials.size(), Expedition.MATERIAL_ROOM]
+	for tile in material_tiles:
+		_material_row.remove_child(tile)
+		tile.queue_free()
+	material_tiles.clear()
+	var counts := {}
+	for id in _trip.materials:
+		counts[id] = counts.get(id, 0) + 1
+	for id: String in Database.sorted_ids(counts):
+		var tile := ShopTile.new(id, true, counts[id])
+		tile.focus_mode = Control.FOCUS_NONE
+		tile.mouse_entered.connect(_on_material_pointed.bind(id))
+		tile.mouse_exited.connect(_on_pointed.bind(""))
+		_material_row.add_child(tile)
+		material_tiles.append(tile)
+
+
+func _on_material_pointed(id: String) -> void:
+	var material := Database.get_material(id)
+	_show_words(material.display_name, "%s
+The Shop pays %d gold for one." % [material.description, TownData.material_price(id)], "")
 
 
 func _build_slots(parent: Control) -> void:

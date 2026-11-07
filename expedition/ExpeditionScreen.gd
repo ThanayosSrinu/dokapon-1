@@ -119,6 +119,7 @@ var die: RollBlock
 var battle_screen: BattleScreen
 ## Asks what to do with something found when the bag is full.
 var bag_prompt: BagPrompt
+var material_prompt: MaterialPrompt
 var learn_prompt: LearnPrompt
 var back: KitBackButton
 var arrow: KitArrow
@@ -250,7 +251,8 @@ func _on_space_clicked(node: BoardNode) -> void:
 
 # Keeps the bag shut during fights, and points its box at the space under the mouse.
 func _update_bag_panel() -> void:
-	bag_panel.locked = battle_screen.visible or bag_prompt.visible or learn_prompt.visible or trip.is_over()
+	bag_panel.locked = (battle_screen.visible or bag_prompt.visible or material_prompt.visible
+			or learn_prompt.visible or trip.is_over())
 	var space := board.get_node_at(get_global_mouse_position())
 	if get_viewport().gui_get_hovered_control() != null or space == null:
 		bag_panel.point_at_space(trip.space_id)
@@ -304,6 +306,7 @@ func _play_day() -> void:
 		await _show_news(read_from)
 		await _fight_if_needed()
 		await _settle_found_item()
+		await _settle_found_material()
 		await _ask_about_portal()
 	trip.end_day()
 
@@ -472,6 +475,14 @@ func _settle_found_item() -> void:
 	hud.refresh()
 
 
+# A material was found with the materials bag full, so the player says what stays.
+func _settle_found_material() -> void:
+	if trip.found_material == "" or trip.is_over():
+		return
+	await material_prompt.ask(trip)
+	bag_panel.refresh()
+
+
 # A tome wants a move forgotten, so the player says which.
 func _on_wants_to_forget(item_id: String) -> void:
 	var before := get_viewport().gui_get_focus_owner()
@@ -488,7 +499,7 @@ func _on_wants_to_forget(item_id: String) -> void:
 func _ask_about_portal() -> void:
 	if not trip.may_go_home():
 		return
-	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size())
+	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size(), trip.materials.size())
 	portal_words.text = PORTAL_WORDS % (what if what != "" else PORTAL_NOTHING)
 	_close_map(false)
 	_dim.show()
@@ -571,6 +582,7 @@ func _clear_for_ending() -> void:
 	camp_button.hide()
 	portal_panel.hide()
 	bag_prompt.hide()
+	material_prompt.hide()
 	_drop_roll_arrow()
 	_clear_landing_choices()
 	_mark_nothing()
@@ -734,7 +746,7 @@ func _focus_on_day() -> void:
 func _on_back() -> void:
 	if report != null:
 		Screens.go(GAME_OVER if TownData.current().lost() else TOWN)
-	elif bag_prompt.visible:
+	elif bag_prompt.visible or material_prompt.visible:
 		return
 	elif map_panel.visible:
 		_close_map()
@@ -748,7 +760,7 @@ func _open_leave_panel() -> void:
 	_time_before = Engine.time_scale
 	_focus_before = get_viewport().gui_get_focus_owner()
 	Engine.time_scale = 0.0
-	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size())
+	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size(), trip.materials.size())
 	leave_cost.text = LEAVE_COST % what if what != "" else ""
 	leave_cost.visible = what != ""
 	_dim.show()
@@ -853,6 +865,8 @@ func _build_ui(town: TownData) -> void:
 	fight_layer.add_child(battle_screen)
 	bag_prompt = BagPrompt.new()
 	fight_layer.add_child(bag_prompt)
+	material_prompt = MaterialPrompt.new()
+	fight_layer.add_child(material_prompt)
 	learn_prompt = LearnPrompt.new()
 	fight_layer.add_child(learn_prompt)
 	var ui := CanvasLayer.new()

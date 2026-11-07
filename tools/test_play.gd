@@ -675,8 +675,12 @@ func _test_fights_by_hand() -> void:
 		await get_tree().process_frame
 	var battle := screen.battle_screen
 	var row: Container = battle._choices
-	while row.get_child_count() == 0:
+	# If the monster is quicker, its first blow is answered before the hero's turn.
+	while not _texts(row).has("ATK"):
 		await get_tree().process_frame
+		var defense := row.get_children().filter(func(child: Node) -> bool: return child is Button)
+		if not defense.is_empty() and not _texts(row).has("ATK"):
+			defense[0].pressed.emit()
 	await get_tree().process_frame
 	_expect(not screen.map_button.visible, "the Map stays out of a fight")
 	_expect(screen.bag_panel.locked, "and the bag stays shut")

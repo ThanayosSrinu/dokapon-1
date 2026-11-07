@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MaterialData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MaterialData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "wood"
+display_name = "Wood"
+description = "Sound timber from the island's forests."
+price = 20
+icon = 22
+rare = false

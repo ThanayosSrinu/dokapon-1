@@ -414,6 +414,8 @@ func _test_stranded() -> void:
 	town.gold = 50
 	town.loan_owed = 120
 	town.loan_due = 29
+	for one in town.roster:
+		one.pack.clear()
 	_expect(town.stranded() and town.lost(), "with a loan in the way and too little gold, the town is lost")
 	_expect(town.final_story(5)[-1]["text"].contains("hire"), "and the story ends by saying why")
 	town.gold = 99

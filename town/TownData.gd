@@ -31,12 +31,16 @@ const OUT_AFTER_DEFEAT := 7
 ## Warnings: how many days before a due day each step starts.
 const WARN_DAYS := 7
 const ALARM_DAYS := 3
+## The order of kinds on the Shop's shelves.
+const SHOP_ORDER: Array[ItemData.Kind] = [ItemData.Kind.WEAPON, ItemData.Kind.ARMOR,
+		ItemData.Kind.ACCESSORY, ItemData.Kind.CONSUMABLE, ItemData.Kind.TOME]
 
 ## What a building is called and what it does, in words for its sign. Every building
 ## here can be visited, so a new one in E17 needs an entry and a place in TownArt.
 const BUILDINGS := {
 	"tavern": {"name": "Tavern", "job": "Hire adventurers and look after your roster."},
 	"bank": {"name": "Bank", "job": "Pay the month's bills, and borrow gold."},
+	"shop": {"name": "Shop", "job": "Buy gear for your people, and sell what trips bring home."},
 	"portal": {"name": "Portal", "job": "Send your adventurer off to explore, and bring them home."},
 }
 
@@ -65,6 +69,11 @@ var loan_due := 0
 var history: Array[Dictionary] = []
 ## The strongest warning shown for each due day: due day -> an Alert.
 var warned := {}
+## What the town owns and nobody carries: item id -> how many. Trips fill it, and the Shop
+## buys from it.
+var stock := {}
+## Materials brought home: material id -> how many.
+var materials := {}
 
 
 func _init() -> void:
@@ -173,10 +182,18 @@ func send_problem() -> String:
 	return "" if going != null else "Nobody is ready"
 
 
-## What selling everything the town owns would raise. The town owns nothing it can sell
-## until the Shop's stock in E15, which must add it here.
+## What selling everything the town owns would raise: its stock, its materials, and what
+## waits in the packs. Worn gear doesn't count, because nobody can go without it.
 func goods_worth() -> int:
-	return 0
+	var worth := 0
+	for id: String in stock:
+		worth += sell_price(id) * stock[id]
+	for id: String in materials:
+		worth += material_price(id) * materials[id]
+	for one in roster:
+		for id in one.pack:
+			worth += sell_price(id)
+	return worth
 
 
 # The most gold that could be raised from `cash`, with the biggest loan taken. A loan in
@@ -229,7 +246,13 @@ func bring_home(trip: Expedition) -> void:
 	day += trip.day
 	one.trips += 1
 	one.keep(trip.player)
+	# The pack went out with them. What comes back belongs to the town.
+	one.pack.clear()
 	if trip.ending == Expedition.Ending.HOME:
+		for id in trip.player.inventory:
+			add_stock(id)
+		for id in trip.materials:
+			materials[id] = materials.get(id, 0) + 1
 		one.trips_home += 1
 		one.gold_home += trip.gold_home()
 		remember("%s came home with %d gold." % [trip.person.display_name, trip.gold_home()])
@@ -274,6 +297,146 @@ func remember(text: String) -> void:
 ## `count` as words, such as "1 day" or "3 days".
 static func days_words(count: int) -> String:
 	return "1 day" if count == 1 else "%d days" % count
+
+
+# --- The Shop ---------------------------------------------------------------
+
+## What the Shop sells: gear and things to use, by kind and then by price. Tomes are taught
+## in town later, so they are only bought, never sold.
+static func shop_goods() -> Array[String]:
+	var goods: Array[String] = []
+	for id in Database.sorted_ids(Database.items):
+		var item := Database.get_item(id)
+		if item.is_gear() or item.kind == ItemData.Kind.CONSUMABLE:
+			goods.append(id)
+	goods.sort_custom(func(a: String, b: String) -> bool:
+			var first := Database.get_item(a)
+			var second := Database.get_item(b)
+			if first.kind != second.kind:
+				return SHOP_ORDER.find(first.kind) < SHOP_ORDER.find(second.kind)
+			if first.price != second.price:
+				return first.price < second.price
+			return a < b)
+	return goods
+
+
+## What the Shop pays for one `item_id`.
+static func sell_price(item_id: String) -> int:
+	return int(Database.get_item(item_id).price * Shop.SELL_SHARE)
+
+
+## What the Shop pays for one material `material_id`.
+static func material_price(material_id: String) -> int:
+	return int(Database.get_material(material_id).price * Shop.SELL_SHARE)
+
+
+func stock_count(item_id: String) -> int:
+	return stock.get(item_id, 0)
+
+
+func add_stock(item_id: String, count := 1) -> void:
+	stock[item_id] = stock_count(item_id) + count
+
+
+# Takes one `item_id` out of the stock. Returns false if there is none.
+func _take_stock(item_id: String) -> bool:
+	if stock_count(item_id) == 0:
+		return false
+	stock[item_id] -= 1
+	if stock[item_id] == 0:
+		stock.erase(item_id)
+	return true
+
+
+## The stock's item ids in the Shop's order, each once.
+func stock_ids() -> Array[String]:
+	var ids: Array[String] = []
+	ids.assign(stock.keys())
+	ids.sort_custom(func(a: String, b: String) -> bool:
+			var first := Database.get_item(a)
+			var second := Database.get_item(b)
+			if first.kind != second.kind:
+				return SHOP_ORDER.find(first.kind) < SHOP_ORDER.find(second.kind)
+			return first.price < second.price if first.price != second.price else a < b)
+	return ids
+
+
+## Why `item_id` can't be bought for `one`, in a few words for a button, or "" if it can.
+## Gear is worn at once, and anything else goes in their pack.
+func buy_problem(item_id: String, one: Member) -> String:
+	var item := Database.get_item(item_id)
+	if not item.is_gear() and not one.pack_has_room():
+		return "Pack is full"
+	if item.price > gold:
+		return "Need %d more gold" % (item.price - gold)
+	return ""
+
+
+## Buys `item_id` for `one`. What it replaces goes to the stock. Returns false, changing
+## nothing, if that can't be done.
+func buy(item_id: String, one: Member) -> bool:
+	if buy_problem(item_id, one) != "":
+		return false
+	var item := Database.get_item(item_id)
+	gold -= item.price
+	_hand_over(item_id, one)
+	remember("Bought a %s for %s." % [item.display_name, one.person.display_name])
+	return true
+
+
+## Why `item_id` from the stock can't go to `one`, in a few words, or "" if it can.
+func give_problem(item_id: String, one: Member) -> String:
+	if stock_count(item_id) == 0:
+		return "None left"
+	if Database.get_item(item_id).is_gear():
+		return ""
+	return "" if one.pack_has_room() else "Pack is full"
+
+
+## Gives `one` the `item_id` from the stock, to wear or to pack.
+func give(item_id: String, one: Member) -> bool:
+	if give_problem(item_id, one) != "":
+		return false
+	_take_stock(item_id)
+	_hand_over(item_id, one)
+	return true
+
+
+## Takes the item at `index` out of `one`'s pack and puts it in the stock.
+func unpack(one: Member, index: int) -> bool:
+	if index < 0 or index >= one.pack.size():
+		return false
+	add_stock(one.pack[index])
+	one.pack.remove_at(index)
+	return true
+
+
+## Sells one `item_id` from the stock for half its price.
+func sell(item_id: String) -> bool:
+	if not _take_stock(item_id):
+		return false
+	gold += sell_price(item_id)
+	return true
+
+
+## Sells one material `material_id` for half its price.
+func sell_material(material_id: String) -> bool:
+	if materials.get(material_id, 0) == 0:
+		return false
+	materials[material_id] -= 1
+	if materials[material_id] == 0:
+		materials.erase(material_id)
+	gold += material_price(material_id)
+	return true
+
+
+func _hand_over(item_id: String, one: Member) -> void:
+	if Database.get_item(item_id).is_gear():
+		var old := one.wear(item_id)
+		if old != "":
+			add_stock(old)
+	else:
+		one.pack.append(item_id)
 
 
 # --- Bills ------------------------------------------------------------------

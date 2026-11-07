@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MaterialData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MaterialData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "starstone"
+display_name = "Starstone"
+description = "A pale gem that hums faintly. Found only at the end of the longest roads."
+price = 160
+icon = 25
+rare = true

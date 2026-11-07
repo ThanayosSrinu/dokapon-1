@@ -682,6 +682,61 @@ def icon_tome(cover, band):
     return image
 
 
+def icon_log():
+    """Wood: a cut log, end on."""
+    image, draw = icon_canvas()
+    bark, dark = hexc("#8a5a33"), hexc("#5e3a22")
+    draw.polygon([(2, 7), (10, 3), (13, 5), (13, 9), (5, 13), (2, 11)], fill=bark)
+    draw.line((3, 11, 12, 6), fill=dark)
+    draw.ellipse((1, 7, 6, 13), fill=hexc("#e2b878"))
+    draw.ellipse((2, 8, 5, 12), outline=hexc("#b8854a"))
+    draw.point((3, 10), fill=hexc("#b8854a"))
+    draw.point((9, 5), fill=shade(bark, 1.25))
+    return with_outline(image)
+
+
+def icon_ore():
+    """Ore: a grey rock with copper flecks."""
+    image, draw = icon_canvas()
+    rock = hexc("#8d93a6")
+    draw.polygon([(3, 12), (2, 8), (5, 4), (9, 3), (13, 6), (13, 11), (10, 13), (5, 13)], fill=rock)
+    draw.polygon([(5, 4), (9, 3), (10, 6), (6, 7)], fill=shade(rock, 1.3))
+    draw.line((3, 12, 10, 13), fill=shade(rock, 0.65))
+    for x, y in ((7, 9), (10, 8), (5, 10), (11, 11)):
+        draw.point((x, y), fill=hexc("#e08a3a"))
+    draw.point((8, 9), fill=hexc("#f5c27a"))
+    return with_outline(image)
+
+
+def icon_herbs():
+    """Wild herbs: a bundle tied with string."""
+    image, draw = icon_canvas()
+    leaf, dark = hexc("#7fcf5a"), hexc("#3f8a3a")
+    for top_x, color in ((4, dark), (8, leaf), (12, dark)):
+        draw.polygon([(top_x - 2, 2), (top_x + 1, 3), (8, 9), (7, 9)], fill=color)
+    draw.polygon([(6, 2), (9, 1), (8, 8)], fill=shade(leaf, 1.2))
+    draw.line((7, 9, 6, 14), fill=hexc("#6d8a3a"))
+    draw.line((8, 9, 9, 14), fill=hexc("#6d8a3a"))
+    draw.line((6, 9, 9, 9), fill=hexc("#e6d3b3"))
+    draw.line((6, 10, 9, 10), fill=hexc("#b89a6a"))
+    return with_outline(image)
+
+
+def icon_starstone():
+    """Starstone, the rare one: a pale gem with a glint."""
+    image, draw = icon_canvas()
+    gem = hexc("#9ad8f5")
+    draw.polygon([(8, 1), (13, 6), (8, 14), (3, 6)], fill=gem)
+    draw.polygon([(8, 1), (13, 6), (8, 7), (3, 6)], fill=shade(gem, 1.25))
+    draw.line((8, 7, 8, 13), fill=shade(gem, 0.7))
+    draw.line((3, 6, 8, 14), fill=shade(gem, 0.8))
+    draw.point((6, 4), fill=(255, 255, 255, 255))
+    draw.point((12, 2), fill=hexc("#fff3b0"))
+    draw.point((13, 1), fill=hexc("#fff3b0"))
+    draw.point((14, 2), fill=hexc("#fff3b0"))
+    return with_outline(image)
+
+
 def make_items():
     """One picture per item. ItemData.icon counts along this row from 0."""
     steel, iron = hexc("#c6cbd8"), hexc("#8d93b0")
@@ -709,6 +764,10 @@ def make_items():
         icon_flask(hexc("#4c8fe6"), big=True),
         icon_tome(hexc("#3f62c8"), hexc("#a9d0f5")),
         icon_tome(hexc("#b8413f"), hexc("#f0d890")),
+        icon_log(),
+        icon_ore(),
+        icon_herbs(),
+        icon_starstone(),
     ]
     sheet = Image.new("RGBA", (ITEM_CELL * len(icons), ITEM_CELL), (0, 0, 0, 0))
     for index, icon in enumerate(icons):
@@ -838,6 +897,8 @@ if __name__ == "__main__":
     art_tavern.make_tavern()
     import art_bank
     art_bank.make_bank()
+    import art_shop
+    art_shop.make_shop()
     import art_portal
     art_portal.make_portal()
     make_tile_table()

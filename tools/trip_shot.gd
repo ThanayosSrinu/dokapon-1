@@ -155,6 +155,17 @@ func _full_bag(screen: ExpeditionScreen, folder: String) -> void:
 	screen.bag_prompt._leave.pressed.emit()
 	await _settle(0.2)
 	screen.bag_panel.refresh()
+	var trip := screen.trip
+	trip.materials.assign(["wood", "wood", "wood", "ore", "ore", "wild_herbs", "wild_herbs", "starstone"])
+	trip.found_material = "ore"
+	screen._settle_found_material()
+	await _settle(0.4)
+	await _save(folder + "/trip_materials_full.png")
+	screen.material_prompt.get_buttons()[1].pressed.emit()
+	await _settle(0.3)
+	screen.bag_panel.material_tiles[0].mouse_entered.emit()
+	await _settle(0.2)
+	await _save(folder + "/trip_materials.png")
 
 
 func _settle(seconds: float) -> void:

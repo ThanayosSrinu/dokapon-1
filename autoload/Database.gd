@@ -15,6 +15,7 @@ const CLASS_FOLDER := "res://data/classes"
 const MONSTER_FOLDER := "res://data/monsters"
 const ADVENTURER_FOLDER := "res://data/adventurers"
 const STAGE_FOLDER := "res://data/stages"
+const MATERIAL_FOLDER := "res://data/materials"
 
 ## Every stat a character has.
 const STATS: Array[String] = ["max_hp", "max_mp", "attack", "defense", "magic", "speed"]
@@ -30,6 +31,7 @@ var classes := {}
 var monsters := {}
 var adventurers := {}
 var stages := {}
+var materials := {}
 
 
 func _ready() -> void:
@@ -44,10 +46,25 @@ func load_all() -> void:
 	monsters = _load_folder(MONSTER_FOLDER)
 	adventurers = _load_folder(ADVENTURER_FOLDER)
 	stages = _load_folder(STAGE_FOLDER)
+	materials = _load_folder(MATERIAL_FOLDER)
 
 
 func get_item(id: String) -> ItemData:
 	return items.get(id)
+
+
+func get_material(id: String) -> MaterialData:
+	return materials.get(id)
+
+
+## The ids of the materials found anywhere, or with `rare` on, the ones found only at the
+## deep end of a spur. Sorted, like sorted_ids().
+func material_ids(rare := false) -> Array[String]:
+	var ids: Array[String] = []
+	for id in sorted_ids(materials):
+		if get_material(id).rare == rare:
+			ids.append(id)
+	return ids
 
 
 func get_spell(id: String) -> SpellData:
@@ -114,8 +131,12 @@ func sorted_ids(table: Dictionary) -> Array[String]:
 ## Lists every mistake in the data. tools/check_data.gd prints these.
 func validate() -> PackedStringArray:
 	var problems := PackedStringArray()
-	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, MOVE_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER, STAGE_FOLDER]:
+	for folder: String in [ITEM_FOLDER, SPELL_FOLDER, MOVE_FOLDER, CLASS_FOLDER, MONSTER_FOLDER, ADVENTURER_FOLDER, STAGE_FOLDER, MATERIAL_FOLDER]:
 		_check_folder(folder, problems)
+	for id: String in materials:
+		_check_material(materials[id], problems)
+	if material_ids().is_empty() or material_ids(true).is_empty():
+		problems.append("trips need common and rare materials")
 	for id: String in items:
 		_check_item(items[id], problems)
 	for id: String in spells:
@@ -168,6 +189,15 @@ func _check_folder(folder: String, problems: PackedStringArray) -> void:
 			problems.append("%s has id '%s'" % [path, entry.id])
 		elif entry.display_name == "" or entry.description == "":
 			problems.append("%s needs a name and a description" % path)
+
+
+func _check_material(material: MaterialData, problems: PackedStringArray) -> void:
+	if material.price <= 0:
+		problems.append("material %s needs a price above 0" % material.id)
+	if material.icon < 0 or material.icon >= GameArt.ITEM_ICONS.get_width() / GameArt.ITEM_ICON_SIZE:
+		problems.append("material %s has icon %d, which is not on the sheet" % [material.id, material.icon])
+	if items.has(material.id):
+		problems.append("material %s has the id of an item" % material.id)
 
 
 func _check_item(item: ItemData, problems: PackedStringArray) -> void:
