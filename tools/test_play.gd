@@ -549,7 +549,7 @@ func _test_warnings() -> void:
 	trip.food_left = 99
 	var town := TownData.current()
 	town.months_paid = 0
-	town.day = town.next_due() - 3 - trip.day
+	town.day = town.next_due() - 3 - trip.trip_days
 	screen._warn_of_debts()
 	_expect(hud.warning.text.contains("The bill is due in 3 days."), "a bill says so")
 	town.day += 3
