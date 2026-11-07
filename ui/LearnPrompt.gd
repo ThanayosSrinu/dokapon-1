@@ -48,7 +48,7 @@ func ask(trip: Expedition, item_id: String) -> bool:
 		_rows.remove_child(child)
 		child.queue_free()
 	_heading.text = "Learn %s?" % taught.display_name
-	for move_id in trip.player.moves_in(taught.category):
+	for move_id in trip.player.learned:
 		var row := Button.new()
 		row.text = Database.get_move(move_id).display_name
 		row.pressed.connect(func() -> void: _choice_made.emit(move_id))

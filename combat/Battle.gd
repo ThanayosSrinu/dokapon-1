@@ -3,25 +3,30 @@ extends RefCounted
 ## The rules of one fight, with no animation or UI. ui/BattleScreen.gd shows it,
 ## and tools/test_battle.gd runs thousands of them without opening a window.
 ##
-## A round gives each fighter one action. The acting fighter picks a category and a move in
-## secret, the other picks a defense, then resolve() works out what happened:
+## A round gives each fighter one action. The acting fighter picks a move in secret, the
+## other picks a defense move, then resolve() works out what happened. What a move does
+## against a defense comes from its keywords (see MoveData), not from where it came from:
 ##
-##                 Guard                Counter                  Ward
-##   Attack        less                 full                     full
-##   Smash         1.5x, it breaks      misses, hits the smasher 1.5x, it breaks
-##   Magic         full                 full                     less
+##                 Guard                  Counter                  Ward
+##   plain         less                   full                     full
+##   heavy         1.5x, it breaks        misses, hits the user    1.5x, it breaks
+##   magic         full                   full                     less
+##   status        shorter                full                     blocked
 ##
-## A Special asks for no defense. How much "less" is, and how hard a Counter hits back, comes
-## from the defender's move. See MoveData for what comes from where.
+## A move on its user, such as a heal or a boost, asks for no defense. How much "less" is,
+## and how hard a Counter hits back, comes from the defender's move. Heavy armor's Guard
+## holds a heavy hit to full damage instead of 1.5x.
 ##
-## Attack, Smash, Guard, Counter and Ward are free. Magic uses MP, and a Special works once
-## per fight, with its turns counted in the user's own turns.
+## Plain and heavy moves are free. Magic uses MP, and a move with "once" works once per
+## fight. Boosts, weakens and poison count the turns of the fighter they are on.
 ##
 ## Every random result uses GameState.rng, so a seed replays the same battle.
 
 enum Offense { ATTACK, SMASH, MAGIC, SPECIAL, ITEM, FLEE }
 enum Defense { NONE, GUARD, COUNTER, WARD }
 enum Ending { NONE, KNOCKOUT, FLED, DRAW }
+## How a move can be answered, from its keywords. SELF needs no answer.
+enum Kind { PLAIN, HEAVY, MAGIC, STATUS, SELF }
 
 ## The fight stops as a draw after this many rounds.
 const MAX_ROUNDS := 8
@@ -30,10 +35,13 @@ const DEFENSE_FACTOR := 0.5
 ## Damage varies by this share either way.
 const VARIANCE := 0.1
 
-## How much of a hit a Smash lands on a Guard or a Ward.
+## How much of a hit a heavy move lands on a Guard or a Ward, unless the move answering it
+## says otherwise.
 const BROKEN_HIT := 1.5
 ## How much a Guard or a Ward takes off when nobody says otherwise.
 const USUAL_BLOCK := 0.5
+## What a Guard leaves of a status move's turns, rounded up.
+const GUARDED_TURNS := 0.5
 
 ## The moves anyone has with no weapon and no armor.
 const BARE_ATTACK := "punch"
@@ -57,6 +65,8 @@ const CPU_HEAL_BELOW := 0.35
 ## CpuBrain assumes that anyone it has not seen fight has these habits too.
 const CPU_OFFENSE := {"attack": 5, "smash": 2, "magic": 3}
 const CPU_DEFENSE := {"guard": 4, "counter": 3, "ward": 2}
+## How much a habit to Smash grows against a foe with no Counter (D25).
+const SMASH_WITH_NO_COUNTER := 2
 const OFFENSE_NAMES := {
 	"attack": Offense.ATTACK, "smash": Offense.SMASH, "magic": Offense.MAGIC, "special": Offense.SPECIAL,
 }
@@ -76,6 +86,7 @@ const DEFENSE_CATEGORIES := {
 	Defense.GUARD: MoveData.Category.GUARD, Defense.COUNTER: MoveData.Category.COUNTER,
 	Defense.WARD: MoveData.Category.WARD,
 }
+const DEFENSE_WORDS := {Defense.GUARD: "Guard", Defense.COUNTER: "Counter", Defense.WARD: "Ward"}
 
 
 ## An offense, and the id of the move or item it uses. With no id, an offense uses the
@@ -95,6 +106,8 @@ class Outcome:
 	var defender: Fighter
 	var offense: Offense
 	var defense: Defense
+	## How the move could be answered. SELF for an item or fleeing too.
+	var kind := Kind.SELF
 	## The move the attacker used, or null for an item or fleeing.
 	var move: MoveData
 	## The move the defender answered with, or null if there was no answer.
@@ -106,6 +119,11 @@ class Outcome:
 	## HP or MP the attacker gained.
 	var healed := 0
 	var mana_restored := 0
+	## A status move: true if a Ward stopped it, and how many turns it holds if not.
+	var blocked := false
+	var turns := 0
+	## HP the attacker lost to poison at the end of this turn.
+	var poison := 0
 	var fled := false
 	## The sentence that announces the move.
 	var opening := ""
@@ -129,8 +147,8 @@ var winner: Fighter
 var loser: Fighter
 ## Set when the battle ends with someone running away.
 var fled_fighter: Fighter
-## Fighter -> Offense or Defense -> how often it has shown that move in this fight.
-## Moves are shown when they resolve, so CpuBrain may learn from them.
+## Fighter -> Kind or Defense -> how often it has shown that in this fight. Moves are
+## shown when they resolve, so CpuBrain may learn from them.
 var seen_offenses := {}
 var seen_defenses := {}
 
@@ -155,21 +173,83 @@ func is_over() -> bool:
 	return ending != Ending.NONE
 
 
-## True when the defender gets to answer an offense of this kind.
+## The choice to use the move `move_id`.
+static func move_choice(move_id: String) -> Choice:
+	var category := Database.get_move(move_id).category
+	for offense: Offense in OFFENSE_CATEGORIES:
+		if OFFENSE_CATEGORIES[offense] == category:
+			return Choice.new(offense, move_id)
+	return null
+
+
+## True when the defender gets to answer this choice: any move that is not on its user.
 func needs_defense(choice: Choice) -> bool:
-	return choice.offense in [Offense.ATTACK, Offense.SMASH, Offense.MAGIC]
+	var move := _move_of(attacker, choice)
+	return move != null and not move.on_self()
 
 
-## How much of a hit lands when `offense` meets `defense`, with `block` being what the
-## defender's move takes off when it answers that hit. A countered Smash lands nothing.
-static func hit_share(offense: Offense, defense: Defense, block := USUAL_BLOCK) -> float:
-	if offense == Offense.SMASH and defense == Defense.COUNTER:
+## How `move` can be answered, from its keywords.
+static func kind_of(move: MoveData) -> Kind:
+	if move == null or move.on_self():
+		return Kind.SELF
+	if move.has(MoveData.STATUS):
+		return Kind.STATUS
+	if move.has(MoveData.HEAVY):
+		return Kind.HEAVY
+	if move.has(MoveData.MAGIC):
+		return Kind.MAGIC
+	return Kind.PLAIN
+
+
+## The defense a defense move gives, from its category.
+static func defense_of(move: MoveData) -> Defense:
+	for defense: Defense in DEFENSE_CATEGORIES:
+		if DEFENSE_CATEGORIES[defense] == move.category:
+			return defense
+	return Defense.NONE
+
+
+## The kinds of move that `defense` does something against: makes weaker, stops, shortens
+## or hits back. These are the icons a defense move shows.
+static func answers(defense: Defense) -> Array[Kind]:
+	match defense:
+		Defense.GUARD:
+			return [Kind.PLAIN, Kind.STATUS]
+		Defense.COUNTER:
+			return [Kind.HEAVY]
+		Defense.WARD:
+			return [Kind.MAGIC, Kind.STATUS]
+	return []
+
+
+## How much of a hit lands when a move of `kind` meets `defense`. `block` is what the
+## defender's move takes off when it answers that hit, and `broken` is what a heavy hit
+## lands through it. A countered heavy hit lands nothing.
+static func hit_share(kind: Kind, defense: Defense, block := USUAL_BLOCK, broken := BROKEN_HIT) -> float:
+	if kind == Kind.HEAVY and defense == Defense.COUNTER:
 		return 0.0
-	if offense == Offense.SMASH and defense != Defense.NONE:
-		return BROKEN_HIT
-	if (offense == Offense.ATTACK and defense == Defense.GUARD) or (offense == Offense.MAGIC and defense == Defense.WARD):
+	if kind == Kind.HEAVY and defense != Defense.NONE:
+		return broken
+	if (kind == Kind.PLAIN and defense == Defense.GUARD) or (kind == Kind.MAGIC and defense == Defense.WARD):
 		return 1.0 - block
 	return 1.0
+
+
+## How much of the hit in `outcome` lands, with the answer it met.
+static func share_of(outcome: Outcome) -> float:
+	if outcome.answer == null:
+		return hit_share(outcome.kind, outcome.defense)
+	return hit_share(outcome.kind, outcome.defense, outcome.answer.power, outcome.answer.broken_share)
+
+
+## How many turns a status move of `turns` holds against `defense`. A Ward blocks it, and
+## a Guard makes it shorter.
+static func status_turns(turns: int, defense: Defense) -> int:
+	if defense == Defense.WARD:
+		return 0
+	if defense == Defense.GUARD:
+		return ceili(turns * GUARDED_TURNS)
+	return turns
 
 
 ## The chance that `runner` gets away from `enemy`.
@@ -181,7 +261,7 @@ func flee_chance(runner: Fighter, enemy: Fighter) -> float:
 ## True if `fighter` could use `move_id` right now.
 func can_use(fighter: Fighter, move_id: String) -> bool:
 	var move := Database.get_move(move_id)
-	if fighter.mp < move.mp_cost or fighter.specials_used.has(move_id):
+	if fighter.mp < move.mp_cost or (move.has(MoveData.ONCE) and fighter.specials_used.has(move_id)):
 		return false
 	return move.effect != MoveData.Effect.HEAL or fighter.hp < fighter.get_stat("max_hp")
 
@@ -189,6 +269,22 @@ func can_use(fighter: Fighter, move_id: String) -> bool:
 ## The moves `fighter` could use right now in `category`.
 func usable_moves(fighter: Fighter, category: MoveData.Category) -> Array[String]:
 	return fighter.moves_in(category).filter(func(id: String) -> bool: return can_use(fighter, id))
+
+
+## Every move `fighter` can make on its own turn, in the order the ATK menu lists them.
+static func offense_moves(fighter: Fighter) -> Array[String]:
+	var found: Array[String] = []
+	for offense: Offense in OFFENSE_CATEGORIES:
+		found.append_array(fighter.moves_in(OFFENSE_CATEGORIES[offense]))
+	return found
+
+
+## Every defense move `fighter` has, in the order the DEF menu lists them.
+static func defense_moves(fighter: Fighter) -> Array[String]:
+	var found: Array[String] = []
+	for defense: Defense in DEFENSE_CATEGORIES:
+		found.append_array(fighter.moves_in(DEFENSE_CATEGORIES[defense]))
+	return found
 
 
 ## The defenses `fighter` has a move for.
@@ -201,31 +297,37 @@ func usable_defenses(fighter: Fighter) -> Array[Defense]:
 
 
 ## Plays the attacker's action and passes play to the other fighter. `answer_id` is the move
-## the defender answers with. With none, they use the first of its category.
+## the defender answers with, and sets the defense. With none, they use the first move of
+## `defense`.
 func resolve(choice: Choice, defense := Defense.NONE, answer_id := "") -> Outcome:
 	var outcome := Outcome.new()
 	outcome.attacker = attacker
 	outcome.defender = defender
 	outcome.offense = choice.offense
-	outcome.defense = defense
 	outcome.move = _move_of(attacker, choice)
+	outcome.kind = kind_of(outcome.move)
+	if outcome.kind == Kind.SELF:
+		defense = Defense.NONE
+		answer_id = ""
+	elif answer_id != "":
+		defense = defense_of(Database.get_move(answer_id))
+	outcome.defense = defense
 	outcome.answer = _answer_of(defender, defense, answer_id)
-	if needs_defense(choice):
-		_remember(seen_offenses, attacker, choice.offense)
+	if outcome.kind != Kind.SELF:
+		_remember(seen_offenses, attacker, outcome.kind)
 		_remember(seen_defenses, defender, defense)
 	match choice.offense:
-		Offense.ATTACK, Offense.SMASH:
-			outcome.opening = "%s uses %s!" % [attacker.display_name, outcome.move.display_name]
-			_strike(outcome, _physical_force() * outcome.move.power)
-		Offense.MAGIC:
-			_cast(outcome)
-		Offense.SPECIAL:
-			_use_special(outcome)
 		Offense.ITEM:
 			_use_item(outcome, choice.id)
 		Offense.FLEE:
 			_try_to_flee(outcome)
+		_:
+			_use_move(outcome)
 
+	if not is_over():
+		outcome.poison = attacker.poison_tick()
+		if outcome.poison > 0 and attacker.hp == 0:
+			_end_by_knockout(defender, attacker)
 	outcome.attacker.tick_boosts()
 	if not is_over():
 		_pass_play()
@@ -259,9 +361,14 @@ func cpu_offense() -> Choice:
 	var healing := _cpu_healing_choice(fighter)
 	if healing != null:
 		return healing
-	var weights: Dictionary = fighter.monster.offense_weights if fighter.monster != null else CPU_OFFENSE
+	var weights: Dictionary = (fighter.monster.offense_weights if fighter.monster != null else CPU_OFFENSE).duplicate()
+	# D25: a smash is the better bet against someone who cannot Counter it.
+	if weights.has("smash") and not usable_defenses(defender).has(Defense.COUNTER):
+		weights["smash"] *= SMASH_WITH_NO_COUNTER
 	var offense: Offense = OFFENSE_NAMES[_weighted_pick(weights)]
-	var options := usable_moves(fighter, OFFENSE_CATEGORIES[offense])
+	# Heals are kept for when they are needed: see _cpu_healing_choice().
+	var options := usable_moves(fighter, OFFENSE_CATEGORIES[offense]).filter(
+			func(id: String) -> bool: return Database.get_move(id).effect != MoveData.Effect.HEAL)
 	if options.is_empty():
 		offense = Offense.ATTACK
 		options = fighter.moves_in(MoveData.Category.ATTACK)
@@ -282,10 +389,10 @@ func _thinks(fighter: Fighter) -> bool:
 	return fighter.player != null and fighter.player.difficulty != CpuBrain.Level.EASY
 
 
-func _remember(memory: Dictionary, fighter: Fighter, move: int) -> void:
+func _remember(memory: Dictionary, fighter: Fighter, shown: Variant) -> void:
 	if not memory.has(fighter):
 		memory[fighter] = {}
-	memory[fighter][move] = memory[fighter].get(move, 0) + 1
+	memory[fighter][shown] = memory[fighter].get(shown, 0) + 1
 
 
 # --- Resolving an action ----------------------------------------------------
@@ -314,49 +421,14 @@ func _answer_of(fighter: Fighter, defense: Defense, answer_id: String) -> MoveDa
 	return null if moves.is_empty() else Database.get_move(moves[0])
 
 
-# Applies a hit of `force`, before the defense counts, to the defender.
-func _strike(outcome: Outcome, force: float) -> void:
-	var answer_power := 1.0 if outcome.answer == null else outcome.answer.power
-	if outcome.offense == Offense.SMASH and outcome.defense == Defense.COUNTER:
-		outcome.reflected = _roll(force * answer_power)
-		attacker.hp -= outcome.reflected
-		outcome.result = "Countered! %s takes %d." % [attacker.display_name, outcome.reflected]
-		if attacker.hp == 0:
-			_end_by_knockout(defender, attacker)
-		return
-
-	outcome.damage = _roll(force * hit_share(outcome.offense, outcome.defense, answer_power))
-	defender.hp -= outcome.damage
-	outcome.result = _hit_words(outcome)
-	if defender.hp == 0:
-		_end_by_knockout(attacker, defender)
-
-
-# What the defense did, in words, so that a player learns the table by reading it.
-func _hit_words(outcome: Outcome) -> String:
-	var who := defender.display_name
-	var share := hit_share(outcome.offense, outcome.defense)
-	if outcome.defense == Defense.NONE:
-		return "%s takes %d." % [who, outcome.damage]
-	var defense_word := "Guard" if outcome.defense == Defense.GUARD else ("Ward" if outcome.defense == Defense.WARD else "Counter")
-	if share > 1.0:
-		return "The %s breaks! %s takes %d." % [defense_word, who, outcome.damage]
-	if share < 1.0:
-		return "%s holds with %s, and takes %d." % [who, outcome.answer.display_name if outcome.answer != null else defense_word, outcome.damage]
-	return "The %s does nothing. %s takes %d." % [defense_word, who, outcome.damage]
-
-
-func _cast(outcome: Outcome) -> void:
+# Any move: a hit, a spell, a status on the foe, or a heal or a boost on its user.
+func _use_move(outcome: Outcome) -> void:
 	var move := outcome.move
-	outcome.opening = "%s casts %s!" % [attacker.display_name, move.display_name]
+	var magic := move.has(MoveData.MAGIC)
+	outcome.opening = "%s %s %s!" % [attacker.display_name, "casts" if magic else "uses", move.display_name]
+	if move.has(MoveData.ONCE):
+		attacker.specials_used.append(move.id)
 	attacker.mp -= move.mp_cost
-	_strike(outcome, attacker.get_stat("magic") + move.power - defender.get_stat("defense") * DEFENSE_FACTOR)
-
-
-func _use_special(outcome: Outcome) -> void:
-	var move := outcome.move
-	outcome.opening = "%s uses %s!" % [attacker.display_name, move.display_name]
-	attacker.specials_used.append(move.id)
 	match move.effect:
 		MoveData.Effect.HEAL:
 			var before := attacker.hp
@@ -367,8 +439,66 @@ func _use_special(outcome: Outcome) -> void:
 			attacker.add_boost(move.boost_stat, move.power, move.boost_turns)
 			outcome.result = "%s up by %d%%, for %d turns." % [ItemData.STAT_NAMES[move.boost_stat],
 					roundi(move.power * 100.0), move.boost_turns]
+		MoveData.Effect.WEAKEN, MoveData.Effect.POISON:
+			_afflict(outcome)
 		_:
-			_strike(outcome, _physical_force() * move.power)
+			var force := _physical_force() * move.power
+			if magic:
+				force = attacker.get_stat("magic") + move.power - defender.get_stat("defense") * DEFENSE_FACTOR
+			_strike(outcome, force)
+
+
+# Applies a hit of `force`, before the defense counts, to the defender.
+func _strike(outcome: Outcome, force: float) -> void:
+	var answer_power := 1.0 if outcome.answer == null else outcome.answer.power
+	if outcome.kind == Kind.HEAVY and outcome.defense == Defense.COUNTER:
+		outcome.reflected = _roll(force * answer_power)
+		attacker.hp -= outcome.reflected
+		outcome.result = "Countered! %s takes %d." % [attacker.display_name, outcome.reflected]
+		if attacker.hp == 0:
+			_end_by_knockout(defender, attacker)
+		return
+
+	outcome.damage = _roll(force * share_of(outcome))
+	defender.hp -= outcome.damage
+	outcome.result = _hit_words(outcome)
+	if defender.hp == 0:
+		_end_by_knockout(attacker, defender)
+
+
+# What the defense did, in words, so that a player learns the table by reading it.
+func _hit_words(outcome: Outcome) -> String:
+	var who := defender.display_name
+	var share := share_of(outcome)
+	if outcome.defense == Defense.NONE:
+		return "%s takes %d." % [who, outcome.damage]
+	var defense_word: String = DEFENSE_WORDS[outcome.defense]
+	if share > 1.0:
+		return "The %s breaks! %s takes %d." % [defense_word, who, outcome.damage]
+	if share < 1.0:
+		return "%s holds with %s, and takes %d." % [who, outcome.answer.display_name if outcome.answer != null else defense_word, outcome.damage]
+	if outcome.kind == Kind.HEAVY:
+		return "The %s bends but holds. %s takes %d." % [defense_word, who, outcome.damage]
+	return "The %s does nothing. %s takes %d." % [defense_word, who, outcome.damage]
+
+
+# A status move on the defender: a Ward blocks it, and a Guard makes it shorter.
+func _afflict(outcome: Outcome) -> void:
+	var move := outcome.move
+	outcome.turns = status_turns(move.boost_turns, outcome.defense)
+	if outcome.turns == 0:
+		outcome.blocked = true
+		outcome.result = "The Ward stops it. Nothing happens."
+		return
+	var held := "The Guard keeps it short. " if outcome.defense == Defense.GUARD else ""
+	var who := defender.display_name
+	if move.effect == MoveData.Effect.POISON:
+		defender.add_poison(roundi(defender.get_stat("max_hp") * move.power), outcome.turns)
+		outcome.result = "%s%s is poisoned, for %s." % [held, who, Expedition.turns_words(outcome.turns)]
+	else:
+		defender.add_boost(move.boost_stat, -move.power, outcome.turns, false)
+		outcome.result = "%s%s's %s down by %d%%, for %s." % [held, who, ItemData.STAT_NAMES[move.boost_stat],
+				roundi(move.power * 100.0), Expedition.turns_words(outcome.turns)]
 
 
 func _use_item(outcome: Outcome, item_id: String) -> void:

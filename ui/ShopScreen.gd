@@ -25,6 +25,7 @@ const KIND_NAMES := {
 	ItemData.Kind.WEAPON: "Weapon",
 	ItemData.Kind.ARMOR: "Armor",
 	ItemData.Kind.ACCESSORY: "Accessory",
+	ItemData.Kind.TOME: "Tome",
 }
 
 var _player: PlayerData

@@ -56,7 +56,7 @@ var bag_size := INVENTORY_SIZE
 var equipment := {}
 ## The ids of the spells this player knows, for the old board game. A fight uses `learned`.
 var spells: Array[String] = []
-## The ids of the Magic and Special moves this player knows. See MoveData.MOST_LEARNED.
+## The ids of the Magic and Special moves this player knows, at most MoveData.MOST_LEARNED.
 var learned: Array[String] = []
 ## True in the old board game, where a class teaches spells as it levels up. On a trip,
 ## moves only come from tomes.
@@ -335,13 +335,13 @@ func moves_in(category: MoveData.Category) -> Array[String]:
 	return from.filter(func(id: String) -> bool: return Database.get_move(id).category == category)
 
 
-## True if `move_id`, a move that is learned, has a free slot.
-func has_room_for(move_id: String) -> bool:
-	var category := Database.get_move(move_id).category
-	return moves_in(category).size() < MoveData.MOST_LEARNED[category]
+## True if `move_id`, a move that is learned, has a free slot. Magic and Special share
+## the slots the weapon leaves in the ATK menu.
+func has_room_for(_move_id: String) -> bool:
+	return learned.size() < MoveData.MOST_LEARNED
 
 
-## Learns `move_id`. With its category full, name a move to forget in `forgotten`. Returns
+## Learns `move_id`. With the slots full, name a move to forget in `forgotten`. Returns
 ## false if nothing changed.
 func learn_move(move_id: String, forgotten := "") -> bool:
 	if learned.has(move_id) or (forgotten == "" and not has_room_for(move_id)):

@@ -8,5 +8,6 @@ id = "smite"
 display_name = "Smite"
 description = "Holy light that burns."
 category = 2
+keywords = Array[String](["magic"])
 power = 12.0
 mp_cost = 4

@@ -8,4 +8,5 @@ id = "crush"
 display_name = "Crush"
 description = "A slow blow that nothing stops."
 category = 1
+keywords = Array[String](["heavy"])
 power = 1.0

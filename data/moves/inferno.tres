@@ -8,5 +8,6 @@ id = "inferno"
 display_name = "Inferno"
 description = "A wall of fire."
 category = 2
+keywords = Array[String](["magic"])
 power = 32.0
 mp_cost = 14

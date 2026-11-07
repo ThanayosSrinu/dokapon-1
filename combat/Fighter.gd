@@ -38,8 +38,12 @@ var mp: int:
 		else:
 			_mp = clamped
 
-## The Specials already used in this fight. A Special works once per fight.
+## The moves with "once" already used in this fight.
 var specials_used: Array[String] = []
+## Poison on this fighter: the HP lost at the end of each of its own turns, and for how
+## many more of them. See poison_tick().
+var poison_damage := 0
+var poison_turns := 0
 
 var _hp := 0
 var _mp := 0
@@ -74,15 +78,34 @@ func get_stat(stat: String) -> int:
 	for boost in _boosts:
 		if boost["stat"] == stat:
 			share += boost["share"]
-	return ceili(value * share) if share > 1.0 else value
+	if share > 1.0:
+		return ceili(value * share)
+	return maxi(floori(value * maxf(share, 0.0)), 0) if share < 1.0 else value
 
 
 ## Raises `stat` by `share` for `turns` of this fighter's own turns, counted from the next
-## one. Using the same boost again starts it over.
-func add_boost(stat: String, share: float, turns: int) -> void:
+## one. A share below 0 lowers it: a Weaken from the foe. Using the same boost again starts
+## it over, and a boost and a weaken on one stat replace each other.
+func add_boost(stat: String, share: float, turns: int, own_turn := true) -> void:
 	_boosts = _boosts.filter(func(boost: Dictionary) -> bool: return boost["stat"] != stat)
-	# The turn it was used on is counted off too.
-	_boosts.append({"stat": stat, "share": share, "turns": turns + 1})
+	# The turn a boost was used on is counted off too. A weaken lands on the foe's turn.
+	_boosts.append({"stat": stat, "share": share, "turns": turns + (1 if own_turn else 0)})
+
+
+## Poisons this fighter for `turns` of its own turns, losing `damage` HP after each.
+func add_poison(damage: int, turns: int) -> void:
+	poison_damage = maxi(damage, 1)
+	poison_turns = turns
+
+
+## The poison at the end of one of this fighter's turns. Returns the HP it lost.
+func poison_tick() -> int:
+	if poison_turns <= 0:
+		return 0
+	poison_turns -= 1
+	var before := hp
+	hp -= poison_damage
+	return before - hp
 
 
 ## Counts one of this fighter's own turns.
@@ -92,7 +115,7 @@ func tick_boosts() -> void:
 	_boosts = _boosts.filter(func(boost: Dictionary) -> bool: return boost["turns"] > 0)
 
 
-## What is raised right now, as {"stat", "share", "turns"}.
+## What is raised or lowered right now, as {"stat", "share", "turns"}.
 func boosts() -> Array[Dictionary]:
 	return _boosts
 

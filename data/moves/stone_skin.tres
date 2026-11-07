@@ -8,6 +8,7 @@ id = "stone_skin"
 display_name = "Stone Skin"
 description = "Defense up 20% for your next 3 turns."
 category = 3
+keywords = Array[String](["once"])
 power = 0.2
 effect = 3
 boost_stat = "defense"

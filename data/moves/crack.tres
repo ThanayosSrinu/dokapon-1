@@ -8,4 +8,5 @@ id = "crack"
 display_name = "Crack"
 description = "Brings the staff down overhead."
 category = 1
+keywords = Array[String](["heavy"])
 power = 1.0

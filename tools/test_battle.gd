@@ -21,6 +21,10 @@ func _ready() -> void:
 	_test_magic_and_items()
 	_test_moves_from_gear()
 	_test_specials()
+	_test_status_moves()
+	_test_armor_kinds()
+	_test_monsters_differ()
+	_test_menus_and_icons()
 	_test_learning()
 	_test_many_fights()
 	_test_flee()
@@ -87,10 +91,27 @@ func _test_damage_table() -> void:
 	for case: Array in cases:
 		_expect(absf(_average_damage(case[0], case[1]) - case[2]) < 0.7, case[3])
 
-	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.GUARD) == 1.0, "Guard takes all of Magic")
-	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.COUNTER) == 1.0, "Counter takes all of Magic")
-	_expect(Battle.hit_share(Battle.Offense.MAGIC, Battle.Defense.WARD) == 0.5, "Ward takes less from Magic")
-	_expect(Battle.hit_share(Battle.Offense.SMASH, Battle.Defense.COUNTER) == 0.0, "a Counter stops a Smash")
+	# Every keyword against every defense (E14).
+	var table := [
+		[Battle.Kind.PLAIN, 0.5, 1.0, 1.0],
+		[Battle.Kind.HEAVY, 1.5, 0.0, 1.5],
+		[Battle.Kind.MAGIC, 1.0, 1.0, 0.5],
+	]
+	for row: Array in table:
+		var kind_name: String = Battle.Kind.keys()[row[0]]
+		_expect(Battle.hit_share(row[0], Battle.Defense.GUARD) == row[1], "%s against Guard" % kind_name)
+		_expect(Battle.hit_share(row[0], Battle.Defense.COUNTER) == row[2], "%s against Counter" % kind_name)
+		_expect(Battle.hit_share(row[0], Battle.Defense.WARD) == row[3], "%s against Ward" % kind_name)
+		_expect(Battle.hit_share(row[0], Battle.Defense.NONE) == 1.0, "%s with no answer" % kind_name)
+	_expect(Battle.status_turns(3, Battle.Defense.WARD) == 0, "a Ward blocks a status move")
+	_expect(Battle.status_turns(3, Battle.Defense.GUARD) == 2, "a Guard makes it shorter")
+	_expect(Battle.status_turns(3, Battle.Defense.COUNTER) == 3, "a Counter takes it in full")
+	_expect(Battle.kind_of(Database.get_move("crush")) == Battle.Kind.HEAVY, "Crush is heavy")
+	_expect(Battle.kind_of(Database.get_move("spark")) == Battle.Kind.MAGIC, "Spark is magic")
+	_expect(Battle.kind_of(Database.get_move("venom")) == Battle.Kind.STATUS, "Venom is status")
+	_expect(Battle.kind_of(Database.get_move("slash")) == Battle.Kind.PLAIN, "Slash is plain")
+	_expect(Battle.kind_of(Database.get_move("sure_strike")) == Battle.Kind.PLAIN, "Power Strike is plain, once")
+	_expect(Battle.kind_of(Database.get_move("rally")) == Battle.Kind.SELF, "Rally is on its user")
 	_expect(_ward_share() < _guard_share(), "a real Ward takes less Magic than a Guard does")
 
 	var battle := _duel()
@@ -195,11 +216,11 @@ func _test_moves_from_gear() -> void:
 
 	var long_sword: ItemData = Database.get_item("iron_sword").duplicate()
 	long_sword.id = "test_sword"
-	long_sword.moves = ["slash", "stab", "bonk", "pound", "cleave", "lunge", "crack", "crush"]
+	long_sword.moves = ["slash", "pound"]
 	Database.items["test_sword"] = long_sword
 	hero.equipment[ItemData.Kind.WEAPON] = "test_sword"
-	_expect(fighter.moves_in(MoveData.Category.ATTACK).size() == 4, "a weapon can hold 4 moves in a category")
-	_expect(fighter.moves_in(MoveData.Category.SMASH).size() == 4, "in each category")
+	_expect(fighter.moves_in(MoveData.Category.ATTACK).size() == 2, "a weapon can give 2 Attacks")
+	_expect(fighter.moves_in(MoveData.Category.SMASH).is_empty(), "and no Smash")
 	var battle := _duel()
 	battle.attacker.player.equipment[ItemData.Kind.WEAPON] = "test_sword"
 	var picked := battle.resolve(Battle.Choice.new(Battle.Offense.ATTACK, "pound"), Battle.Defense.GUARD)
@@ -268,14 +289,176 @@ func _test_specials() -> void:
 		fight.resolve(Battle.Choice.new(Battle.Offense.ATTACK), Battle.Defense.GUARD)
 	_expect(bram.get_stat("attack") == usual, "and ends after their own 3 turns")
 
-	# Sure Strike hits in full, with nothing to answer it.
+	# Power Strike is a plain hit once a fight, so a Guard answers it (D23).
 	var wren := Fighter.from_player(_player("rogue"))
 	var slime := Fighter.from_monster(Database.get_monster("slime"))
 	var strike := Battle.new(wren, slime)
 	strike.attacker = wren
 	strike.defender = slime
-	var outcome := strike.resolve(Battle.Choice.new(Battle.Offense.SPECIAL, "sure_strike"))
-	_expect(outcome.damage > 0 and outcome.defense == Battle.Defense.NONE, "Sure Strike lands with no answer")
+	var choice := Battle.move_choice("sure_strike")
+	_expect(strike.needs_defense(choice), "a Special on the foe asks for an answer")
+	var outcome := strike.resolve(choice, Battle.Defense.GUARD)
+	_expect(outcome.damage > 0 and outcome.defense == Battle.Defense.GUARD, "Power Strike meets the Guard")
+	_expect(not strike.can_use(wren, "sure_strike"), "and is spent")
+
+
+# A fight with `attacker` to move first against `defender`.
+func _set_up(attacker: Fighter, defender: Fighter) -> Battle:
+	var battle := Battle.new(attacker, defender)
+	battle.attacker = attacker
+	battle.defender = defender
+	return battle
+
+
+# A monster that lives through a long test.
+func _sturdy(monster_id: String) -> Fighter:
+	var data: MonsterData = Database.get_monster(monster_id).duplicate()
+	data.stats = data.stats.duplicate()
+	data.stats["max_hp"] = 9999
+	return Fighter.from_monster(data)
+
+
+# Status moves on the foe (D23): Ward blocks, Guard makes shorter, Counter takes in full.
+func _test_status_moves() -> void:
+	for defense: Battle.Defense in [Battle.Defense.WARD, Battle.Defense.GUARD, Battle.Defense.COUNTER]:
+		var word: String = Battle.DEFENSE_WORDS[defense]
+		var slime := _sturdy("slime")
+		var hero := Fighter.from_player(_player("warrior"))
+		var fight := _set_up(slime, hero)
+		var usual := hero.get_stat("attack")
+		var outcome := fight.resolve(Battle.move_choice("goo"), defense)
+		_expect(not fight.can_use(slime, "goo"), "Goo is spent, whatever answers it (%s)" % word)
+		var turns := Battle.status_turns(3, defense)
+		_expect(outcome.turns == turns and outcome.blocked == (turns == 0), "Goo against %s holds %d turns" % [word, turns])
+		var lowered := floori(usual * 0.75)
+		_expect(hero.get_stat("attack") == (usual if turns == 0 else lowered), "Goo against %s lowers Attack right" % word)
+		# Its turns are the hero's own: the slime's turns don't count.
+		for turn in turns:
+			_expect(hero.get_stat("attack") == lowered, "still down on the hero's turn %d (%s)" % [turn, word])
+			fight.resolve(Battle.move_choice("slash"), Battle.Defense.GUARD)
+			fight.resolve(Battle.move_choice("tackle"), Battle.Defense.GUARD)
+		_expect(hero.get_stat("attack") == usual, "and back after its turns (%s)" % word)
+
+	# Venom: HP lost after each of the poisoned fighter's own turns.
+	var scout := _sturdy("orc_scout")
+	var victim := Fighter.from_player(_player("warrior", 10))
+	var poisoned := _set_up(scout, victim)
+	poisoned.resolve(Battle.move_choice("venom"), Battle.Defense.COUNTER)
+	_expect(victim.poison_turns == 3, "Venom takes in full against a Counter")
+	var lost := 0
+	for turn in 4:
+		var own := poisoned.resolve(Battle.move_choice("slash"), Battle.Defense.GUARD)
+		lost += own.poison
+		if turn < 3:
+			_expect(own.poison > 0, "poison bites after their own turn %d" % turn)
+		else:
+			_expect(own.poison == 0, "and stops after 3")
+		if poisoned.is_over():
+			break
+		var before := victim.hp
+		var theirs := poisoned.resolve(Battle.move_choice("stab"), Battle.Defense.WARD)
+		_expect(theirs.poison == 0 and victim.hp == before - theirs.damage, "the scout's turn adds no poison")
+	_expect(lost >= 3, "poison costs HP")
+	var guarded := _set_up(Fighter.from_monster(Database.get_monster("orc_scout")), Fighter.from_player(_player("warrior")))
+	guarded.resolve(Battle.move_choice("venom"), Battle.Defense.GUARD)
+	_expect(guarded.attacker.poison_turns == 2, "a Guard makes Venom shorter")
+
+	# Poison can end a fight.
+	var dying := _set_up(Fighter.from_monster(Database.get_monster("orc_scout")), Fighter.from_player(_player("warrior")))
+	var weak_one := dying.defender
+	dying.resolve(Battle.move_choice("venom"), Battle.Defense.COUNTER)
+	weak_one.hp = 1
+	dying.resolve(Battle.move_choice("slash"), Battle.Defense.GUARD)
+	_expect(dying.ending == Battle.Ending.KNOCKOUT and dying.loser == weak_one, "poison can knock out")
+
+	# A heal or a boost asks nobody.
+	var cleric := Fighter.from_player(_player("cleric"))
+	var pair := _set_up(cleric, Fighter.from_player(_player("warrior")))
+	_expect(not pair.needs_defense(Battle.move_choice("mend")), "a heal needs no answer")
+	_expect(pair.needs_defense(Battle.move_choice("smite")), "but magic does")
+
+
+# Armor may miss a Counter or a Ward, and heavy armor holds a heavy hit to full (D24).
+func _test_armor_kinds() -> void:
+	var plate := Fighter.from_player(_player("warrior"))
+	plate.player.add_item("tower_plate")
+	plate.player.equip("tower_plate")
+	var duel := _set_up(Fighter.from_player(_player("warrior")), plate)
+	_expect(not duel.usable_defenses(plate).has(Battle.Defense.COUNTER), "heavy armor has no Counter")
+	_expect(not Battle.defense_moves(plate).has("riposte"), "so DEF does not list one")
+	_expect(duel.usable_defenses(plate).has(Battle.Defense.GUARD), "but has a Guard")
+	var through := 0.0
+	var full := 0.0
+	for index in 200:
+		var heavy := _set_up(Fighter.from_player(_player("warrior")), plate)
+		plate.hp = plate.get_stat("max_hp")
+		through += heavy.resolve(Battle.move_choice("cleave"), Battle.Defense.GUARD, "bulwark").damage
+		var open := _set_up(Fighter.from_player(_player("warrior")), plate)
+		plate.hp = plate.get_stat("max_hp")
+		full += open.resolve(Battle.move_choice("cleave")).damage
+	_expect(absf(through - full) / full < 0.08, "a heavy hit through heavy armor's Guard lands in full")
+	_expect(Battle.hit_share(Battle.Kind.HEAVY, Battle.Defense.GUARD, 0.6, 1.0) == 1.0, "medium, not big")
+	_expect(Battle.hit_share(Battle.Kind.PLAIN, Battle.Defense.GUARD, 0.6, 1.0) < 0.5, "and its Guard is strong")
+
+	var light := Database.get_item("scout_jerkin")
+	var heavy_item := Database.get_item("tower_plate")
+	_expect(light.bonuses["speed"] > 0 and heavy_item.bonuses["speed"] < 0, "light armor is quick, heavy is slow")
+	_expect(Database.get_move("glance").power < Database.get_move("block").power, "light armor's Guard is weak")
+	_expect(light.moves.has("riposte") and light.moves.has("ward_off"), "but it Counters and Wards")
+	_expect(not heavy_item.moves.has("riposte"), "heavy armor does not Counter")
+	for item_id in Database.sorted_ids(Database.items):
+		var item := Database.get_item(item_id)
+		if item.kind == ItemData.Kind.ARMOR:
+			_expect(item.moves.any(func(id: String) -> bool: return Database.get_move(id).category == MoveData.Category.GUARD),
+					"%s has a Guard" % item_id)
+			_expect(item.moves.size() <= MoveData.MOST_IN_MENU, "%s fits DEF" % item_id)
+
+
+# Monsters need different answers, and smash more at a foe who can't Counter (D25).
+func _test_monsters_differ() -> void:
+	for monster_id in Database.sorted_ids(Database.monsters):
+		var monster := Fighter.from_monster(Database.get_monster(monster_id))
+		var answers := {}
+		for id in Battle.offense_moves(monster):
+			var kind := Battle.kind_of(Database.get_move(id))
+			if kind != Battle.Kind.SELF:
+				answers[Database.BEST_ANSWER[kind]] = true
+		_expect(answers.size() >= 2, "%s needs 2 different answers" % monster_id)
+	_expect(_smash_share(false) > _smash_share(true) * 1.3, "a monster smashes more at a foe with no Counter")
+
+
+func _smash_share(with_counter: bool) -> float:
+	var smashes := 0
+	for index in 600:
+		var hero := _player("warrior")
+		if not with_counter:
+			hero.add_item("tower_plate")
+			hero.equip("tower_plate")
+		var fight := _set_up(Fighter.from_monster(Database.get_monster("orc_peon")), Fighter.from_player(hero))
+		if fight.cpu_offense().offense == Battle.Offense.SMASH:
+			smashes += 1
+	return smashes / 600.0
+
+
+# ATK and DEF hold at most 4 moves, and every move shows its icons (E14).
+func _test_menus_and_icons() -> void:
+	for class_id in Database.sorted_ids(Database.classes):
+		var fighter := Fighter.from_player(_player(class_id))
+		_expect(Battle.offense_moves(fighter).size() <= MoveData.MOST_IN_MENU, "%s fits ATK" % class_id)
+		_expect(Battle.defense_moves(fighter).size() <= MoveData.MOST_IN_MENU, "%s fits DEF" % class_id)
+	var rogue := Fighter.from_player(_player("rogue"))
+	_expect(Battle.offense_moves(rogue) == ["stab", "lunge", "spark", "sure_strike"], "ATK lists the weapon, then what is learned")
+	_expect(MoveIcons.names_for(Database.get_move("slash")).is_empty(), "a plain move has no icon")
+	_expect(MoveIcons.names_for(Database.get_move("crush")) == ["heavy"], "Crush shows heavy")
+	_expect(MoveIcons.names_for(Database.get_move("venom")) == ["status", "once"], "Venom shows status and once")
+	_expect(MoveIcons.names_for(Database.get_move("block")) == ["plain", "status"], "a Guard shows what it answers")
+	_expect(MoveIcons.names_for(Database.get_move("riposte")) == ["heavy"], "a Counter answers heavy")
+	_expect(MoveIcons.names_for(Database.get_move("ward_off")) == ["magic", "status"], "a Ward answers magic and status")
+	var icon := MoveIcons.for_move(Database.get_move("venom"))
+	_expect(icon != null and icon.get_height() == MoveIcons.ART_SIZE * MoveIcons.SCALE, "icons are drawn at 2x")
+	_expect(MoveIcons.hint_for(Database.get_move("bulwark")).contains("full"), "Bulwark's line says it holds")
+	for move_id in Database.sorted_ids(Database.moves):
+		_expect(MoveIcons.hint_for(Database.get_move(move_id)) != "", "%s has a line" % move_id)
 
 
 func _test_learning() -> void:
@@ -298,9 +481,10 @@ func _test_learning() -> void:
 	_expect(not hero.read_tome("tome_mend"), "so a third needs one forgotten")
 	_expect(hero.read_tome("tome_mend", "focus"), "name one and it is replaced")
 	_expect(hero.learned.has("mend") and not hero.learned.has("focus"), "the new for the old")
-	hero.learned.assign(["spark", "smite", "frost_shard", "thunderbolt"])
-	_expect(not hero.has_room_for("inferno"), "four Magic fill the slots")
-	_expect(hero.has_room_for("rally"), "and Magic has no say over Special")
+	hero.learned.assign(["spark", "smite"])
+	_expect(not hero.has_room_for("rally"), "Magic and Special share the slots")
+	hero.learned.assign(["spark"])
+	_expect(hero.has_room_for("inferno") and hero.has_room_for("rally"), "one learned leaves room for one more")
 
 
 # Thousands of fights, across everyone and everything, must all end with no error.

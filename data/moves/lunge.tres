@@ -8,4 +8,5 @@ id = "lunge"
 display_name = "Lunge"
 description = "All the weight behind one point."
 category = 1
+keywords = Array[String](["heavy"])
 power = 1.0

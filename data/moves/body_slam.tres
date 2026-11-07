@@ -8,4 +8,5 @@ id = "body_slam"
 display_name = "Body Slam"
 description = "Leaps up and lands hard."
 category = 1
+keywords = Array[String](["heavy"])
 power = 1.0

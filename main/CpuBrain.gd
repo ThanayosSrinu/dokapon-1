@@ -69,6 +69,8 @@ const TIDY_HEAL_BELOW := 0.6
 const TIDY_MANA_BELOW := 0.3
 ## What a Special Boost is worth, in plain hits.
 const BOOST_WORTH := 2.0
+## A status move on the foe counts as this many hits, when it lands in full.
+const STATUS_WORTH := 1.5
 ## It runs from a fight it has less chance than this of winning.
 const FLEE_BELOW_ODDS := 0.25
 ## The worst hit it plans around, as a multiple of a plain hit.
@@ -205,26 +207,25 @@ static func offense(battle: Battle) -> Battle.Choice:
 	var moves := []
 	var weights: Array[float] = []
 	var best_hit := 0.0
-	for offense_kind: Battle.Offense in [Battle.Offense.ATTACK, Battle.Offense.SMASH]:
-		for id in me.moves_in(Battle.OFFENSE_CATEGORIES[offense_kind]):
-			var force := _physical_force(me, foe) * Database.get_move(id).power
-			var value := _move_value(battle, offense_kind, force, defenses)
-			moves.append(Battle.Choice.new(offense_kind, id))
-			weights.append(value)
-			best_hit = maxf(best_hit, value)
-	for id in me.moves_in(MoveData.Category.MAGIC):
-		if battle.can_use(me, id):
-			var value := _move_value(battle, Battle.Offense.MAGIC, _spell_force(me, foe, Database.get_move(id)), defenses)
-			moves.append(Battle.Choice.new(Battle.Offense.MAGIC, id))
-			weights.append(value)
-			best_hit = maxf(best_hit, value)
-	for id in me.moves_in(MoveData.Category.SPECIAL):
+	for id in Battle.offense_moves(me):
+		if not battle.can_use(me, id):
+			continue
 		var move := Database.get_move(id)
-		if battle.can_use(me, id) and move.effect != MoveData.Effect.HEAL:
-			# Nobody can answer a Special, so a hit counts in full, and a Boost as two hits.
-			var hits := BOOST_WORTH if move.effect == MoveData.Effect.BOOST else move.power
-			moves.append(Battle.Choice.new(Battle.Offense.SPECIAL, id))
-			weights.append(_physical_force(me, foe) * hits)
+		var kind := Battle.kind_of(move)
+		var value := 0.0
+		match kind:
+			Battle.Kind.SELF:
+				if move.effect != MoveData.Effect.BOOST:
+					continue
+				value = _physical_force(me, foe) * BOOST_WORTH
+			Battle.Kind.STATUS:
+				value = _physical_force(me, foe) * STATUS_WORTH * _status_share(defenses)
+			_:
+				var force := _spell_force(me, foe, move) if move.has(MoveData.MAGIC) else _physical_force(me, foe) * move.power
+				value = _move_value(kind, force, defenses)
+				best_hit = maxf(best_hit, value)
+		moves.append(Battle.move_choice(id))
+		weights.append(value)
 
 	if best_hit < foe.hp:
 		var danger := _strongest_hit(foe, me) * WORST_HIT
@@ -248,30 +249,40 @@ static func defense(battle: Battle) -> Battle.Defense:
 	var weights: Array[float] = []
 	for answer in answers:
 		var taken := 0.0
-		for offense_kind: Battle.Offense in offenses:
-			var share: float = offenses[offense_kind]
+		for kind: Battle.Kind in offenses:
+			var share: float = offenses[kind]
 			var force := _physical_force(foe, me)
-			if offense_kind == Battle.Offense.MAGIC:
+			if kind == Battle.Kind.MAGIC:
 				force = _strongest_hit(foe, me)
-			if offense_kind == Battle.Offense.SMASH and answer == Battle.Defense.COUNTER:
+			if kind == Battle.Kind.HEAVY and answer == Battle.Defense.COUNTER:
 				taken -= share * force * 0.5
-				continue
-			taken += share * force * Battle.hit_share(offense_kind, answer)
+			elif kind == Battle.Kind.STATUS:
+				taken += share * force * STATUS_WORTH * Battle.status_turns(2, answer) / 2.0
+			else:
+				taken += share * force * Battle.hit_share(kind, answer)
 		weights.append(1.0 / maxf(taken, _physical_force(foe, me) * LEAST_EXPECTED_HIT))
 	return answers[_mixed_pick(weights, _profile(me.player)["mix"])]
 
 
-# The damage a move should do against what the defender tends to answer with. The
-# hit a Counter sends back is taken off.
-static func _move_value(battle: Battle, kind: Battle.Offense, force: float, defenses: Dictionary) -> float:
+# The damage a move of `kind` should do against what the defender tends to answer with.
+# The hit a Counter sends back is taken off.
+static func _move_value(kind: Battle.Kind, force: float, defenses: Dictionary) -> float:
 	var value := 0.0
 	for answer: Battle.Defense in defenses:
 		var share: float = defenses[answer]
-		if kind == Battle.Offense.SMASH and answer == Battle.Defense.COUNTER:
+		if kind == Battle.Kind.HEAVY and answer == Battle.Defense.COUNTER:
 			value -= share * force
 			continue
 		value += share * force * Battle.hit_share(kind, answer)
 	return maxf(value, 0.1)
+
+
+# How much of a status move is expected to land, from 0 to 1.
+static func _status_share(defenses: Dictionary) -> float:
+	var landed := 0.0
+	for answer: Battle.Defense in defenses:
+		landed += defenses[answer] * Battle.status_turns(2, answer) / 2.0
+	return maxf(landed, 0.05)
 
 
 # Defense -> how likely it is, from the fighter's habits and, on Hard, what it has
@@ -288,20 +299,34 @@ static func _expected_defenses(battle: Battle, foe: Fighter) -> Dictionary:
 	return _shares(counts)
 
 
-# Offense -> how likely it is, in the same way. Without MP, a spell is not an option.
+# Kind -> how likely it is, in the same way. Without MP, a spell is not an option, and a
+# Special counts only while a status move on the foe is left.
 static func _expected_offenses(battle: Battle, foe: Fighter) -> Dictionary:
 	var habits: Dictionary = foe.monster.offense_weights if foe.monster != null else Battle.CPU_OFFENSE
 	var counts := {}
 	for habit: String in habits:
-		var kind: Battle.Offense = Battle.OFFENSE_NAMES[habit]
-		if kind == Battle.Offense.MAGIC and _strongest_hit(foe, battle.defender) == _physical_force(foe, battle.defender):
-			kind = Battle.Offense.ATTACK
+		var kind := Battle.Kind.PLAIN
+		match habit:
+			"smash":
+				kind = Battle.Kind.HEAVY
+			"magic":
+				if _strongest_hit(foe, battle.defender) > _physical_force(foe, battle.defender):
+					kind = Battle.Kind.MAGIC
+			"special":
+				if not _has_status_left(battle, foe):
+					continue
+				kind = Battle.Kind.STATUS
 		counts[kind] = counts.get(kind, 0.0) + habits[habit]
 	if _profile(battle.defender.player)["reads"]:
 		var seen: Dictionary = battle.seen_offenses.get(foe, {})
-		for kind: Battle.Offense in seen:
+		for kind: Battle.Kind in seen:
 			counts[kind] = counts.get(kind, 0.0) + seen[kind] * 2.0
 	return _shares(counts)
+
+
+static func _has_status_left(battle: Battle, fighter: Fighter) -> bool:
+	return battle.usable_moves(fighter, MoveData.Category.SPECIAL).any(
+			func(id: String) -> bool: return Battle.kind_of(Database.get_move(id)) == Battle.Kind.STATUS)
 
 
 static func _shares(counts: Dictionary) -> Dictionary:

@@ -8,5 +8,6 @@ id = "sanctuary"
 display_name = "Sanctuary"
 description = "A great healing."
 category = 3
+keywords = Array[String](["once"])
 power = 36.0
 effect = 1

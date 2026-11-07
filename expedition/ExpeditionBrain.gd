@@ -65,6 +65,15 @@ func wants_camp() -> bool:
 	return hurt and trip.can_camp() and trip.food_left > trip.days_home()
 
 
+## Picks where a roll lands, out of `options`.
+func choose_landing(options: Array[int]) -> int:
+	var best := options[0]
+	for option in options:
+		if _values.get(option, 0.0) > _values.get(best, 0.0):
+			best = option
+	return best
+
+
 ## Picks one of `options` at a fork, with `steps_left` steps to walk from `from`.
 func choose_path(options: Array[int], from: int, steps_left: int) -> int:
 	var best := options[0]

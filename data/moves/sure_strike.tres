@@ -5,8 +5,9 @@
 [resource]
 script = ExtResource("1")
 id = "sure_strike"
-display_name = "Sure Strike"
-description = "A hit nobody gets to answer."
+display_name = "Power Strike"
+description = "A big plain hit, once a fight. A Guard makes it weaker."
 category = 3
-power = 1.0
+keywords = Array[String](["once"])
+power = 1.6
 effect = 2

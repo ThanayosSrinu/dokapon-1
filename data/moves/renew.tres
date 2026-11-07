@@ -8,5 +8,6 @@ id = "renew"
 display_name = "Renew"
 description = "Warm light that heals deep cuts."
 category = 3
+keywords = Array[String](["once"])
 power = 18.0
 effect = 1

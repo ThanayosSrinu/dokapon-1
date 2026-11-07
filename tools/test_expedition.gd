@@ -62,7 +62,7 @@ func _ready() -> void:
 	_test_new_trip()
 	_test_board_is_made_each_trip()
 	_test_used_spaces_turn_empty()
-	_test_monsters_stop_the_walk()
+	_test_monsters_take_an_exact_landing()
 	_test_chests_take_an_exact_landing()
 	_test_camp()
 	_test_food_by_size()
@@ -200,36 +200,41 @@ func _test_used_spaces_turn_empty() -> void:
 			_expect(chest_trip.type_at(chest) == BoardNode.NodeType.NORMAL, "beating its guardian empties it")
 
 
-func _test_monsters_stop_the_walk() -> void:
+func _test_monsters_take_an_exact_landing() -> void:
+	# A monster takes an exact landing, the same as a chest (D18). Walking past does nothing.
 	var trip := _trip_on_map(IslandMap.new(ROADS), [2])
 	trip.day = 2
 	trip.begin_walk(3)
-	_expect(trip.landing_spaces() == ([2] as Array[int]), "a monster is where the walk ends")
-	trip.step_to(1)
-	trip.step_to(trip.next_spaces()[0])
-	_expect(trip.space_id == 2 and trip.steps_left == 0, "walking onto a monster loses the steps left")
-	_expect(trip.player.space_id == 2, "and they stand on it")
+	_expect(trip.landing_spaces() == ([3] as Array[int]), "a monster on the way is no place to stop")
+	for next in trip.path_to(3):
+		trip.step_to(next)
+	_expect(trip.space_id == 3 and trip.steps_left == 0, "the walk goes past it")
 	trip.land()
-	_expect(trip.fight != null, "and the fight starts")
+	_expect(trip.fight == null and trip.type_at(2) == BoardNode.NodeType.BATTLE, "with no fight, and it stays")
 
-	# With the monster gone, the same roll walks on.
 	trip = _trip_on_map(IslandMap.new(ROADS), [2])
-	trip._clear_space(2)
-	trip.begin_walk(3)
-	_expect(trip.landing_spaces() == ([3] as Array[int]), "a beaten monster stops nobody")
+	trip.day = 2
+	trip.begin_walk(2)
+	_expect(trip.path_to(2) == ([1, 2] as Array[int]), "the path leads to the space picked")
+	for next in trip.path_to(2):
+		trip.step_to(next)
+	trip.land()
+	_expect(trip.fight != null, "landing exactly on it fights")
 
-	# No road is 9 long, but a monster ends the walk first, so the turn is not void.
+	# A roll too long for any road is void, monster or not.
 	trip = _trip_on_map(IslandMap.new(ROADS), [2])
-	_expect(trip.begin_walk(9), "a monster makes a roll too long to walk possible")
-	_expect(trip.next_spaces() == ([1] as Array[int]), "the road to it is open")
+	_expect(not trip.begin_walk(9), "a monster does not make a roll too long to walk possible")
+
+	# From a fork, the path takes the road that leads to the space picked.
 	trip = _trip_on_map(IslandMap.new(ROADS))
-	_expect(not trip.begin_walk(9), "with no monster the same roll is void")
-
-	# The road with the monster is the only one long enough, so it is the only one offered.
-	trip = _trip_on_map(IslandMap.new(ROADS), [4])
-	trip.space_id = 1
-	trip.begin_walk(3)
-	_expect(trip.next_spaces() == ([2] as Array[int]), "a fork offers only roads that can hold the roll")
+	trip.space_id = 0
+	trip.day = 2
+	trip.begin_walk(2)
+	var ends := trip.landing_spaces()
+	ends.sort()
+	_expect(ends == ([2, 5] as Array[int]), "every space a roll can end on is offered")
+	_expect(trip.path_to(5) == ([1, 5] as Array[int]), "and each has its own path")
+	_expect(trip.path_to(4).is_empty(), "a space the roll can't end on has none")
 
 	# Standing on one does not hold them back.
 	trip = _trip_on_map(IslandMap.new(ROADS), [2])

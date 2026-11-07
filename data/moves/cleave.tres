@@ -8,4 +8,5 @@ id = "cleave"
 display_name = "Cleave"
 description = "A big two-handed swing."
 category = 1
+keywords = Array[String](["heavy"])
 power = 1.0

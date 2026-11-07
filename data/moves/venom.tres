@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MoveData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "venom"
+display_name = "Venom"
+description = "Poison. Loses some HP after each of the next 3 turns."
+category = 3
+keywords = Array[String](["status", "once"])
+power = 0.08
+effect = 5
+boost_turns = 3

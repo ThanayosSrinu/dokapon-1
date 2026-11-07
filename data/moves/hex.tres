@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/MoveData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "hex"
+display_name = "Hex"
+description = "A curse on what you wear. Defense down for 3 turns."
+category = 3
+keywords = Array[String](["status", "once"])
+power = 0.3
+effect = 4
+boost_stat = "defense"
+boost_turns = 3

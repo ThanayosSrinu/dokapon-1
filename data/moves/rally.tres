@@ -8,6 +8,7 @@ id = "rally"
 display_name = "Rally"
 description = "Attack up 20% for your next 3 turns."
 category = 3
+keywords = Array[String](["once"])
 power = 0.2
 effect = 3
 boost_stat = "attack"

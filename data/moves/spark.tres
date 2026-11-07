@@ -8,5 +8,6 @@ id = "spark"
 display_name = "Spark"
 description = "A snapping jolt of energy."
 category = 2
+keywords = Array[String](["magic"])
 power = 6.0
 mp_cost = 3

@@ -8,5 +8,6 @@ id = "frost_shard"
 display_name = "Frost Shard"
 description = "A spear of ice."
 category = 2
+keywords = Array[String](["magic"])
 power = 11.0
 mp_cost = 5

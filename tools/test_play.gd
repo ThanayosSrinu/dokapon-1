@@ -20,27 +20,49 @@ func _ready() -> void:
 	get_tree().current_scene = null
 	var bram := Database.get_adventurer("bram")
 	var grass := Database.get_stage(TownData.FIRST_STAGE)
+	print("RUN _test_bag_panel() ", Time.get_ticks_msec())
 	await _test_bag_panel()
+	print("RUN _test_no_bot() ", Time.get_ticks_msec())
 	await _test_no_bot()
+	print("RUN _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.KEYS) ", Time.get_ticks_msec())
 	await _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.KEYS)
+	print("RUN _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.PAD) ", Time.get_ticks_msec())
 	await _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.PAD)
+	print("RUN _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.MOUSE) ", Time.get_ticks_msec())
 	await _test_whole_trip(bram, grass, Expedition.Ending.HOME, Hand.MOUSE)
+	print("RUN _test_whole_trip(bram, grass, Expedition.Ending.BEATEN, Hand.KEYS) ", Time.get_ticks_msec())
 	await _test_whole_trip(bram, grass, Expedition.Ending.BEATEN, Hand.KEYS)
+	print("RUN _test_whole_trip(bram, grass, Expedition.Ending.STARVED, Hand.KEYS) ", Time.get_ticks_msec())
 	await _test_whole_trip(bram, grass, Expedition.Ending.STARVED, Hand.KEYS)
+	print("RUN _test_other_dice() ", Time.get_ticks_msec())
 	await _test_other_dice()
+	print("RUN _test_roll_and_marks() ", Time.get_ticks_msec())
 	await _test_roll_and_marks()
+	print("RUN _test_forks() ", Time.get_ticks_msec())
 	await _test_forks()
+	print("RUN _test_portal_question() ", Time.get_ticks_msec())
 	await _test_portal_question()
+	print("RUN _test_keys_on_the_strip() ", Time.get_ticks_msec())
 	await _test_keys_on_the_strip()
+	print("RUN _test_map() ", Time.get_ticks_msec())
 	await _test_map()
+	print("RUN _test_warnings() ", Time.get_ticks_msec())
 	await _test_warnings()
+	print("RUN _test_fights_by_hand() ", Time.get_ticks_msec())
 	await _test_fights_by_hand()
+	print("RUN _test_picking_a_move() ", Time.get_ticks_msec())
 	await _test_picking_a_move()
+	print("RUN _test_reading_a_tome() ", Time.get_ticks_msec())
 	await _test_reading_a_tome()
+	print("RUN _test_full_bag() ", Time.get_ticks_msec())
 	await _test_full_bag()
+	print("RUN _test_leaving() ", Time.get_ticks_msec())
 	await _test_leaving()
+	print("RUN _test_report_screen() ", Time.get_ticks_msec())
 	await _test_report_screen()
+	print("RUN _test_two_trips() ", Time.get_ticks_msec())
 	await _test_two_trips()
+	print("RUN _test_board_and_camp() ", Time.get_ticks_msec())
 	await _test_board_and_camp()
 	Engine.time_scale = 1.0
 	ExpeditionScreen.next_seed = 0
@@ -93,15 +115,16 @@ func _back_to_town() -> void:
 
 # --- The same choices with no screen ----------------------------------------
 
-## Plays a trip by the rules, always taking the first road, Attack and Guard: what the
-## hands below do on screen. With `goes_home` off, they stay out at the Portal.
+## Plays a trip by the rules, always landing on the first space offered, with the first
+## move and the first defense: what the hands below do on screen. With `goes_home` off, they stay out at the Portal.
 func _plain_trip(person: Adventurer, stage: Stage, seed_value: int, goes_home := true) -> Expedition:
 	var trip := Expedition.new(person, stage, seed_value, true, stage.most_food(person))
 	while not trip.is_over():
 		if trip.start_day():
 			trip.begin_walk(trip.roll())
-			while trip.steps_left > 0:
-				trip.step_to(trip.next_spaces()[0])
+			if trip.steps_left > 0:
+				for next in trip.path_to(trip.landing_spaces()[0]):
+					trip.step_to(next)
 			trip.land()
 			while trip.fight != null:
 				_plain_fight(trip)
@@ -147,13 +170,15 @@ func _play_trip(screen: ExpeditionScreen, hand: Hand, goes_home := true) -> void
 
 ## Answers whatever the screen is asking now, if anything.
 func _make_a_choice(screen: ExpeditionScreen, hand: Hand, goes_home := true) -> void:
+	if Engine.get_process_frames() % 600 == 0:
+		print("DBG day %d steps %d choices %s sel %d roll %s battle %s portal %s bag %s moving %s focus %s report %s" % [screen.trip.day, screen.trip.steps_left, screen.landing_choices, screen.selected_landing, screen.roll_button.visible, screen.battle_screen.visible, screen.portal_panel.visible, screen.bag_prompt.visible, screen.token.is_moving, _focused(), screen.report])
 	var row: Container = screen.battle_screen._choices
 	if screen.bag_prompt.visible:
 		await _press(screen.bag_prompt._leave, hand)
 	elif screen.battle_screen.visible and row.get_child_count() > 0:
 		await _press_first_of_row(row, hand)
-	elif not screen.road_choices.is_empty():
-		await _take_road(screen, screen.road_choices[0], hand)
+	elif not screen.landing_choices.is_empty():
+		await _pick_space(screen, screen.landing_choices[0], hand)
 	elif screen.portal_panel.visible:
 		await _press(screen.home_button if goes_home else screen.stay_out_button, hand)
 	elif screen.roll_button.visible:
@@ -185,16 +210,28 @@ func screen_focus() -> Control:
 	return _focused()
 
 
-func _take_road(screen: ExpeditionScreen, id: int, hand: Hand) -> void:
-	var node := screen.board.get_board_node(id)
-	var way := screen.token.current_node.global_position.direction_to(node.global_position).round()
-	match hand:
-		Hand.KEYS:
-			await _tap(KEYS[way])
-		Hand.PAD:
-			await _pad(PADS[way])
-		Hand.MOUSE:
-			await _click_at(_on_screen(screen, node))
+# Picks space `id` out of those a roll can land on. Keys and the pad move the selection
+# there first, if it isn't selected already.
+func _pick_space(screen: ExpeditionScreen, id: int, hand: Hand) -> void:
+	if hand == Hand.MOUSE:
+		# The camera moves to show every choice, in real time.
+		await get_tree().create_timer(0.7, true, false, true).timeout
+		await _click_at(_on_screen(screen, screen.board.get_board_node(id)))
+		return
+	var tries := 0
+	while screen.selected_landing != id and tries < 20:
+		var here := screen.board.get_board_node(screen.selected_landing).global_position
+		var way := here.direction_to(screen.board.get_board_node(id).global_position)
+		var key := Vector2(signf(way.x), 0.0) if absf(way.x) > absf(way.y) else Vector2(0.0, signf(way.y))
+		if hand == Hand.PAD:
+			await _pad(PADS[key])
+		else:
+			await _tap(KEYS[key])
+		tries += 1
+	if hand == Hand.PAD:
+		await _pad(JOY_BUTTON_A)
+	else:
+		await _tap("ui_accept")
 
 
 func _on_screen(screen: ExpeditionScreen, node: BoardNode) -> Vector2:
@@ -279,7 +316,7 @@ func _test_roll_and_marks() -> void:
 	marked.sort()
 	ends.sort()
 	_expect(marked == ends, "the marks are the spaces this roll can end on")
-	_expect(not screen.token.is_moving or screen.road_choices.is_empty(), "and they show before the walk")
+	_expect(not screen.token.is_moving or screen.landing_choices.is_empty(), "and they show before the walk")
 	Engine.time_scale = TEST_SPEED
 	while screen.trip.day == day and screen.report == null:
 		await _make_a_choice(screen, Hand.KEYS)
@@ -290,82 +327,85 @@ func _test_roll_and_marks() -> void:
 	await _leave()
 
 
-# Finds a seed and a day where the walk reaches a fork, and stops there.
-func _until_fork(screen: ExpeditionScreen) -> void:
+# Plays on until a roll offers more than one space to land on, and stops there.
+func _until_choice(screen: ExpeditionScreen) -> void:
 	Engine.time_scale = TEST_SPEED
-	while screen.road_choices.is_empty() and screen.report == null:
+	while screen.landing_choices.is_empty() and screen.report == null:
 		await _make_a_choice(screen, Hand.KEYS)
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
 
 
+# After a roll, every space it can land on is ringed and the player picks one (D18).
 func _test_forks() -> void:
 	_hire(Database.get_adventurer("bram"))
 	var screen := await _open_trip(5)
-	await _until_fork(screen)
+	await _until_choice(screen)
 	var trip := screen.trip
-	_expect(screen.road_choices.size() >= 2, "a fork offers its roads")
-	_expect(screen._news_words.text == ExpeditionScreen.FORK_WORDS, "and asks which way")
+	var offered := screen.landing_choices.duplicate()
+	var ends := trip.landing_spaces()
+	offered.sort()
+	ends.sort()
+	_expect(offered.size() >= 2 and offered == ends, "every space the roll can end on is offered")
+	_expect(screen._news_words.text == ExpeditionScreen.PICK_WORDS, "and it asks where to")
+	for id in screen.landing_choices:
+		_expect(screen.board.get_board_node(id).is_landing_spot, "each is ringed")
+	_expect(screen.board.get_board_node(screen.selected_landing).is_path_choice, "the selected one is lit")
 	var steps := trip.steps_left
 	var here := trip.space_id
-	for id in screen.road_choices:
-		_expect(screen.board.get_board_node(id).is_path_choice, "each road is lit")
 	await get_tree().create_timer(0.3).timeout
 	_expect(trip.steps_left == steps and trip.space_id == here, "the walk waits for the player")
-	# A click on anything else, or a key with no road that way, does nothing.
-	EventBus.space_clicked.emit(screen.board.get_board_node(here))
+	var elsewhere := -1
+	for id in trip.map.spaces():
+		if not screen.landing_choices.has(id):
+			elsewhere = id
+	EventBus.space_clicked.emit(screen.board.get_board_node(elsewhere))
 	await get_tree().process_frame
-	_expect(trip.space_id == here, "a space that is no road does nothing")
-	var missing := _way_with_no_road(screen)
-	if missing != Vector2.ZERO:
-		await _tap(KEYS[missing])
-		_expect(trip.space_id == here, "a key with no road that way does nothing")
-	var chosen: int = screen.road_choices[-1]
-	await get_tree().process_frame
-	await _tap_road(screen, chosen)
-	_expect(trip.space_id == chosen, "the arrow key takes the road that way")
-	_expect(trip.steps_left == steps - 1, "and it uses a step")
-	_expect(screen.road_choices.is_empty(), "and the question goes")
+	_expect(trip.space_id == here and not screen.landing_choices.is_empty(), "a space not offered does nothing")
+	var first := screen.selected_landing
+	var moved := false
+	for way: Vector2 in KEYS:
+		if screen.landing_toward(way) >= 0:
+			await _tap(KEYS[way])
+			moved = screen.selected_landing != first
+			break
+	_expect(moved, "an arrow key moves to another space")
+	_expect(not screen.board.get_board_node(first).is_path_choice, "and only one is lit")
+	var chosen := screen.selected_landing
+	await _tap("ui_accept")
+	_expect(screen.landing_choices.is_empty(), "Accept takes it, and the question goes")
 	for node in screen.board.get_all_nodes():
-		_expect(not node.is_path_choice, "and so do the lit roads")
+		_expect(not node.is_path_choice, "and so does the light")
 	await _until_token_stops(screen)
+	_expect(trip.space_id == chosen and trip.steps_left == 0, "the walk goes all the way there by itself")
 	await _leave()
 
-	# Esc at a fork asks about the stone, and the fork is still there afterwards.
+	# Esc while picking asks about the stone, and the choice is still there afterwards.
 	_hire(Database.get_adventurer("bram"))
 	screen = await _open_trip(5)
-	await _until_fork(screen)
+	await _until_choice(screen)
+	here = screen.trip.space_id
 	await _tap("ui_cancel")
 	await _wait()
-	_expect(screen.leave_panel.visible, "Esc works at a fork")
-	var offered: Array[int] = screen.road_choices.duplicate()
+	_expect(screen.leave_panel.visible, "Esc works while picking")
+	var still: Array[int] = screen.landing_choices.duplicate()
 	await _tap("ui_down")
 	_expect(screen.trip.space_id == here, "and the arrows answer the panel instead")
 	_expect(_focused() == screen.leave_button, "so they move to its button")
 	await _tap("ui_up")
 	await _tap("ui_cancel")
 	await _wait()
-	_expect(screen.road_choices == offered, "the fork is still asked")
-	var road: int = offered[0]
-	await _click_at(_on_screen(screen, screen.board.get_board_node(road)))
-	_expect(screen.trip.space_id == road, "a click on a lit space takes that road")
+	_expect(screen.landing_choices == still, "the choice is still asked")
+	var target: int = still[-1]
+	await get_tree().create_timer(0.7, true, false, true).timeout
+	await _click_at(_on_screen(screen, screen.board.get_board_node(target)))
 	await _until_token_stops(screen)
+	_expect(screen.trip.space_id == target, "a click on a ringed space walks there")
 	await _leave()
 
 
-func _way_with_no_road(screen: ExpeditionScreen) -> Vector2:
-	for way: Vector2 in KEYS:
-		if screen._road_toward(way) < 0:
-			return way
-	return Vector2.ZERO
-
-
-func _tap_road(screen: ExpeditionScreen, id: int) -> void:
-	await _take_road(screen, id, Hand.KEYS)
-
-
 func _until_token_stops(screen: ExpeditionScreen) -> void:
-	while screen.token.is_moving or screen.trip.steps_left > 0 and screen.road_choices.is_empty() and not screen.trip.is_over():
+	while screen.token.is_moving or screen.trip.steps_left > 0 and screen.landing_choices.is_empty() and not screen.trip.is_over():
 		await get_tree().process_frame
 
 
@@ -529,7 +569,7 @@ func _test_warnings() -> void:
 	await _leave()
 
 
-# The second step of the menu: a category of several moves asks which, and Esc steps back.
+# ATK lists every move with its icons, Esc steps back, and DEF lists the armor's moves.
 func _test_picking_a_move() -> void:
 	var bram := Database.get_adventurer("bram")
 	var grass := Database.get_stage(TownData.FIRST_STAGE)
@@ -537,38 +577,49 @@ func _test_picking_a_move() -> void:
 	var screen := await _open_trip(_seed_for(bram, grass, Expedition.Ending.BEATEN), TEST_SPEED)
 	var wide: ItemData = Database.get_item("iron_sword").duplicate()
 	wide.id = "test_wide"
-	wide.moves = ["slash", "stab", "cleave"]
+	wide.moves = ["slash", "stab"]
 	Database.items["test_wide"] = wide
 	screen.trip.player.equipment[ItemData.Kind.WEAPON] = "test_wide"
 	screen.trip.player.equipment.erase(ItemData.Kind.ARMOR)
+	screen.trip.player.learned.assign(["rally"])
 	screen.trip.player.hp = 400
 	while not screen.battle_screen.visible:
 		await _make_a_choice(screen, Hand.KEYS)
 		await get_tree().process_frame
 	var battle := screen.battle_screen
 	var row: Container = battle._choices
-	# Wait for the player's own turn, answering Guard if the monster goes first.
-	while row.get_child_count() == 0 or row.get_child(0).text != "Attack":
+	# Wait for the player's own turn, answering with DEF if the monster goes first.
+	while row.get_child_count() == 0 or row.get_child(0).text != "ATK":
 		if row.get_child_count() > 0:
-			_expect(row.get_child(1).disabled and row.get_child(2).disabled, "with no armor, only Guard can answer")
+			_expect(_texts(row) == ["Brace"], "with no armor, DEF holds only Brace")
 			row.get_child(0).pressed.emit()
 		await get_tree().process_frame
 	await get_tree().process_frame
+	_expect(_texts(row) == ["ATK", "Item", "Flee"], "the row is ATK, Item and Flee")
 	row.get_child(0).pressed.emit()
 	await get_tree().process_frame
-	var words := []
-	for button: Button in row.get_children():
-		words.append(button.text)
-	_expect(words == ["Slash", "Stab", "Back"], "a category of two moves asks which")
+	_expect(_texts(row) == ["Slash", "Stab", "Rally", "Back"], "ATK lists every move")
+	_expect((row.get_child(0) as Button).icon == null, "a plain move shows no icon")
+	_expect((row.get_child(2) as Button).icon != null, "a move with a keyword shows its icon")
 	await _tap("ui_cancel")
 	await get_tree().process_frame
-	_expect(row.get_child(0).text == "Attack", "Esc steps back to the categories")
+	_expect(row.get_child(0).text == "ATK", "Esc steps back to ATK")
 	_expect(not screen.leave_panel.visible, "and doesn't open the way out")
+	row.get_child(0).pressed.emit()
+	await get_tree().process_frame
 	row.get_child(1).pressed.emit()
 	await get_tree().process_frame
-	_expect(row.get_child_count() == 0, "a category of one move asks nothing more")
-	Database.items.erase("test_wide")
+	_expect(row.get_child_count() == 0, "a move picked asks nothing more")
 	await _leave()
+	Database.items.erase("test_wide")
+
+
+func _texts(row: Container) -> Array:
+	var words := []
+	for child in row.get_children():
+		if child is Button:
+			words.append(child.text)
+	return words
 
 
 # A tome is read from the bag, and with no room the player says what to forget.
@@ -584,7 +635,7 @@ func _test_reading_a_tome() -> void:
 	player.inventory.clear()
 	player.add_item("tome_spark")
 	player.add_item("tome_mend")
-	player.learned.assign(["rally", "focus"])
+	player.learned.assign(["rally"])
 	await get_tree().process_frame
 	bag._on_tile_pressed(0)
 	_expect(bag.action.visible and bag.action.text == "Read", "a tome offers Read")
@@ -594,7 +645,7 @@ func _test_reading_a_tome() -> void:
 	bag._on_tile_pressed(0)
 	bag._on_action()
 	await get_tree().process_frame
-	_expect(screen.learn_prompt.visible, "a full category asks what to forget")
+	_expect(screen.learn_prompt.visible, "full slots ask what to forget")
 	_expect(bag.locked, "and the bag waits")
 	var buttons := screen.learn_prompt.get_buttons()
 	_expect(buttons.size() == 3, "both moves, and a way to keep them")
@@ -630,8 +681,7 @@ func _test_fights_by_hand() -> void:
 	_expect(not screen.map_button.visible, "the Map stays out of a fight")
 	_expect(screen.bag_panel.locked, "and the bag stays shut")
 	var first: Button = row.get_child(0)
-	_expect(row.get_child(1).disabled, "with bare hands, Smash can't be picked")
-	_expect(_focused() == first, "the first move has focus")
+	_expect(_focused() == first, "ATK has focus")
 	await _tap("ui_up")
 	await _tap("ui_down")
 	await _tap("ui_left")
@@ -640,7 +690,10 @@ func _test_fights_by_hand() -> void:
 	for button in row.get_children():
 		if button is Button:
 			options.append(button.text)
-	_expect(options == ["Attack", "Smash", "Magic", "Special", "Item", "Flee"], "the row has the moves and nothing else")
+	_expect(options == ["ATK", "Item", "Flee"], "the row is ATK, Item and Flee, and nothing else")
+	first.pressed.emit()
+	await get_tree().process_frame
+	_expect(_texts(row)[0] == "Punch", "with bare hands, ATK starts with Punch")
 	while screen.battle_screen.visible:
 		if row.get_child_count() > 0:
 			await get_tree().process_frame
@@ -737,7 +790,9 @@ func _test_leaving() -> void:
 	_expect(get_tree().current_scene is TownScreen, "leaving reaches town")
 	_expect(Engine.time_scale == 1.0, "time is normal again in town")
 	_expect(town.gold == gold, "a trip given up brings nothing")
+	print("RUN _test_warp_during_a_fight() ", Time.get_ticks_msec())
 	await _test_warp_during_a_fight()
+	print("RUN _test_warp_at_a_fork() ", Time.get_ticks_msec())
 	await _test_warp_at_a_fork()
 
 
@@ -775,9 +830,9 @@ func _test_warp_during_a_fight() -> void:
 func _test_warp_at_a_fork() -> void:
 	_hire(Database.get_adventurer("bram"))
 	var screen := await _open_trip(5)
-	await _until_fork(screen)
+	await _until_choice(screen)
 	await _leave()
-	_expect(get_tree().current_scene is TownScreen, "the stone works at a fork")
+	_expect(get_tree().current_scene is TownScreen, "the stone works while picking a space")
 
 
 func _test_report_screen() -> void:
@@ -831,7 +886,7 @@ func _test_board_and_camp() -> void:
 	for id in trip.map.spaces():
 		if trip.type_at(id) == BoardNode.NodeType.BATTLE:
 			monster = id
-	_expect(SpaceNotes.of(trip, monster)["text"].contains("blocks"), "the detail box tells of the monster")
+	_expect(SpaceNotes.of(trip, monster)["text"].contains("exactly"), "the detail box tells of the monster")
 	trip._clear_space(monster)
 	_expect(screen.board.get_board_node(monster).node_type == BoardNode.NodeType.NORMAL, "a used space turns empty on the board")
 	_expect(SpaceNotes.of(trip, monster)["title"] == "Normal", "and in the detail box")
@@ -863,7 +918,7 @@ func _leave_and_reopen_hurt() -> void:
 
 func _make_a_choice_but_not_roll(screen: ExpeditionScreen) -> void:
 	if not screen.roll_button.visible:
-		await _make_a_choice(screen, Hand.KEYS)
+		await _make_a_choice(screen, Hand.KEYS, false)
 
 
 # Rests by every hand, one day each.

@@ -28,9 +28,11 @@ extends RefCounted
 ## number, and if no road is long enough the walk is void: they stay put and lose the turn.
 ##
 ## The board is made for each trip: the stage says how many monsters and chests there are,
-## and the seed says where. Walking onto a monster ends the walk there and starts the fight,
-## and the steps left are lost. A chest takes an exact landing. A beaten monster or an opened
-## chest leaves an empty space. A monster stays if the fight ends any other way.
+## and the seed says where. A monster and a chest both take an exact landing: walking past
+## one does nothing (D18). A beaten monster or an opened chest leaves an empty space. A monster
+## stays if the fight ends any other way.
+##
+## The player picks where a roll lands from landing_spaces(), and path_to() finds the way.
 ##
 ## Every random result uses GameState.rng, so a seed replays the same trip.
 
@@ -286,7 +288,7 @@ func begin_walk(steps: int) -> bool:
 	came_from = -1
 	steps_left = steps
 	_lands = steps > 0 or day > 1 or space_id != map.portal
-	if map.landings(space_id, -1, steps, _monsters).is_empty():
+	if map.landings(space_id, -1, steps).is_empty():
 		_lands = false
 		steps_left = 0
 		note("stuck", "%s can't walk %d spaces, and loses the turn." % [player.player_name, steps])
@@ -296,7 +298,7 @@ func begin_walk(steps: int) -> bool:
 
 ## Where the next step of the walk may go. More than one means a fork.
 func next_spaces() -> Array[int]:
-	return map.ways(space_id, came_from, steps_left, _monsters)
+	return map.ways(space_id, came_from, steps_left)
 
 
 ## Every space the walk under way can still end on.
@@ -306,29 +308,50 @@ func landing_spaces() -> Array[int]:
 
 ## Every space a walk of `steps` from `id` can end on, as the board stands now.
 func landings_from(id: int, from: int, steps: int) -> Array[int]:
-	return map.landings(id, from, steps, _monsters)
+	return map.landings(id, from, steps)
 
 
-## Takes one step of the walk, onto one of next_spaces(). A monster ends the walk there.
+## The spaces the walk under way steps on to end on `landing`, which must be one of
+## landing_spaces(). Where two roads lead there, it takes the first.
+func path_to(landing: int) -> Array[int]:
+	var path: Array[int] = []
+	var here := space_id
+	var from := came_from
+	var left := steps_left
+	while left > 0:
+		var found := -1
+		for next in map.exits(here, from):
+			if map.landings(next, here, left - 1).has(landing):
+				found = next
+				break
+		if found < 0:
+			return []
+		path.append(found)
+		from = here
+		here = found
+		left -= 1
+	return path
+
+
+## Takes one step of the walk, onto one of next_spaces().
 func step_to(next: int) -> void:
 	came_from = space_id
 	space_id = next
-	steps_left = 0 if _monsters.has(next) else steps_left - 1
+	steps_left -= 1
 	if steps_left == 0:
 		player.space_id = space_id
 		furthest = maxi(furthest, depth_of(space_id))
 
 
-## Walks `steps` spaces with the brain choosing at each fork, and returns the ids stepped on
+## Walks `steps` spaces to where the brain chooses to land, and returns the ids stepped on
 ## in order. If no road is `steps` long, the path is empty.
 func walk(steps: int) -> Array[int]:
 	var path: Array[int] = []
 	if not begin_walk(steps):
 		return path
-	while steps_left > 0:
-		var options := next_spaces()
-		step_to(options[0] if options.size() == 1 else brain.choose_path(options, space_id, steps_left))
-		path.append(space_id)
+	for next in path_to(brain.choose_landing(landing_spaces())):
+		step_to(next)
+		path.append(next)
 	return path
 
 

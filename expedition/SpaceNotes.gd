@@ -6,7 +6,7 @@ extends RefCounted
 
 const WORDS := {
 	BoardNode.NodeType.NORMAL: "A quiet stretch of road. Nothing happens here.",
-	BoardNode.NodeType.BATTLE: "A monster blocks the road. Walking onto it ends the walk and starts a fight.",
+	BoardNode.NodeType.BATTLE: "A monster. Landing exactly on it starts a fight, and walking past does nothing.",
 	BoardNode.NodeType.PORTAL: "The only way home. They must land on it exactly.",
 }
 

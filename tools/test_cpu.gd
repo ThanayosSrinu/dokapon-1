@@ -122,7 +122,7 @@ func _test_battle_choices() -> void:
 	battle = _battle_between(hard, foe)
 	var counters := 0
 	var trials := 200
-	battle.seen_offenses[battle.attacker if battle.attacker != _fighter_of(battle, hard) else battle.defender] = {Battle.Offense.SMASH: 8}
+	battle.seen_offenses[battle.attacker if battle.attacker != _fighter_of(battle, hard) else battle.defender] = {Battle.Kind.HEAVY: 8}
 	if battle.defender == _fighter_of(battle, hard):
 		for trial in trials:
 			counters += 1 if CpuBrain.defense(battle) == Battle.Defense.COUNTER else 0

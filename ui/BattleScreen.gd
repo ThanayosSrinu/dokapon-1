@@ -5,8 +5,10 @@ extends Control
 ##     var lines: PackedStringArray = await battle_screen.run(battle)
 ## run() returns when the fight is over and its rewards are paid.
 ##
-## The menu asks for a category, then a move, and skips the second step when the category
-## holds only one. The attacker's choice is never shown until the defender has answered.
+## On your turn the row reads ATK, with small Item and Flee buttons. ATK lists every move
+## you can make, each with icons for how it can be answered. Defending, the row lists your
+## defense moves (DEF), each with icons for what it answers. The attacker's choice is never
+## shown until the defender has answered.
 
 ## Emitted by a choice button, with that choice's value.
 signal _option_picked(value: Variant)
@@ -34,20 +36,12 @@ const SMALL_GAP := 20.0
 ## Where a word about the defense floats, against the damage number above it.
 const DEFENSE_WORD_DROP := 34.0
 
-const OFFENSE_ROW := [
-	["Attack", Battle.Offense.ATTACK, "A safe hit. Only a Guard cuts it down."],
-	["Smash", Battle.Offense.SMASH, "Breaks a Guard or a Ward. A Counter turns it back on you."],
-	["Magic", Battle.Offense.MAGIC, "Uses MP. Only a Ward cuts it down."],
-	["Special", Battle.Offense.SPECIAL, "Once a fight. Nothing can answer it."],
-]
-const DEFENSE_ROW := [
-	["Guard", Battle.Defense.GUARD, "Cuts down an Attack. A Smash breaks through."],
-	["Counter", Battle.Defense.COUNTER, "Turns a Smash back on them. Anything else lands."],
-	["Ward", Battle.Defense.WARD, "Cuts down Magic. A Smash breaks through."],
-]
-const NO_MOVE := "You have no move for this yet."
+const ATK_MENU := "atk"
+const ATK_HINT := "Pick a move. Its icons say how it can be answered."
+const DEF_WORDS := "DEF: %s, how will you answer %s?"
 const FLEE_HINT := "Run from the fight. Speed decides if you get away."
 const BOOST_COLOR := Color(1.0, 0.8, 0.35)
+const STATUS_COLOR := Color(0.76, 0.48, 0.96)
 
 var _battle: Battle
 var _arena: Control
@@ -202,16 +196,16 @@ func _get_offense() -> Battle.Choice:
 		return _battle.cpu_offense()
 	while true:
 		var picked: Variant = await _ask(_offense_options())
-		if picked is String:
+		if picked is String and picked == ITEM_MENU:
 			var item_id: Variant = await _ask(_item_options())
 			if item_id != BACK:
 				return Battle.Choice.new(Battle.Offense.ITEM, item_id)
-		elif picked == Battle.Offense.FLEE:
-			return Battle.Choice.new(picked)
-		else:
-			var move_id: String = await _pick_move(attacker, Battle.OFFENSE_CATEGORIES[picked])
+		elif picked is String and picked == ATK_MENU:
+			var move_id: String = await _ask(_move_options(attacker, Battle.offense_moves(attacker), true))
 			if move_id != BACK:
-				return Battle.Choice.new(picked, move_id)
+				return Battle.move_choice(move_id)
+		else:
+			return Battle.Choice.new(Battle.Offense.FLEE)
 	return null
 
 
@@ -220,58 +214,33 @@ func _get_defense() -> Dictionary:
 	if defender.is_cpu():
 		await _wait(CPU_PAUSE)
 		return {"defense": _battle.cpu_defense(), "move": ""}
-	_log.text = "%s, how will you answer %s?" % [defender.display_name, _battle.attacker.display_name]
-	while true:
-		var picked: Battle.Defense = await _ask(_defense_options())
-		var move_id: String = await _pick_move(defender, Battle.DEFENSE_CATEGORIES[picked])
-		if move_id != BACK:
-			return {"defense": picked, "move": move_id}
-	return {}
+	_log.text = DEF_WORDS % [defender.display_name, _battle.attacker.display_name]
+	var move_id: String = await _ask(_move_options(defender, Battle.defense_moves(defender), false))
+	return {"defense": Battle.defense_of(Database.get_move(move_id)), "move": move_id}
 
 
-# The second step: which move of `category`, or BACK. With one move there's nothing to ask.
-func _pick_move(fighter: Fighter, category: MoveData.Category) -> String:
-	var moves := fighter.moves_in(category)
-	if moves.size() == 1:
-		return moves[0]
+# One button per move in `moves`, with its icons, and Back when `with_back`.
+func _move_options(fighter: Fighter, moves: Array[String], with_back: bool) -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
 	for move_id in moves:
 		var move := Database.get_move(move_id)
 		var words := "%s %d MP" % [move.display_name, move.mp_cost] if move.mp_cost > 0 else move.display_name
-		options.append(_option(words, move_id, move.description, not _battle.can_use(fighter, move_id)))
-	options.append(_option("Back", BACK, ""))
-	return await _ask(options)
+		var option := _option(words, move_id, MoveIcons.hint_for(move), not _battle.can_use(fighter, move_id))
+		option["icon"] = MoveIcons.for_move(move)
+		options.append(option)
+	if with_back:
+		options.append(_option("Back", BACK, ""))
+	return options
 
 
 func _offense_options() -> Array[Dictionary]:
 	var attacker := _battle.attacker
-	var options: Array[Dictionary] = []
-	for entry: Array in OFFENSE_ROW:
-		options.append(_category_option(attacker, entry, Battle.OFFENSE_CATEGORIES[entry[1]]))
+	var usable := Battle.offense_moves(attacker).any(func(id: String) -> bool: return _battle.can_use(attacker, id))
+	var options: Array[Dictionary] = [_option("ATK", ATK_MENU, ATK_HINT, not usable)]
 	options.append(_option("Item", ITEM_MENU, "Use something from the bag.", attacker.get_items().is_empty(), true))
 	var chance := _battle.flee_chance(attacker, _battle.defender)
 	options.append(_option("Flee", Battle.Offense.FLEE, "%s %d%% chance." % [FLEE_HINT, roundi(chance * 100.0)], false, true))
 	return options
-
-
-func _defense_options() -> Array[Dictionary]:
-	var options: Array[Dictionary] = []
-	for entry: Array in DEFENSE_ROW:
-		options.append(_category_option(_battle.defender, entry, Battle.DEFENSE_CATEGORIES[entry[1]]))
-	return options
-
-
-# One button of a row: `entry` is its name, value and hint. A category with one move names it.
-func _category_option(fighter: Fighter, entry: Array, category: MoveData.Category) -> Dictionary:
-	var moves := fighter.moves_in(category)
-	if moves.is_empty():
-		return _option(entry[0], entry[1], NO_MOVE, true)
-	var hint: String = entry[2]
-	if moves.size() == 1:
-		var move := Database.get_move(moves[0])
-		var cost := " %d MP." % move.mp_cost if move.mp_cost > 0 else ""
-		hint = "%s.%s %s" % [move.display_name, cost, hint]
-	return _option(entry[0], entry[1], hint, _battle.usable_moves(fighter, category).is_empty())
 
 
 func _item_options() -> Array[Dictionary]:
@@ -314,6 +283,9 @@ func _ask(options: Array[Dictionary]) -> Variant:
 			button.add_theme_font_size_override("font_size", SMALL_TEXT)
 			button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		button.disabled = option["disabled"]
+		if option.get("icon") != null:
+			button.icon = option["icon"]
+			button.expand_icon = false
 		button.pressed.connect(func() -> void: _option_picked.emit(option["value"]))
 		var show_hint := func() -> void: _hint.text = option["hint"]
 		button.focus_entered.connect(show_hint)
@@ -376,41 +348,51 @@ func _play_outcome(outcome: Battle.Outcome) -> void:
 				await attacker.stumble()
 		Battle.Offense.ITEM:
 			await _play_recovery(outcome, attacker)
-		Battle.Offense.MAGIC:
-			Sound.play("magic")
-			await attacker.cast()
-			BoardFx.burst(_arena, defender.position + Vector2(0, -24), MANA_COLOR)
-			await _play_hit(outcome, attacker, defender)
-		Battle.Offense.SPECIAL:
-			await _play_special(outcome, attacker, defender)
-		Battle.Offense.SMASH:
-			await attacker.wind_up()
-			await attacker.lunge(defender.position)
-			await _play_hit(outcome, attacker, defender)
-			await attacker.go_home()
 		_:
-			await attacker.lunge(defender.position)
-			await _play_hit(outcome, attacker, defender)
-			await attacker.go_home()
+			await _play_move(outcome, attacker, defender)
+	if outcome.poison > 0:
+		_float_text("-%d" % outcome.poison, attacker, STATUS_COLOR)
+		await attacker.hurt()
 	_panels[outcome.attacker].refresh()
 	if outcome.result != "":
 		_log.text = "%s\n%s" % [outcome.opening, outcome.result]
 	await _wait(READ_PAUSE)
 
 
-func _play_special(outcome: Battle.Outcome, attacker: BattleSprite, defender: BattleSprite) -> void:
-	match outcome.move.effect:
-		MoveData.Effect.HEAL:
+# Animations follow how the move works, so no move needs its own art.
+func _play_move(outcome: Battle.Outcome, attacker: BattleSprite, defender: BattleSprite) -> void:
+	match outcome.kind:
+		Battle.Kind.SELF:
 			Sound.play("magic")
 			await attacker.cast()
-			await _play_recovery(outcome, attacker)
-		MoveData.Effect.BOOST:
+			if outcome.move.effect == MoveData.Effect.HEAL:
+				await _play_recovery(outcome, attacker)
+			else:
+				BoardFx.burst(_arena, attacker.position + Vector2(0, -24), BOOST_COLOR, 8)
+				_float_text("Up!", attacker, BOOST_COLOR)
+				_panels[outcome.attacker].refresh()
+				await _wait(0.4)
+		Battle.Kind.STATUS:
 			Sound.play("magic")
 			await attacker.cast()
-			BoardFx.burst(_arena, attacker.position + Vector2(0, -24), BOOST_COLOR, 8)
-			_float_text("Up!", attacker, BOOST_COLOR)
-			_panels[outcome.attacker].refresh()
+			if outcome.blocked:
+				Sound.play("miss")
+				_float_text("Blocked", defender, MANA_COLOR)
+			else:
+				BoardFx.burst(_arena, defender.position + Vector2(0, -24), STATUS_COLOR, 8)
+				_float_text("Down!", defender, STATUS_COLOR)
+			_panels[outcome.defender].refresh()
 			await _wait(0.4)
+		Battle.Kind.MAGIC:
+			Sound.play("magic")
+			await attacker.cast()
+			BoardFx.burst(_arena, defender.position + Vector2(0, -24), MANA_COLOR)
+			await _play_hit(outcome, attacker, defender)
+		Battle.Kind.HEAVY:
+			await attacker.wind_up()
+			await attacker.lunge(defender.position)
+			await _play_hit(outcome, attacker, defender)
+			await attacker.go_home()
 		_:
 			await attacker.lunge(defender.position)
 			await _play_hit(outcome, attacker, defender)
@@ -436,7 +418,7 @@ func _play_hit(outcome: Battle.Outcome, attacker: BattleSprite, defender: Battle
 		_panels[outcome.attacker].refresh()
 		await attacker.hurt()
 	else:
-		var held := Battle.hit_share(outcome.offense, outcome.defense) < 1.0
+		var held := Battle.share_of(outcome) < 1.0
 		Sound.play("miss" if held else "hit")
 		if not held:
 			_shake_arena()
@@ -477,7 +459,7 @@ func _levels_now() -> Dictionary:
 func _float_defense(outcome: Battle.Outcome, sprite: BattleSprite) -> void:
 	if outcome.defense == Battle.Defense.NONE:
 		return
-	var share := Battle.hit_share(outcome.offense, outcome.defense)
+	var share := Battle.share_of(outcome)
 	if share > 1.0:
 		_float_text("Broken!", sprite, GameArt.GOLD, DEFENSE_WORD_DROP)
 	elif share < 1.0:

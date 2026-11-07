@@ -224,10 +224,11 @@ func _test_long_walk(board: BoardManager, start: BoardNode, far: BoardNode) -> v
 	add_child(token)
 	await get_tree().process_frame
 	token.global_position = start.global_position
-	var started := Time.get_ticks_msec()
+	# Game time, counted in frames: the test runner runs it faster than real time.
+	var started := Engine.get_process_frames()
 	var path: Array[BoardNode] = [far]
 	await token.walk_path(path)
-	var seconds := (Time.get_ticks_msec() - started) / 1000.0
+	var seconds := (Engine.get_process_frames() - started) / float(Engine.physics_ticks_per_second)
 	_expect(seconds >= 0.09, "a long road takes as long as two short ones")
 	_expect(token.global_position == far.global_position, "and ends on the far space")
 	token.free()

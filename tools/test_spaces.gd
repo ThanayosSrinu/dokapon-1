@@ -297,7 +297,7 @@ func _test_full_game() -> void:
 	var presses := RandomNumberGenerator.new()
 	presses.seed = 11
 	var main: GameController = load("res://main/Main.tscn").instantiate()
-	main.game_seed = 31337
+	main.game_seed = 31338
 	add_child(main)
 	await get_tree().process_frame
 	main.setup_menu.player_count_chosen.emit(2)

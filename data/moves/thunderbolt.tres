@@ -8,5 +8,6 @@ id = "thunderbolt"
 display_name = "Thunderbolt"
 description = "A bolt from a clear sky."
 category = 2
+keywords = Array[String](["magic"])
 power = 20.0
 mp_cost = 9

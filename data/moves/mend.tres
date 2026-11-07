@@ -8,5 +8,6 @@ id = "mend"
 display_name = "Mend"
 description = "Closes small wounds."
 category = 3
+keywords = Array[String](["once"])
 power = 8.0
 effect = 1

@@ -65,9 +65,9 @@ func _until_roll(screen: ExpeditionScreen) -> void:
 		await get_tree().process_frame
 
 
-# Plays on, taking the first road, until a fork can be seen.
+# Plays on, taking the first space, until a roll offers a choice of spaces.
 func _until_fork(screen: ExpeditionScreen, folder: String) -> void:
-	while screen.road_choices.is_empty():
+	while screen.landing_choices.is_empty():
 		if screen.roll_button.visible:
 			await _settle(0.1)
 			screen.roll_button.pressed.emit()
@@ -78,8 +78,7 @@ func _until_fork(screen: ExpeditionScreen, folder: String) -> void:
 		await get_tree().process_frame
 	await _settle(0.3)
 	await _save(folder + "/trip_fork.png")
-	screen.road_choices = screen.road_choices.duplicate()
-	screen._road_picked.emit(screen.road_choices[0])
+	screen._landing_picked.emit(screen.landing_choices[0])
 
 
 func _until_fight(screen: ExpeditionScreen, folder: String) -> void:
@@ -89,8 +88,8 @@ func _until_fight(screen: ExpeditionScreen, folder: String) -> void:
 			screen.roll_button.pressed.emit()
 		elif screen.portal_panel.visible:
 			screen.stay_out_button.pressed.emit()
-		elif not screen.road_choices.is_empty():
-			screen._road_picked.emit(screen.road_choices[0])
+		elif not screen.landing_choices.is_empty():
+			screen._landing_picked.emit(screen.landing_choices[0])
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
 	screen.battle_screen._battle.opponent.hp = 500

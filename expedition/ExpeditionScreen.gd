@@ -3,7 +3,7 @@ extends Node2D
 ## One trip on screen, from the far side of the Portal to the report, played by the person
 ## at the keys. The rules stay in Expedition.gd: this script runs the steps of a day in
 ## order, asks for each choice, and shows what came back. Every choice waits for the player:
-## roll or camp, the road at a fork, each move of a fight, and going home at the Portal.
+## roll or camp, where a roll lands, each move of a fight, and going home at the Portal.
 ##
 ## A road is picked by clicking a green space, or with the arrow keys or the controller,
 ## because every link on a map runs straight along the grid, so each road has its own
@@ -11,8 +11,8 @@ extends Node2D
 
 ## The day's choice was made.
 signal _day_chosen(to_camp: bool)
-## A road was picked at a fork.
-signal _road_picked(id: int)
+## A space was picked for the roll to land on.
+signal _landing_picked(id: int)
 ## The Portal's question was answered.
 signal _portal_answered(going_home: bool)
 
@@ -75,7 +75,13 @@ const PORTAL_WORDS := "Go home with %s, and end the trip here?"
 const PORTAL_NOTHING := "nothing"
 const GO_HOME_TEXT := "Go home"
 const STAY_OUT_TEXT := "Stay out"
-const FORK_WORDS := "Which way?"
+const PICK_WORDS := "Where to? Pick a ringed space."
+## Room kept around the spaces on offer when the camera frames them, in world pixels.
+const PICK_MARGIN := 100.0
+## What the news bar, the strip and the bag cover, in screen pixels, so framing keeps clear.
+const COVERED_TOP := 90.0
+const COVERED_BELOW := 140.0
+const COVERED_RIGHT := 300.0
 const CAMP_TEXT := "Camp"
 const CAMP_WORDS := "Spend this turn's food to rest, and get back %d%% of HP and MP."
 const CAMP_FULL := "They are fully rested."
@@ -91,9 +97,9 @@ const DEBT_LEFT := "The %s is due in %s."
 const DEBT_TODAY := "The %s is due today."
 const DEBT_MISSED := "The %s was not paid."
 const OUT_WORDS := "%s can't work for %s."
-## The way each key points on the board, for picking a road.
+## The way each key points on the board, for picking a space.
 const ROAD_KEYS := {"ui_left": Vector2.LEFT, "ui_right": Vector2.RIGHT, "ui_up": Vector2.UP, "ui_down": Vector2.DOWN}
-## How close to a key's direction a road must run for that key to take it.
+## How close to a key's direction a space must lie for that key to move to it.
 const ROAD_AIM := 0.7
 
 ## Above 0, the seed of the next trip. For tests.
@@ -143,8 +149,10 @@ var stay_out_button: KitButton
 ## Opens the map of the island.
 var map_button: KitButton
 var map_panel: MapPanel
-## The ids of the spaces offered at the fork being asked about, or empty.
-var road_choices: Array[int] = []
+## The ids of the spaces the roll can land on, while the player picks one, or empty.
+var landing_choices: Array[int] = []
+## The one of landing_choices that keys and the mouse point at now.
+var selected_landing := -1
 
 var _motes: PortalMotes
 var _layer: Control
@@ -191,25 +199,41 @@ func _input(event: InputEvent) -> void:
 		return
 	if roll_button.visible and get_viewport().gui_get_focus_owner() == null and event.is_action_pressed("ui_accept"):
 		roll_button.grab_focus()
-	if road_choices.is_empty() or map_panel.visible:
+	if landing_choices.is_empty() or map_panel.visible:
+		return
+	if event is InputEventMouseMotion:
+		var hovered := board.get_node_at(get_global_mouse_position())
+		if hovered != null and landing_choices.has(hovered.node_id):
+			_select_landing(hovered.node_id)
+		return
+	if event.is_action_pressed("ui_accept"):
+		get_viewport().set_input_as_handled()
+		_landing_picked.emit(selected_landing)
 		return
 	for action: String in ROAD_KEYS:
 		if event.is_action_pressed(action):
 			get_viewport().set_input_as_handled()
-			var id := _road_toward(ROAD_KEYS[action])
+			var id := landing_toward(ROAD_KEYS[action])
 			if id >= 0:
-				_road_picked.emit(id)
+				_select_landing(id)
 			return
 
 
-# The road that leaves in direction `way`, or -1 if none does.
-func _road_toward(way: Vector2) -> int:
-	var here := token.current_node.global_position
-	for id in road_choices:
-		var road := here.direction_to(board.get_board_node(id).global_position)
-		if road.dot(way) >= ROAD_AIM:
-			return id
-	return -1
+## The nearest space to pick in direction `way` from the one selected, or -1 if none lies
+## that way.
+func landing_toward(way: Vector2) -> int:
+	var here := board.get_board_node(selected_landing).global_position
+	var best := -1
+	var best_score := INF
+	for id in landing_choices:
+		var there := board.get_board_node(id).global_position
+		if id == selected_landing or here.direction_to(there).dot(way) < ROAD_AIM:
+			continue
+		var score := here.distance_to(there) / here.direction_to(there).dot(way)
+		if score < best_score:
+			best = id
+			best_score = score
+	return best
 
 
 func _on_space_emptied(id: int) -> void:
@@ -220,8 +244,8 @@ func _on_space_emptied(id: int) -> void:
 
 
 func _on_space_clicked(node: BoardNode) -> void:
-	if road_choices.has(node.node_id):
-		_road_picked.emit(node.node_id)
+	if landing_choices.has(node.node_id):
+		_landing_picked.emit(node.node_id)
 
 
 # Keeps the bag shut during fights, and points its box at the space under the mouse.
@@ -338,16 +362,23 @@ func _walk() -> void:
 	await die.throw(steps, trip.person.die_top)
 	if not trip.begin_walk(steps):
 		return
+	# The roll stays over the token's head while the landing is shown or picked.
+	token.steps_left = trip.steps_left
 	_watch_token()
 	_mark_landings()
-	await _pause(MARK_SECONDS)
-	while trip.steps_left > 0:
-		var options := trip.next_spaces()
-		var next: int = options[0] if options.size() == 1 else await _pick_road(options)
+	var landings := trip.landing_spaces()
+	var landing := landings[0]
+	if landings.size() == 1:
+		await _pause(MARK_SECONDS)
+	else:
+		landing = await _pick_landing(landings)
+	_mark_nothing()
+	board.get_board_node(landing).is_landing_spot = true
+	_marked.append(board.get_board_node(landing))
+	for next in trip.path_to(landing):
 		var left := trip.steps_left
 		trip.step_to(next)
 		await token.walk_path([board.get_board_node(next)], left)
-		_mark_landings()
 		_refresh_map()
 	_mark_nothing()
 
@@ -367,22 +398,55 @@ func _mark_nothing() -> void:
 	_marked.clear()
 
 
-# Waits for the player to take one of the roads in `options`.
-func _pick_road(options: Array[int]) -> int:
-	road_choices = options
-	for id in options:
-		board.get_board_node(id).is_path_choice = true
-	_set_news(FORK_WORDS)
-	var picked: int = await _road_picked
-	_clear_road_choices()
+# Waits for the player to pick where the roll lands, out of `options`, which are ringed.
+# The one selected is lit: click any, or move with the arrow keys and press Accept.
+func _pick_landing(options: Array[int]) -> int:
+	landing_choices = options
+	_select_landing(options[0])
+	_set_news(PICK_WORDS)
+	var zoom_before := camera.zoom_index()
+	_frame_spaces(options)
+	var picked: int = await _landing_picked
+	_clear_landing_choices()
 	_set_news("")
+	camera.set_zoom_index(zoom_before)
+	_watch_token()
 	return picked
 
 
-func _clear_road_choices() -> void:
-	for id in road_choices:
-		board.get_board_node(id).is_path_choice = false
-	road_choices = []
+# Moves the camera, and zooms out if it must, so the token and every space in `ids` show in
+# the part of the screen the strip and the bag leave clear.
+func _frame_spaces(ids: Array[int]) -> void:
+	var box := Rect2(token.global_position, Vector2.ZERO)
+	for id in ids:
+		box = box.expand(board.get_board_node(id).global_position)
+	box = box.grow(PICK_MARGIN)
+	var screen_size := get_viewport_rect().size
+	var clear := screen_size - Vector2(COVERED_RIGHT, COVERED_TOP + COVERED_BELOW)
+	var index := camera.zoom_index()
+	while index > 0 and (box.size.x * BoardCamera.ZOOM_LEVELS[index] > clear.x
+			or box.size.y * BoardCamera.ZOOM_LEVELS[index] > clear.y):
+		index -= 1
+	if index != camera.zoom_index():
+		camera.set_zoom_index(index, 0.4)
+	# The clear part of the screen is off its middle, so the camera aims to one side.
+	var clear_middle := Vector2(clear.x * 0.5, COVERED_TOP + clear.y * 0.5)
+	var shift := (screen_size * 0.5 - clear_middle) / BoardCamera.ZOOM_LEVELS[index]
+	camera.focus_on(box.get_center() + shift)
+
+
+func _select_landing(id: int) -> void:
+	if selected_landing >= 0:
+		board.get_board_node(selected_landing).is_path_choice = false
+	selected_landing = id
+	board.get_board_node(id).is_path_choice = true
+
+
+func _clear_landing_choices() -> void:
+	if selected_landing >= 0:
+		board.get_board_node(selected_landing).is_path_choice = false
+	selected_landing = -1
+	landing_choices = []
 
 
 func _fight_if_needed() -> void:
@@ -508,7 +572,7 @@ func _clear_for_ending() -> void:
 	portal_panel.hide()
 	bag_prompt.hide()
 	_drop_roll_arrow()
-	_clear_road_choices()
+	_clear_landing_choices()
 	_mark_nothing()
 	bubble.hide()
 	back.hide()

@@ -20,11 +20,12 @@ stats = Dictionary[String, int]({
 "max_mp": 30,
 "speed": 18
 })
-moves = Array[String](["slash", "cleave", "block", "riposte", "ward_off", "frost_shard"])
+moves = Array[String](["slash", "cleave", "frost_shard", "venom", "block", "riposte", "ward_off"])
 offense_weights = Dictionary[String, int]({
 "attack": 4,
 "smash": 3,
-"magic": 2
+"magic": 2,
+"special": 2
 })
 defense_weights = Dictionary[String, int]({
 "guard": 3,

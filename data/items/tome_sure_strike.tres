@@ -5,8 +5,8 @@
 [resource]
 script = ExtResource("1")
 id = "tome_sure_strike"
-display_name = "Sure Strike Tome"
-description = "Read it once and Sure Strike is yours for good."
+display_name = "Power Strike Tome"
+description = "Read it once and Power Strike is yours for good."
 kind = 4
 price = 240
 icon = 21
