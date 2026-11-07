@@ -1,5 +1,5 @@
 extends Node
-## Saves screenshots of what E8.5 added, to check them by eye. Run with:
+## Saves screenshots of what E9 added, to check them by eye. Run with:
 ##   godot --path . res://tools/bank_shot.tscn -- <folder>
 
 var _folder := ""
