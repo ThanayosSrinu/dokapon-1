@@ -56,6 +56,8 @@ func _ready() -> void:
 	await _test_reading_a_tome()
 	print("RUN _test_full_bag() ", Time.get_ticks_msec())
 	await _test_full_bag()
+	print("RUN _test_menu_speed_zoom() ", Time.get_ticks_msec())
+	await _test_menu_speed_zoom()
 	print("RUN _test_leaving() ", Time.get_ticks_msec())
 	await _test_leaving()
 	print("RUN _test_report_screen() ", Time.get_ticks_msec())
@@ -483,7 +485,9 @@ func _test_keys_on_the_strip() -> void:
 	await _tap("ui_up")
 	_expect(_focused() == screen.map_button, "up reaches the Map")
 	await _tap("ui_left")
-	_expect(_focused() == screen.back, "left reaches the stone")
+	_expect(_focused() == screen.speed_button, "left reaches the speed")
+	await _tap("ui_left")
+	_expect(_focused() == screen.back, "left again reaches the stone")
 	await _tap("ui_down")
 	_expect(_focused() == screen.roll_button, "and down comes back to Roll")
 	get_viewport().gui_release_focus()
@@ -761,6 +765,82 @@ func _leave() -> void:
 	await _wait()
 	await _tap("ui_down")
 	await _tap("ui_accept")
+	await _until_report(screen)
+	await _back_to_town()
+
+
+func _key(code: Key) -> void:
+	for pressed: bool in [true, false]:
+		var event := InputEventKey.new()
+		event.physical_keycode = code
+		event.keycode = code
+		event.pressed = pressed
+		await _send(event)
+
+
+func _wheel(button: MouseButton) -> void:
+	for pressed: bool in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = pressed
+		event.position = Vector2(640, 360)
+		event.global_position = event.position
+		await _send(event)
+
+
+func _test_menu_speed_zoom() -> void:
+	_hire(Database.get_adventurer("bram"))
+	var kept := Settings.trip_speed
+	Settings.trip_speed = 1.0
+	var screen := await _open_trip(7)
+	await _until_roll(screen)
+	_expect(Engine.time_scale == 1.0, "a trip starts at the kept speed")
+	_expect(screen.speed_button.text == "x1", "the speed button says so")
+	await _key(KEY_F)
+	_expect(Settings.trip_speed == 3.0 and Engine.time_scale == 3.0, "F goes to x3")
+	await _click(screen.speed_button)
+	_expect(Engine.time_scale == 5.0 and screen.speed_button.text == "x5", "a click goes to x5")
+	await _key(KEY_F)
+	_expect(Engine.time_scale == 1.0, "and round to x1")
+	await _key(KEY_F)
+	await _key(KEY_ESCAPE)
+	_expect(GameMenu.is_open() and get_tree().paused, "Esc opens the game menu and stops the game")
+	_expect(not screen.leave_panel.visible, "and leaves the Warp Stone alone")
+	_expect(_focused() == GameMenu.resume_button, "Resume has the focus")
+	await _click(GameMenu.options_button)
+	_expect(GameMenu.options.visible, "Options open from the menu")
+	await _key(KEY_ESCAPE)
+	_expect(not GameMenu.options.visible and GameMenu.is_open(), "Esc closes Options, back to the menu")
+	await _key(KEY_ESCAPE)
+	_expect(not GameMenu.is_open() and not get_tree().paused, "Esc again goes back to the game")
+	_expect(Engine.time_scale == 3.0, "at the chosen speed")
+	await _click(screen.back)
+	await _wait()
+	_expect(screen.leave_panel.visible and not screen.back.visible, "the open panel hides the Warp button")
+	var holder := screen.leave_panel.get_parent() as Control
+	var middle := holder.get_global_rect().get_center()
+	_expect(screen.leave_panel.get_global_rect().get_center().distance_to(middle) < 2.0,
+			"the panel sits in the middle")
+	await _key(KEY_ESCAPE)
+	await _wait()
+	_expect(not screen.leave_panel.visible and screen.back.visible, "Esc closes the panel")
+	_expect(Engine.time_scale == 3.0, "and the speed comes back")
+	screen.camera.set_zoom_index(1, 0.0)
+	await _wheel(MOUSE_BUTTON_WHEEL_UP)
+	await _wheel(MOUSE_BUTTON_WHEEL_UP)
+	_expect(screen.camera.zoom_index() == 2, "one notch of the wheel is one step of zoom")
+	Settings.trip_speed = kept
+	Settings.save()
+	await _key(KEY_ESCAPE)
+	await _click(GameMenu.resume_button)
+	_expect(not GameMenu.is_open(), "Resume closes the menu")
+	await _abandon(screen)
+
+
+func _abandon(screen: ExpeditionScreen) -> void:
+	await _click(screen.back)
+	await _wait()
+	await _click(screen.leave_button)
 	await _until_report(screen)
 	await _back_to_town()
 

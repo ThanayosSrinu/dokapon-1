@@ -63,6 +63,8 @@ const DIM := Color(0.06, 0.05, 0.12, 0.62)
 const PANEL_WIDTH := 460.0
 const DEFEAT_DIM := Color(0.3, 0.02, 0.05, 0.6)
 const WARP_NAME := "Emergency Warp"
+const SPEED_TEXT := "x%d"
+const SPEED_TIP := "How fast the trip runs. F changes it. The music keeps its own pace."
 const LEAVE_HEADING := "Abandon the trip?"
 const LEAVE_TEXT := "Abandon the trip"
 const LEAVE_WORDS := "The Warp Stone saves %s's life and nothing else. The trip fails, and only walking back to the Portal brings anything home."
@@ -140,6 +142,8 @@ var home_button: KitButton
 var stay_out_button: KitButton
 ## Opens the map of the island.
 var map_button: KitButton
+## Steps through Settings.TRIP_SPEEDS.
+var speed_button: KitButton
 var map_panel: MapPanel
 ## The ids of the spaces the roll can land on, while the player picks one, or empty.
 var landing_choices: Array[int] = []
@@ -168,6 +172,7 @@ func _ready() -> void:
 	_build_ui(town)
 	EventBus.space_clicked.connect(_on_space_clicked)
 	Sound.music("board")
+	Engine.time_scale = Settings.trip_speed
 	if not Screens.busy and get_tree().current_scene == self:
 		Screens.reveal()
 	_play()
@@ -184,6 +189,13 @@ func _process(_delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if leave_panel.visible:
+		if event.is_action_pressed("ui_cancel"):
+			get_viewport().set_input_as_handled()
+			_close_leave_panel()
+		return
+	if speed_button.visible and event.is_action_pressed("trip_speed"):
+		get_viewport().set_input_as_handled()
+		_next_speed()
 		return
 	# The stone is out of the way here, so Esc has to be caught before it is missed.
 	if portal_panel.visible and event.is_action_pressed("ui_cancel"):
@@ -562,6 +574,7 @@ func _clear_for_ending() -> void:
 	_close_map(false)
 	bag_panel.hide()
 	map_button.hide()
+	speed_button.hide()
 	roll_button.hide()
 	camp_button.hide()
 	portal_panel.hide()
@@ -601,6 +614,7 @@ func _show_report(town: TownData, gold_before: int) -> void:
 	town_gold.set_amount(town.gold)
 	Tips.attach(town_gold, "Town gold", "%d gold in the town." % town.gold)
 	back.text = "Back to Town"
+	back.esc_presses = true
 	back.icon = Kit.icon("back")
 	back.danger = false
 	back.kind = KitButton.Kind.NORMAL if report.failed else KitButton.Kind.PRIMARY
@@ -662,6 +676,24 @@ func _warn_of_debts() -> void:
 		hud.warn_of_debts(DEBT_LEFT % [debt["what"], TownData.days_words(left)])
 	else:
 		hud.warn_of_debts((DEBT_TODAY if left == 0 else DEBT_MISSED) % debt["what"])
+
+
+# --- Speed ------------------------------------------------------------------
+
+# Goes to the next of Settings.TRIP_SPEEDS, and keeps it for the next trip. A stopped
+# game stays stopped.
+func _next_speed() -> void:
+	var speeds := Settings.TRIP_SPEEDS
+	Settings.trip_speed = speeds[(speeds.find(Settings.trip_speed) + 1) % speeds.size()]
+	Settings.save()
+	if Engine.time_scale != 0.0:
+		Engine.time_scale = Settings.trip_speed
+	_show_speed()
+
+
+func _show_speed() -> void:
+	speed_button.text = SPEED_TEXT % int(Settings.trip_speed)
+	speed_button.lit = Settings.trip_speed > 1.0
 
 
 # --- The map ----------------------------------------------------------------
@@ -745,6 +777,7 @@ func _open_leave_panel() -> void:
 	_time_before = Engine.time_scale
 	_focus_before = get_viewport().gui_get_focus_owner()
 	Engine.time_scale = 0.0
+	back.hide()
 	var what := TripReport.lost_words(trip.player.gold, trip.player.inventory.size(), trip.materials.size())
 	leave_cost.text = LEAVE_COST % what if what != "" else ""
 	leave_cost.visible = what != ""
@@ -757,6 +790,7 @@ func _open_leave_panel() -> void:
 func _close_leave_panel() -> void:
 	leave_panel.hide()
 	_dim.hide()
+	back.show()
 	Engine.time_scale = _time_before
 	if is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
@@ -877,6 +911,8 @@ func _build_ui(town: TownData) -> void:
 	back.icon = Kit.icon("cross")
 	back.danger = true
 	back.pressed.connect(_on_back)
+	# Esc opens the game menu during a trip. It goes back to town from the report.
+	back.esc_presses = false
 	_layer.add_child(back)
 	_link_focus()
 
@@ -954,7 +990,17 @@ func _build_map() -> void:
 	map_button.icon = Kit.icon("book")
 	map_button.text = "Map"
 	map_button.pressed.connect(_toggle_map)
-	_at_top_right(map_button, EDGE_TOP)
+	speed_button = KitButton.new()
+	speed_button.kind = KitButton.Kind.SMALL
+	speed_button.icon = Kit.icon("boot")
+	speed_button.pressed.connect(_next_speed)
+	Tips.attach(speed_button, "Speed", SPEED_TIP)
+	_show_speed()
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 8)
+	top_row.add_child(speed_button)
+	top_row.add_child(map_button)
+	_at_top_right(top_row, EDGE_TOP)
 	map_panel = MapPanel.new(trip, board)
 	map_panel.island.space_clicked.connect(_look_at_space)
 	_at_top_right(map_panel, MAP_PANEL_TOP)
@@ -1078,8 +1124,9 @@ func _link(part: Control, up: Control, down: Control, left: Control, right: Cont
 ## Roll sits in the middle of everything, and each panel keeps focus to itself while open.
 func _link_focus() -> void:
 	var slot: Control = bag_panel.slots[0]
-	_link(back, back, roll_button, back, map_button)
-	_link(map_button, map_button, slot, back, map_button)
+	_link(back, back, roll_button, back, speed_button)
+	_link(speed_button, speed_button, slot, back, map_button)
+	_link(map_button, map_button, slot, speed_button, map_button)
 	_link(roll_button, camp_button, hud.hp_bar, roll_button, slot)
 	_link(camp_button, back, roll_button, camp_button, slot)
 	_link_strip()

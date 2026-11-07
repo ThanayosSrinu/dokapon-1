@@ -9,11 +9,15 @@ const SECTION := "options"
 const VOLUME_STEP := 10
 ## How much faster the game runs during CPU turns. 1 leaves it alone.
 const CPU_SPEEDS: Array[float] = [1.0, 2.0, 4.0]
+## How fast a trip can run. The music always plays at its own speed.
+const TRIP_SPEEDS: Array[float] = [1.0, 3.0, 5.0]
 const QUIETEST_DB := -36.0
 
 var music_volume := 70
 var sfx_volume := 80
 var cpu_speed := 1.0
+## One of TRIP_SPEEDS. ExpeditionScreen reads it.
+var trip_speed := 1.0
 var fullscreen := false
 var screen_shake := true
 
@@ -23,7 +27,7 @@ func _ready() -> void:
 	apply()
 
 
-## Puts every setting into effect, except cpu_speed, which GameController reads.
+## Puts every setting into effect, except the speeds, which the game screens read.
 func apply() -> void:
 	_set_bus("Music", music_volume)
 	_set_bus("Sfx", sfx_volume)
@@ -47,6 +51,8 @@ func load_file() -> void:
 	sfx_volume = _volume(file.get_value(SECTION, "sfx_volume", sfx_volume))
 	var speed: Variant = file.get_value(SECTION, "cpu_speed", cpu_speed)
 	cpu_speed = float(speed) if speed is float and CPU_SPEEDS.has(speed) else 1.0
+	var trip: Variant = file.get_value(SECTION, "trip_speed", trip_speed)
+	trip_speed = float(trip) if (trip is float or trip is int) and TRIP_SPEEDS.has(float(trip)) else 1.0
 	fullscreen = _flag(file.get_value(SECTION, "fullscreen", fullscreen), false)
 	screen_shake = _flag(file.get_value(SECTION, "screen_shake", screen_shake), true)
 
@@ -56,6 +62,7 @@ func save() -> void:
 	file.set_value(SECTION, "music_volume", music_volume)
 	file.set_value(SECTION, "sfx_volume", sfx_volume)
 	file.set_value(SECTION, "cpu_speed", cpu_speed)
+	file.set_value(SECTION, "trip_speed", trip_speed)
 	file.set_value(SECTION, "fullscreen", fullscreen)
 	file.set_value(SECTION, "screen_shake", screen_shake)
 	file.save(_path())

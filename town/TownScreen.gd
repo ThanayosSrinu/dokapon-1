@@ -148,6 +148,8 @@ func _build_ui(town: TownData) -> void:
 	Tips.attach(gold_chip, "Gold", "Pays for adventurers, bills and upgrades.")
 	back = KitBackButton.new()
 	back.pressed.connect(_on_back)
+	# Esc opens the game menu here. Back still leads to the title.
+	back.esc_presses = false
 	_ui.add_child(back)
 
 

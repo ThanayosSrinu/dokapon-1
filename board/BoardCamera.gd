@@ -17,7 +17,10 @@ extends Camera2D
 ## How quickly the camera catches up with a followed node. Higher is snappier.
 @export var follow_speed := 6.0
 
-const ZOOM_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0, 3.0]
+const ZOOM_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+## Seconds after a wheel step in which more wheel events count as the same notch. A wheel
+## or touchpad can send several events for one notch, which would race to the end.
+const WHEEL_GAP := 0.12
 ## The longest frame that counts, so a hitch can't throw the view across the island.
 const MOST_FRAME_SECONDS := 0.1
 const ARROWS: Array[Key] = [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]
@@ -38,6 +41,8 @@ var _zoom_index := 1
 var _follow_target: Node2D
 # When the last frame began, in real time.
 var _last_frame := 0
+# When the wheel last changed the zoom, in real milliseconds.
+var _last_wheel := -100000
 
 
 func _process(delta: float) -> void:
@@ -151,10 +156,14 @@ func _stay_in_world() -> void:
 
 
 func _zoom_toward_mouse(direction: int) -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_wheel < WHEEL_GAP * 1000.0:
+		return
 	var index := clampi(_zoom_index + direction, 0, ZOOM_LEVELS.size() - 1)
 	if index == _zoom_index:
 		return
 	_zoom_index = index
+	_last_wheel = now
 	_stop_focus()
 	_kill_zoom()
 	# Keep the world point under the cursor in place while zooming.
