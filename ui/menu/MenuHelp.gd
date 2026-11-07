@@ -1,6 +1,6 @@
 class_name MenuHelp
 extends KitPage
-## How to Play, in three short pages. Section E18 rewrites this once the game exists.
+## How to Play, in three short pages. Section E21 rewrites this once the game exists.
 
 const WIDTH := 600.0
 const ROW_HEIGHT := 250.0

@@ -1,7 +1,7 @@
 class_name TownData
 extends RefCounted
 ## The town of the current game: its gold, buildings, date, roster and debts. It has no
-## UI. A game lasts until the program closes, until E15 adds saving.
+## UI. A game lasts until the program closes, until E20 adds saving.
 ##     TownData.current().gold
 ##
 ## Time stands still in town. It moves only when a trip ends. A bill or a loan can be paid
@@ -33,7 +33,7 @@ const WARN_DAYS := 7
 const ALARM_DAYS := 3
 
 ## What a building is called and what it does, in words for its sign. Every building
-## here can be visited, so a new one in E15 needs an entry and a place in TownArt.
+## here can be visited, so a new one in E17 needs an entry and a place in TownArt.
 const BUILDINGS := {
 	"tavern": {"name": "Tavern", "job": "Hire adventurers and look after your roster."},
 	"bank": {"name": "Bank", "job": "Pay the month's bills, and borrow gold."},
@@ -45,7 +45,7 @@ static var _current: TownData
 var gold := START_GOLD
 ## Today. See Calendar.
 var day := 1
-## Building id -> its level. Levels start at 1, and E15 raises them.
+## Building id -> its level. Levels start at 1, and E17 raises them.
 var buildings := {}
 ## The people on the books, in the order they joined.
 var roster: Array[Member] = []
@@ -174,7 +174,7 @@ func send_problem() -> String:
 
 
 ## What selling everything the town owns would raise. The town owns nothing it can sell
-## until the Shop's stock in E13, which must add it here.
+## until the Shop's stock in E15, which must add it here.
 func goods_worth() -> int:
 	return 0
 

@@ -1,7 +1,7 @@
 class_name MainMenu
 extends Control
 ## The first screen. Play is the one main action. There is no Continue yet, because
-## nothing is saved until Section E15.
+## nothing is saved until Section E20.
 
 const TOWN := "res://town/TownScreen.tscn"
 const GALLERY := "res://ui/kit/KitGallery.tscn"
