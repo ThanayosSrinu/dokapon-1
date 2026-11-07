@@ -78,8 +78,10 @@ func reset_price() -> int:
 ## The most days of food they can carry on a trip: their Max Food at their level, with
 ## what the skill tree adds.
 func max_food() -> int:
-	var food := person.food_at(level) + SkillTree.stat_add(person.class_id, tree, "food")
-	return floori(food * (1.0 + SkillTree.perk(person.class_id, tree, SkillTree.FOOD_SHARE)))
+	var town := TownData.current().tree
+	var food := person.food_at(level) + SkillTree.stat_add(person.class_id, tree, "food") + TownTree.food_add(town)
+	return floori(food * (1.0 + SkillTree.perk(person.class_id, tree, SkillTree.FOOD_SHARE)
+			+ TownTree.perk(town, TownTree.FOOD_TIMES)))
 
 
 ## Puts on the gear `item_id`, and returns the id of what it replaces, or "".

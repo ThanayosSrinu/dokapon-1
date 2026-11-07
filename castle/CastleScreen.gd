@@ -24,6 +24,8 @@ const SAY_LETTER := "A letter from the King, my lord."
 const SAY_PLEASED := "The King is pleased with you, my lord!"
 const SAY_BUILT := "The builders start at once."
 const SAY_RAISED := "It will be the finest in the land."
+const SAY_GROWN := "The whole town will feel it, my lord."
+const SIZE_WORDS := {TownTree.Size.SMALL: "Small", TownTree.Size.NOTABLE: "Notable", TownTree.Size.KEYSTONE: "Keystone"}
 const NO_LETTER := "No letter for now. The King will write again."
 
 ## A building id the Castle opens on, set by the town when a building with no room of its
@@ -41,6 +43,13 @@ var bubble: TavernBubble
 var tiles: Array[PlanTile] = []
 ## The id of the tile the card shows.
 var picked := PlanTile.LETTER_ID
+## True while the town tree shows in place of the plans.
+var tree_open := false
+## The town tree space the card shows while the tree is open.
+var tree_pick := "a1"
+var tree_grid: TownTreeGrid
+var plans_tab: KitButton
+var tree_tab: KitButton
 
 var _stage: Node2D
 var _grid: GridContainer
@@ -104,6 +113,24 @@ func tile(id: String) -> PlanTile:
 	return null
 
 
+## Shows the town tree in place of the plans, or the plans again.
+func show_tree(open: bool) -> void:
+	tree_open = open
+	_grid.visible = not open
+	tree_grid.visible = open
+	plans_tab.lit = not open
+	tree_tab.lit = open
+	_refresh(false)
+
+
+## Shows town tree space `id` in the card, as pointing at it would.
+func pick_space(id: String) -> void:
+	if tree_pick != id:
+		tree_pick = id
+		_show_picked(TownData.current())
+		tree_grid.show_tree(TownData.current().tree, tree_pick)
+
+
 ## The red line under a plan, saying why it can't be built, or "".
 func shown_hint() -> String:
 	return _hint.text
@@ -117,14 +144,39 @@ func _tile(id: String) -> PlanTile:
 # --- Building the screen -----------------------------------------------------
 
 func _build_tiles() -> Control:
-	var panel := KitPanel.new("Town Plans", true)
+	var panel := KitPanel.new("", true)
 	panel.position = TILES_SPOT
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", GAP)
+	panel.body.add_child(row)
+	plans_tab = _tab("Town Plans", "The King's letter, and the buildings you can raise.", false)
+	tree_tab = _tab("Town Tree", "What the town gives everyone it sends out. Each space is built with gold and materials.", true)
+	row.add_child(plans_tab)
+	row.add_child(tree_tab)
+	plans_tab.lit = true
+	tree_grid = TownTreeGrid.new()
+	tree_grid.visible = false
+	tree_grid.picked.connect(pick_space)
+	tree_grid.chosen.connect(func(id: String) -> void:
+			pick_space(id)
+			_on_action())
+	panel.body.add_child(tree_grid)
 	_grid = GridContainer.new()
 	_grid.columns = COLUMNS
 	_grid.add_theme_constant_override("h_separation", GAP)
 	_grid.add_theme_constant_override("v_separation", GAP)
 	panel.body.add_child(_grid)
 	return panel
+
+
+func _tab(words: String, tip: String, tree: bool) -> KitButton:
+	var button := KitButton.new()
+	button.kind = KitButton.Kind.SMALL
+	button.text = words
+	button.pressed.connect(show_tree.bind(tree))
+	Tips.attach(button, words, tip)
+	return button
 
 
 func _build_card() -> Control:
@@ -202,6 +254,7 @@ func _refresh(roll := true) -> void:
 	var town := TownData.current()
 	_fill_top_bar(town, roll)
 	_fill_tiles(town)
+	tree_grid.show_tree(town.tree, tree_pick)
 	_show_picked(town)
 	_aim_arrow(town)
 
@@ -239,7 +292,9 @@ func _show_picked(town: TownData) -> void:
 	_hint.text = ""
 	_goal.visible = false
 	_progress.visible = false
-	if picked == PlanTile.LETTER_ID:
+	if tree_open:
+		_show_space(town, tree_pick)
+	elif picked == PlanTile.LETTER_ID:
 		_show_letter(town)
 	else:
 		_show_plan(town, picked)
@@ -298,6 +353,33 @@ func _show_plan(town: TownData, id: String) -> void:
 	action.block(_hint.text)
 
 
+func _show_space(town: TownData, id: String) -> void:
+	var found := TownTree.space(id)
+	var branch: Dictionary = TownTree.BRANCHES[TownTree.branch_of(id)]
+	_title.text = found["name"]
+	_kind.text = "%s, %s" % [SIZE_WORDS[found["size"]], branch["name"]]
+	_words.text = found["text"]
+	action.visible = true
+	action.press_sound = "coin"
+	if town.tree.has(id):
+		action.text = "Built"
+		action.block("The town has this already.")
+		return
+	var cost := TownTree.cost(id)
+	_costs.add_child(_cost_chip(Kit.icon("coin"), cost["gold"], town.gold, "Gold"))
+	for material_id: String in cost["materials"]:
+		var material := Database.get_material(material_id)
+		_costs.add_child(_cost_chip(GameArt.material_icon(material), cost["materials"][material_id],
+				town.materials.get(material_id, 0), material.display_name))
+	action.text = "Build it"
+	var problem := town.grow_problem(id)
+	if problem == "Build a space joined to it first":
+		_hint.text = "Build a space joined to it first."
+	elif problem != "":
+		_hint.text = "%s. Trips bring home materials, and gold." % problem
+	action.block(_hint.text)
+
+
 # A cost, with what the town has: red while it has too few.
 func _cost_chip(picture: Texture2D, need: int, have: int, what: String) -> Control:
 	var chip := KitChip.new("coin", need)
@@ -312,7 +394,9 @@ func _cost_chip(picture: Texture2D, need: int, have: int, what: String) -> Contr
 # The arrow points at the letter while its reward waits, and at a plan that can be built.
 func _aim_arrow(town: TownData) -> void:
 	var target: Control = null
-	if town.letter_done() and picked != PlanTile.LETTER_ID:
+	if tree_open:
+		pass
+	elif town.letter_done() and picked != PlanTile.LETTER_ID:
 		target = tile(PlanTile.LETTER_ID)
 	elif picked == PlanTile.LETTER_ID and town.letter_done():
 		target = action
@@ -340,6 +424,15 @@ func _pick_quietly(id: String) -> void:
 
 func _on_action() -> void:
 	var town := TownData.current()
+	if tree_open:
+		if not town.grow(tree_pick):
+			action.deny()
+			return
+		Sound.play("level_up")
+		_say(SAY_GROWN)
+		_refresh()
+		tree_grid.spots[tree_pick].grab_focus()
+		return
 	if picked == PlanTile.LETTER_ID:
 		if not town.claim_letter():
 			action.deny()

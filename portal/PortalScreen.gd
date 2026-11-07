@@ -226,7 +226,7 @@ func _choose_food(amount: int) -> void:
 
 ## Says where the food comes from, because that is what the player can change.
 func _food_tip(town: TownData) -> String:
-	var words := "One roll of the die is one turn, and a day at camp too. Each costs a day of food, at %d gold a day." % TownData.FOOD_PRICE
+	var words := "One roll of the die is one turn, and a day at camp too. Each costs a day of food, at %d gold a day." % TownData.current().food_price()
 	if town.store_room() == 0:
 		words += " Leftover food is lost."
 	else:

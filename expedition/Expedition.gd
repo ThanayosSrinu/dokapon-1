@@ -785,6 +785,7 @@ static func make_player(who: Adventurer, hand: bool, kept: Member) -> PlayerData
 		made.learned = kept.learned.duplicate()
 		made.inventory = kept.pack.duplicate()
 		made.tree = kept.tree.duplicate()
+		TownData.current().dress(made)
 	made.gold = 0
 	made.gold_share = GOLD_SHARE * (1.0 + made.perk(SkillTree.GOLD))
 	made.rest_share = CAMP_SHARE + made.perk(SkillTree.CAMP)

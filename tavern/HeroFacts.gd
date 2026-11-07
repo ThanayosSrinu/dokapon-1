@@ -39,7 +39,7 @@ static func job(stat: String) -> String:
 			return "The faster one acts first. Fleeing works %d%% of the time at equal SPD, and %d%% more for each point over the foe." % [
 					roundi(Battle.FLEE_BASE * 100), roundi(Battle.FLEE_PER_SPEED * 100)]
 		"max_hp":
-			return "Health. At 0 they are beaten, the trip ends, and they rest %d days." % TownData.OUT_AFTER_DEFEAT
+			return "Health. At 0 they are beaten, the trip ends, and they rest %d days." % TownData.current().days_out_after_defeat()
 		"max_mp":
 			return "Paid for Magic moves. Camp gives back %d%%." % roundi(Expedition.CAMP_SHARE * 100)
 	return ""

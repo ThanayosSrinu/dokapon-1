@@ -97,6 +97,8 @@ var letter_index := 0
 var letter_progress := 0
 ## The buildings whose plans letters have opened, besides those built from the start.
 var opened: Array[String] = []
+## The Castle's town tree spaces built, as TownTree ids.
+var tree: Array[String] = []
 
 
 func _init() -> void:
@@ -274,22 +276,46 @@ func bring_home(trip: Expedition) -> void:
 	# The pack went out with them. What comes back belongs to the town.
 	one.pack.clear()
 	if trip.ending == Expedition.Ending.HOME:
-		for id in trip.player.inventory:
-			add_stock(id)
-		for id in trip.materials:
-			materials[id] = materials.get(id, 0) + 1
-		_count_toward_letter("materials", trip.materials.size())
-		_count_toward_letter("starstone", trip.materials.count("starstone"))
+		_take_bag(trip)
 		food_store = mini(food_store + trip.food_left, store_room())
 		one.trips_home += 1
 		one.gold_home += trip.gold_home()
 		remember("%s came home with %d gold." % [trip.person.display_name, trip.gold_home()])
+	elif trip.ending == Expedition.Ending.WARPED and tree_perk(TownTree.SAFE_WARP) > 0.0:
+		_take_bag(trip)
+		remember("%s warped home, and the Safe Road brought the bag." % trip.person.display_name)
 	elif trip.ending == Expedition.Ending.WARPED:
 		remember("%s warped home, with nothing." % trip.person.display_name)
+	elif tree_perk(TownTree.RESCUE) > 0.0 and gold >= TownTree.RESCUE_PRICE:
+		gold -= TownTree.RESCUE_PRICE
+		_take_bag(trip)
+		one.ready_on = day + days_out_after_defeat()
+		remember("%s came back hurt. The Rescue Party brought the bag home, for %d gold." % [
+				trip.person.display_name, TownTree.RESCUE_PRICE])
 	else:
-		one.ready_on = day + OUT_AFTER_DEFEAT
+		one.ready_on = day + days_out_after_defeat()
 		remember("%s came back hurt, with nothing." % trip.person.display_name)
 	_pick_going()
+
+
+# What a trip carried comes to the town: its items and its materials.
+func _take_bag(trip: Expedition) -> void:
+	for id in trip.player.inventory:
+		add_stock(id)
+	for id in trip.materials:
+		materials[id] = materials.get(id, 0) + 1
+	_count_toward_letter("materials", trip.materials.size())
+	_count_toward_letter("starstone", trip.materials.count("starstone"))
+
+
+## The days someone beaten rests before they can work again.
+func days_out_after_defeat() -> int:
+	return maxi(OUT_AFTER_DEFEAT - roundi(tree_perk(TownTree.DAYS_OUT)), 1)
+
+
+## What a day of food costs.
+func food_price() -> int:
+	return FOOD_PRICE + roundi(tree_perk(TownTree.FOOD_PRICE))
 
 
 ## The most days of food `person` can carry, on any trip: their Max Food at their level now.
@@ -301,18 +327,18 @@ func max_food(person: Adventurer) -> int:
 ## The most days of food `person` can take, by what they carry, what the Storehouse keeps,
 ## and what the town can pay for.
 func food_limit(person: Adventurer) -> int:
-	return mini(max_food(person), food_store + gold / FOOD_PRICE)
+	return mini(max_food(person), food_store + gold / food_price())
 
 
 ## What `amount` days of food cost, after what the Storehouse keeps is used. -1 is the food
 ## chosen for the next trip.
 func food_cost(amount := -1) -> int:
-	return maxi((food if amount < 0 else amount) - food_store, 0) * FOOD_PRICE
+	return maxi((food if amount < 0 else amount) - food_store, 0) * food_price()
 
 
 ## The most days of food the Storehouse keeps, by its level.
 func store_room() -> int:
-	return TownPlans.STOREHOUSE_FOOD[level("storehouse")]
+	return TownPlans.STOREHOUSE_FOOD[level("storehouse")] + roundi(tree_perk(TownTree.STORE))
 
 
 ## Sets the food to all that the trip can take.
@@ -515,6 +541,69 @@ func job_words(id: String) -> String:
 	return about.get("built", about["job"]) if is_built(id) else about["job"]
 
 
+# --- The town tree --------------------------------------------------------------
+
+## The town tree perk `perk_name`, summed over the spaces built. See TownTree.
+func tree_perk(perk_name: String) -> float:
+	return TownTree.perk(tree, perk_name)
+
+
+## The King's tax each month, with what the town tree's keystones add.
+func king_tax() -> int:
+	return KING_TAX + roundi(tree_perk(TownTree.TAX))
+
+
+## How many Magic and Special moves one person can know.
+func move_slots() -> int:
+	return MoveData.MOST_LEARNED + roundi(tree_perk(TownTree.SLOTS))
+
+
+## Why town tree space `id` can't be built, in a few words, or "" if it can.
+func grow_problem(id: String) -> String:
+	if tree.has(id):
+		return "Built already"
+	if not TownTree.can_take(tree, id):
+		return "Build a space joined to it first"
+	var found := TownTree.cost(id)
+	if found["gold"] > gold:
+		return "Need %d more gold" % (found["gold"] - gold)
+	for material_id: String in found["materials"]:
+		var short: int = found["materials"][material_id] - materials.get(material_id, 0)
+		if short > 0:
+			return "Need %d more %s" % [short, Database.get_material(material_id).display_name]
+	return ""
+
+
+## Builds town tree space `id`, paying for it. Returns false, changing nothing, if it can't.
+func grow(id: String) -> bool:
+	if grow_problem(id) != "":
+		return false
+	var found := TownTree.cost(id)
+	gold -= found["gold"]
+	for material_id: String in found["materials"]:
+		materials[material_id] -= found["materials"][material_id]
+		if materials[material_id] == 0:
+			materials.erase(material_id)
+	tree.append(id)
+	remember("Built %s on the town tree." % TownTree.space(id)["name"])
+	return true
+
+
+## Gives `player`, who sets out from this town, what the town tree gives everyone.
+func dress(player: PlayerData) -> void:
+	player.town_stats.clear()
+	player.town_perks.clear()
+	for stat: String in ["attack", "defense", "magic", "speed", "max_hp", "max_mp"]:
+		var add := TownTree.stat_add(tree, stat)
+		if add != 0:
+			player.town_stats[stat] = add
+	for perk_name in TownTree.TRIP_PERKS:
+		var value := tree_perk(perk_name)
+		if value != 0.0:
+			player.town_perks[perk_name] = value
+	player.learn_slots = move_slots()
+
+
 ## True if a letter has opened the plans of `id`, or it stood from the start.
 func is_opened(id: String) -> bool:
 	return BUILDINGS[id]["start"] > 0 or opened.has(id)
@@ -631,7 +720,7 @@ func teach_problem(tome_id: String, one: Member, forgotten := "") -> String:
 		return "Knows it already"
 	if item.price > gold:
 		return "Need %d more gold" % (item.price - gold)
-	if one.learned.size() >= MoveData.MOST_LEARNED and not one.learned.has(forgotten):
+	if one.learned.size() >= move_slots() and not one.learned.has(forgotten):
 		return "Choose a move to forget"
 	return ""
 
@@ -642,7 +731,7 @@ func teach(tome_id: String, one: Member, forgotten := "") -> bool:
 		return false
 	var item := Database.get_item(tome_id)
 	gold -= item.price
-	if one.learned.size() >= MoveData.MOST_LEARNED:
+	if one.learned.size() >= move_slots():
 		one.learned.erase(forgotten)
 	one.learned.append(item.teaches)
 	remember("%s learned %s." % [one.person.display_name, Database.get_move(item.teaches).display_name])
@@ -727,7 +816,7 @@ func to_save() -> Dictionary:
 		"food": food, "months_paid": months_paid, "loan_owed": loan_owed, "loan_due": loan_due,
 		"history": history.duplicate(true), "warned": warned.duplicate(), "stock": stock.duplicate(),
 		"materials": materials.duplicate(), "food_store": food_store, "letter_index": letter_index,
-		"letter_progress": letter_progress, "opened": opened.duplicate(),
+		"letter_progress": letter_progress, "opened": opened.duplicate(), "tree": tree.duplicate(),
 	}
 
 
@@ -768,6 +857,9 @@ static func from_save(saved: Dictionary) -> TownData:
 	town.letter_index = saved["letter_index"]
 	town.letter_progress = saved["letter_progress"]
 	town.opened.assign(saved["opened"])
+	for id: String in saved.get("tree", []):
+		if TownTree.can_take(town.tree, id):
+			town.tree.append(id)
 	for one in town.roster:
 		if one.person.id == saved["going"]:
 			town.going = one.person
@@ -789,7 +881,7 @@ func bill_open() -> bool:
 
 ## Who is on the roster right now is on the bill. Each line is {"text", "amount"}.
 func bill_lines() -> Array[Dictionary]:
-	var lines: Array[Dictionary] = [{"text": "The King's tax", "amount": KING_TAX}]
+	var lines: Array[Dictionary] = [{"text": "The King's tax", "amount": king_tax()}]
 	for one in roster:
 		lines.append({"text": "%s's wage" % one.person.display_name, "amount": one.person.wage})
 	return lines

@@ -60,6 +60,11 @@ var spells: Array[String] = []
 var learned: Array[String] = []
 ## The skill tree spaces they have taken, as SkillTree ids. Only trips use a tree.
 var tree: Array[String] = []
+## What the town tree gives them, set as they set out: stat -> added, and perk -> value.
+var town_stats := {}
+var town_perks := {}
+## How many Magic and Special moves they can know.
+var learn_slots := MoveData.MOST_LEARNED
 ## True in the old board game, where a class teaches spells as it levels up. On a trip,
 ## moves only come from tomes.
 var learns_by_level := true
@@ -183,7 +188,7 @@ func get_stat(stat: String) -> int:
 func fed_stat(stat: String) -> int:
 	var data := Database.get_class_data(class_id)
 	var value: int = data.base_stats[stat] + data.growth[stat] * (level - 1)
-	value += SkillTree.stat_add(class_id, tree, stat)
+	value += SkillTree.stat_add(class_id, tree, stat) + town_stats.get(stat, 0)
 	for item_id: String in equipment.values():
 		value += Database.get_item(item_id).bonuses.get(stat, 0)
 	if not tree.is_empty():
@@ -193,7 +198,8 @@ func fed_stat(stat: String) -> int:
 
 ## The skill tree perk `perk_name`, or 0. See SkillTree.
 func perk(perk_name: String) -> float:
-	return 0.0 if tree.is_empty() else SkillTree.perk(class_id, tree, perk_name)
+	var mine := 0.0 if tree.is_empty() else SkillTree.perk(class_id, tree, perk_name)
+	return mine + town_perks.get(perk_name, 0.0)
 
 
 ## How much experience the next level takes.
@@ -353,7 +359,7 @@ func moves_in(category: MoveData.Category) -> Array[String]:
 ## True if `move_id`, a move that is learned, has a free slot. Magic and Special share
 ## the slots the weapon leaves in the ATK menu.
 func has_room_for(_move_id: String) -> bool:
-	return learned.size() < MoveData.MOST_LEARNED
+	return learned.size() < learn_slots
 
 
 ## Learns `move_id`. With the slots full, name a move to forget in `forgotten`. Returns

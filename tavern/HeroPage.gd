@@ -197,10 +197,10 @@ func _fill_gear() -> void:
 func _fill_moves() -> void:
 	for move_id in _made.learned:
 		_add_move_row(Database.get_move(move_id))
-	var free := MoveData.MOST_LEARNED - _made.learned.size()
-	_add_row("book", "Free slots", "%d of %d" % [free, MoveData.MOST_LEARNED],
+	var free := _made.learn_slots - _made.learned.size()
+	_add_row("book", "Free slots", "%d of %d" % [free, _made.learn_slots],
 			"Tomes and the Academy teach Magic and Special moves.", "Free slots",
-			"Magic and Special share %d slots. A new move with none free replaces one." % MoveData.MOST_LEARNED)
+			"Magic and Special share %d slots. A new move with none free replaces one." % _made.learn_slots)
 
 
 func _fill_traits() -> void:

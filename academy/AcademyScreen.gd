@@ -180,7 +180,7 @@ func _build_card() -> Control:
 	action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action.pressed.connect(_teach.bind(""))
 	card.body.add_child(action)
-	for index in MoveData.MOST_LEARNED:
+	for index in TownData.current().move_slots():
 		var swap := KitButton.new()
 		swap.kind = KitButton.Kind.SMALL
 		swap.press_sound = "coin"
@@ -244,7 +244,7 @@ func _show_person() -> void:
 		_who.text = "Nobody on your roster"
 		return
 	_who.text = "For %s, level %d" % [one.person.display_name, one.level]
-	_known.add_child(Kit.text("Knows %d of %d moves:" % [one.learned.size(), MoveData.MOST_LEARNED], 0.0, &"PaperLabel"))
+	_known.add_child(Kit.text("Knows %d of %d moves:" % [one.learned.size(), TownData.current().move_slots()], 0.0, &"PaperLabel"))
 	for move_id in one.learned:
 		_known.add_child(_move_row(Database.get_move(move_id)))
 
@@ -282,7 +282,7 @@ func _show_picked(town: TownData) -> void:
 	action.text = problem if problem != "" else "Teach for %d gold" % tome.price
 	action.block("" if problem == "" else _reason(town, tome, one, problem))
 	if full:
-		_hint.text = "%s knows %d moves already. Pick one to forget." % [one.person.display_name, MoveData.MOST_LEARNED]
+		_hint.text = "%s knows %d moves already. Pick one to forget." % [one.person.display_name, TownData.current().move_slots()]
 		for index in swaps.size():
 			var old := Database.get_move(one.learned[index])
 			swaps[index].visible = true
