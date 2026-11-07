@@ -12,6 +12,6 @@ size_name = "Medium"
 description = "Fields and woods, with more to find."
 map_file = "res://maps/grass_m_1.json"
 picture = ExtResource("2")
-food_scale = 2.5
+usual_food = 45
 monsters = 14
 chests = 7

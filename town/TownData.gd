@@ -16,7 +16,7 @@ enum Forecast { SAFE, TIGHT, LATE }
 
 const START_GOLD := 300
 ## Gold for one day of food.
-const FOOD_PRICE := 5
+const FOOD_PRICE := 3
 ## Where the Portal leads in a new game. A stage id from data/stages.
 const FIRST_STAGE := "grass_s"
 const ROSTER_ROOM := 3
@@ -292,10 +292,16 @@ func bring_home(trip: Expedition) -> void:
 	_pick_going()
 
 
-## The most days of food `person` can take to `trip_stage`, by what they carry, what the
-## Storehouse keeps, and what the town can pay for.
-func food_limit(trip_stage: Stage, person: Adventurer) -> int:
-	return mini(trip_stage.most_food(person), food_store + gold / FOOD_PRICE)
+## The most days of food `person` can carry, on any trip: their Max Food at their level now.
+func max_food(person: Adventurer) -> int:
+	var one := member(person)
+	return person.food_at(0 if one == null else one.level)
+
+
+## The most days of food `person` can take, by what they carry, what the Storehouse keeps,
+## and what the town can pay for.
+func food_limit(person: Adventurer) -> int:
+	return mini(max_food(person), food_store + gold / FOOD_PRICE)
 
 
 ## What `amount` days of food cost, after what the Storehouse keeps is used. -1 is the food
@@ -311,12 +317,12 @@ func store_room() -> int:
 
 ## Sets the food to all that the trip can take.
 func fill_food() -> void:
-	food = 0 if going == null else food_limit(stage, going)
+	food = 0 if going == null else food_limit(going)
 
 
 ## Sets the food to `amount`, or as near as the trip allows.
 func choose_food(amount: int) -> void:
-	food = 0 if going == null else clampi(amount, 0, food_limit(stage, going))
+	food = 0 if going == null else clampi(amount, 0, food_limit(going))
 
 
 ## Pays for the food, using what the Storehouse keeps first. Leftovers are lost unless the
@@ -899,7 +905,7 @@ func final_story(lines: int) -> Array[Dictionary]:
 func forecast(trip_stage: Stage, person: Adventurer, bought := -1) -> Dictionary:
 	var map := IslandMap.open(trip_stage.map_file)
 	var home: int = day + ceili(map.days_around(map.portal, person.die_top))
-	var whole: int = maxi(day + (food_limit(trip_stage, person) if bought < 0 else bought), home)
+	var whole: int = maxi(day + (food_limit(person) if bought < 0 else bought), home)
 	var due := next_due()
 	var fit := Forecast.SAFE
 	if home > due:

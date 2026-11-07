@@ -97,7 +97,7 @@ func sizes_of(place: String) -> Array[Stage]:
 	for id: String in stages:
 		if stages[id].place == place:
 			found.append(stages[id])
-	found.sort_custom(func(a: Stage, b: Stage) -> bool: return a.food_scale < b.food_scale)
+	found.sort_custom(func(a: Stage, b: Stage) -> bool: return a.usual_food < b.usual_food)
 	return found
 
 
@@ -342,8 +342,8 @@ func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
 		problems.append("stage %s has no map at '%s'" % [stage.id, stage.map_file])
 	if stage.picture == null:
 		problems.append("stage %s needs a picture" % stage.id)
-	if stage.food_scale <= 0.0:
-		problems.append("stage %s needs a food scale above 0" % stage.id)
+	if stage.usual_food <= 0:
+		problems.append("stage %s needs a usual food above 0" % stage.id)
 	if FileAccess.file_exists(stage.map_file):
 		var map := IslandMap.open(stage.map_file)
 		if stage.monsters < 0 or stage.chests < map.fixed_chests():

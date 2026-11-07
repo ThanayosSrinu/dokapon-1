@@ -38,7 +38,7 @@ func _ready() -> void:
 			shot_atk = true
 			screen._choices.get_child(0).pressed.emit()
 		else:
-			(screen._choices.get_child(screen._choices.get_child_count() - 1) as Button).grab_focus()
+			screen._choices.get_children().filter(func(child: Node) -> bool: return child is Button).back().grab_focus()
 			await get_tree().process_frame
 			await _save(folder + "/battle_3_def.png")
 			shot_def = true

@@ -9,7 +9,6 @@ extends Node
 ## never calls them home.
 
 const OLD_MAP := "res://maps/world_map.json"
-const OLD_FOOD_SCALE := 4.0
 
 var _lord := "listens"
 
@@ -41,7 +40,6 @@ func _stages(id: String) -> Array[Stage]:
 	if id == "old":
 		var old := Stage.new()
 		old.map_file = OLD_MAP
-		old.food_scale = OLD_FOOD_SCALE
 		found.append(old)
 	elif id != "":
 		found.append(Database.get_stage(id))

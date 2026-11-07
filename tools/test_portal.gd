@@ -48,10 +48,10 @@ func _test_data() -> void:
 	_expect(town.send_problem() == "", "someone hired can be sent")
 	var maren := Database.get_adventurer("maren")
 	var bram := Database.get_adventurer("bram")
-	_expect(stage.most_food(bram) == bram.max_food, "a small trip carries their Max Food")
+	_expect(town.max_food(town.roster[0].person) == town.roster[0].person.max_food, "someone new carries their Max Food")
 	_expect(maren.max_food > bram.max_food, "someone carries more")
-	var longest := Database.get_stage("grass_l").most_food(maren)
-	_expect(longest * FoodPicker.THINNEST_STEP <= FoodPicker.TRACK, "the most food fits its picture")
+	_expect(bram.food_at(bram.level + 5) == bram.max_food + 5 * Adventurer.FOOD_PER_LEVEL, "each level adds a little")
+	_expect(maren.food_at(20) * FoodPicker.THINNEST_STEP <= FoodPicker.TRACK, "the most food fits its picture")
 
 
 func _test_nobody_hired() -> void:
@@ -111,9 +111,10 @@ func _test_buying_food() -> void:
 	town.gold = 1000
 	var portal: PortalScreen = await _open(PORTAL)
 	var card := portal.card
-	var most := town.stage.most_food(town.going)
+	var most := town.max_food(town.going)
 	_expect(town.food == most, "the pack starts full")
-	_expect(card.shown_food() == "Food for %s" % Expedition.turns_words(most), "the food is counted in turns")
+	_expect(card.shown_food() == "Food for %d of %s" % [most, Expedition.turns_words(most)], "the food is counted in turns")
+	_expect(card.shown_food_guide() == PortalScreen.USUAL_FOOD % ["small", town.stage.usual_food], "and says how long a trip takes")
 	_expect(card.food.amount == most and card.food.carry == most, "the picture shows it")
 	_expect(card.shown_food_cost() == "%d of your 1000 gold" % (most * TownData.FOOD_PRICE), "and the card shows the price")
 	card.food.grab_focus()
@@ -125,12 +126,17 @@ func _test_buying_food() -> void:
 	_expect(town.food == most, "right adds it back, up to what they can carry")
 	await _pad(JOY_BUTTON_DPAD_LEFT)
 	_expect(town.food == most - 1, "the pad slides the food too")
-	var left := Kit.ICON_SIZE + FoodPicker.ICON_GAP
+	var left := card.food._left()
 	_click_food(card.food, left + card.food._step() * 2.5)
 	_expect(town.food == 3, "a click picks a mark")
 	_drag_food(card.food, left + card.food._step() * 4.5)
 	_expect(town.food == 5, "and dragging slides")
-	_click_food(card.food, 0.0)
+	_click_food(card.food, card.food.size.x - 4.0)
+	_expect(town.food == 6, "the + buys a day more")
+	_click_food(card.food, 4.0)
+	_click_food(card.food, 4.0)
+	_expect(town.food == 4, "and the - a day less")
+	_click_food(card.food, left - 4.0)
 	_expect(town.food == 0, "a click on the icon buys none")
 	_expect(card.shown_food_warning() == PortalScreen.NO_FOOD, "no food gets a plain warning")
 	await get_tree().process_frame
@@ -155,7 +161,7 @@ func _test_buying_food() -> void:
 	_expect(town.forecast(town.stage, town.going, 0)["whole"] == town.forecast(town.stage, town.going, 0)["home"],
 			"with no food, the forecast is the soonest they can be home")
 	town.buy_food()
-	_expect(town.gold == 1, "buying costs 5 gold a day")
+	_expect(town.gold == 1, "buying costs its price a day")
 
 	town.gold = 0
 	portal = await _open(PORTAL)
@@ -171,8 +177,10 @@ func _test_buying_food() -> void:
 	portal = await _open(PORTAL)
 	var large := Database.get_stage("grass_l")
 	portal._choose_size(large)
-	_expect(town.food == large.most_food(town.going), "a bigger trip fills a bigger pack")
-	_expect(portal.card.food.carry == large.most_food(town.going), "and its picture is longer")
+	_expect(town.food == most, "a bigger trip carries no more: Max Food is the person's own")
+	_expect(portal.card.food.carry == most, "and its picture stays the same")
+	_expect(portal.card.shown_food_guide() == PortalScreen.USUAL_FOOD % ["large", large.usual_food], "but it says the trip is longer")
+	_expect(portal.card._food_guide.has_theme_color_override("font_color"), "in red, as it is more than they carry")
 	var picked: Stage = Database.get_stage("grass_s")
 	portal._choose_size(picked)
 	portal._choose_food(1)
@@ -204,8 +212,8 @@ func _test_sizes() -> void:
 	var town := TownData.current()
 	var sizes := Database.sizes_of(town.stage.place)
 	_expect(sizes.size() == 3, "grass comes in three sizes")
-	_expect(sizes[0].food_scale < sizes[1].food_scale and sizes[1].food_scale < sizes[2].food_scale,
-			"a bigger trip carries more food")
+	_expect(sizes[0].usual_food < sizes[1].usual_food and sizes[1].usual_food < sizes[2].usual_food,
+			"a bigger trip takes longer")
 	town.gold = 1000
 	var portal: PortalScreen = await _open(PORTAL)
 	var card := portal.card
@@ -220,8 +228,8 @@ func _test_sizes() -> void:
 	await _tap("ui_accept")
 	_expect(town.stage == sizes[1], "pressing one chooses it")
 	_expect(card.sizes[1].lit and not card.sizes[0].lit, "and it is lit")
-	var carried := sizes[1].most_food(town.going)
-	_expect(card.shown_food() == "Food for %s" % Expedition.turns_words(carried), "the food follows the size")
+	var carried := town.max_food(town.going)
+	_expect(card.shown_food() == "Food for %d of %s" % [carried, Expedition.turns_words(carried)], "the food stays the person's")
 	_expect(card.food.carry == carried, "and so does its picture")
 	_expect(card._picture.texture == sizes[1].picture, "and so does the island")
 	await _tap("ui_right")
@@ -238,7 +246,7 @@ func _test_sizes() -> void:
 	portal = await _open(PORTAL)
 	_expect(portal.card.sizes[2].lit, "the Portal remembers the size")
 	var trip := Expedition.new(town.going, town.stage, 1)
-	_expect(trip.food_left == sizes[2].most_food(town.going), "and the trip carries its food")
+	_expect(trip.food_left == town.max_food(town.going), "and the trip carries their food")
 	_expect(trip.map == IslandMap.open(sizes[2].map_file), "on its island")
 
 

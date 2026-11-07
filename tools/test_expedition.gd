@@ -131,7 +131,7 @@ func _test_days_to() -> void:
 func _test_new_trip() -> void:
 	var trip := Expedition.new(_bram, _grass, 1)
 	_expect(trip.space_id == trip.map.portal, "they start on the Portal")
-	_expect(trip.food_left == _grass.most_food(_bram), "with no food named they carry all they can")
+	_expect(trip.food_left == _bram.max_food, "with no food named they carry all they can")
 	_expect(trip.player.gold == 0, "they set out with no gold")
 	_expect(trip.player.hp == trip.player.get_stat("max_hp"), "they set out at full health")
 	_expect(GameState.players == [trip.player], "they are alone on the board")
@@ -140,7 +140,7 @@ func _test_new_trip() -> void:
 	var maren := Database.get_adventurer("maren")
 	var old_hand := Expedition.new(maren, _grass, 1)
 	_expect(old_hand.player.level == maren.level, "they start at their own level")
-	_expect(old_hand.food_left == _grass.most_food(maren), "their own Max Food counts")
+	_expect(old_hand.food_left == maren.max_food, "their own Max Food counts")
 	_expect(old_hand.player.get_stat("attack") >= maren.stat("attack"), "their level gives their stats")
 
 
@@ -296,13 +296,15 @@ func _test_camp() -> void:
 
 func _test_food_by_size() -> void:
 	var person := Database.get_adventurer("maren")
-	_expect(Database.get_stage("grass_s").most_food(person) == person.max_food, "Small is Max Food x1")
-	_expect(Database.get_stage("grass_m").most_food(person) == floori(person.max_food * 2.5), "Medium is x2.5")
-	_expect(Database.get_stage("grass_l").most_food(person) == person.max_food * 5, "Large is x5")
-	_expect(Database.get_stage("grass_m").most_food(_bram) == 12, "rounded down")
+	var small := Database.get_stage("grass_s")
+	var large := Database.get_stage("grass_l")
+	_expect(Expedition.new(person, large, 1).food_left == Expedition.new(person, small, 1).food_left,
+			"Max Food is the person's own, whatever the size")
+	_expect(person.food_at(person.level + 3) == person.max_food + 3, "a level adds one")
 	for id in Database.sorted_ids(Database.adventurers):
 		var food := Database.get_adventurer(id).max_food
-		_expect(food >= 5 and food <= 8, "%s starts between 5 and 8 Max Food" % id)
+		_expect(food >= 20 and food <= 30, "%s starts with enough for a small trip" % id)
+		_expect(food < large.usual_food, "%s must grow before a large trip" % id)
 
 
 func _test_same_seed_same_trip() -> void:

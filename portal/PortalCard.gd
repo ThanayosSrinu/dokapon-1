@@ -19,6 +19,7 @@ var _about: Label
 var _food_words: Label
 var _food_cost: Label
 var _food_warning: Label
+var _food_guide: Label
 var _portrait: TextureRect
 var _person: Label
 var _class: Label
@@ -67,6 +68,8 @@ func _init() -> void:
 	food_row.add_child(_food_cost)
 	food = FoodPicker.new()
 	supplies.add_child(food)
+	_food_guide = Kit.text("", 0.0, &"PaperLabel")
+	supplies.add_child(_food_guide)
 	_food_warning = Kit.text("", 0.0, &"PaperLabel")
 	_food_warning.add_theme_color_override("font_color", Kit.BLOOD)
 	supplies.add_child(_food_warning)
@@ -136,12 +139,27 @@ func show_stage(stage: Stage) -> void:
 ## could be. A `warning` shows in red, and "" clears it.
 ## `kept` is how much of the food comes from the Storehouse, for free.
 func show_food(amount: int, carry: int, afford: int, cost: int, gold: int, warning: String, kept := 0) -> void:
-	_food_words.text = "Food for %s" % Expedition.turns_words(amount)
+	_food_words.text = "Food for %d of %s" % [amount, Expedition.turns_words(carry)] if carry > 0 else "Food for %s" % Expedition.turns_words(amount)
 	if kept > 0:
 		_food_words.text += ", %d kept" % kept
 	_food_cost.text = "%d of your %d gold" % [cost, gold]
 	_food_warning.text = warning
 	food.show_food(amount, carry, afford)
+
+
+## Shows how long a trip of this size usually takes, so the food can be judged.
+## `short` turns it red, for someone who can't carry that much.
+func show_food_guide(words: String, shown := true, short := false) -> void:
+	_food_guide.text = words
+	_food_guide.visible = shown
+	if short:
+		_food_guide.add_theme_color_override("font_color", Kit.BLOOD)
+	else:
+		_food_guide.remove_theme_color_override("font_color")
+
+
+func shown_food_guide() -> String:
+	return _food_guide.text
 
 
 ## Shows who is going. With nobody, it says where to find someone instead.

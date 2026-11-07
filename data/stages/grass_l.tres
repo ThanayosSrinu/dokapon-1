@@ -12,6 +12,6 @@ size_name = "Large"
 description = "A long way from home, and the best chests."
 map_file = "res://maps/grass_l_1.json"
 picture = ExtResource("2")
-food_scale = 5.0
+usual_food = 75
 monsters = 24
 chests = 12

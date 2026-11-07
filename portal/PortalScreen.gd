@@ -26,6 +26,7 @@ const NOT_READY := "Nobody is ready"
 const GOING := "Good luck, %s!"
 const NO_FOOD := "No food: they will lose health every day."
 const LOW_FOOD := "This food may not last the walk home."
+const USUAL_FOOD := "A %s trip takes about %d turns."
 
 const HERO_SPOT := Vector2(404, 610)
 ## Where they stand when the Portal takes them.
@@ -158,10 +159,14 @@ func _show_trip(town: TownData) -> void:
 
 # The food, and the forecasts that follow from it.
 func _show_food(town: TownData) -> void:
-	var carry := 0 if town.going == null else town.stage.most_food(town.going)
-	var afford := 0 if town.going == null else town.food_limit(town.stage, town.going)
+	var carry := 0 if town.going == null else town.max_food(town.going)
+	var afford := 0 if town.going == null else town.food_limit(town.going)
 	card.show_food(town.food, carry, afford, town.food_cost(), town.gold, _food_warning(town),
 			mini(town.food, town.food_store))
+	var guide := USUAL_FOOD % [town.stage.size_name.to_lower(), town.stage.usual_food]
+	# Red when they can't carry that much: the Food line above says how much they can.
+	var short := town.going != null and carry < town.stage.usual_food
+	card.show_food_guide(guide, town.going != null, short)
 	Tips.attach(card.food, "Food", _food_tip(town))
 	_show_forecasts(town)
 
@@ -227,7 +232,7 @@ func _food_tip(town: TownData) -> String:
 		words += " The Storehouse keeps %s, eaten before any is bought, and keeps what comes home, up to %d days." % [
 				TownData.days_words(town.food_store), town.store_room()]
 	if town.going != null:
-		words += " %s can carry %d on a %s trip." % [town.going.display_name, town.stage.most_food(town.going), town.stage.size_name.to_lower()]
+		words += " %s can carry %d, on any trip. Levels and the town's upgrades raise it." % [town.going.display_name, town.max_food(town.going)]
 	return words
 
 

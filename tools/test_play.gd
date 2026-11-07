@@ -118,7 +118,7 @@ func _back_to_town() -> void:
 ## Plays a trip by the rules, always landing on the first space offered, with the first
 ## move and the first defense: what the hands below do on screen. With `goes_home` off, they stay out at the Portal.
 func _plain_trip(person: Adventurer, stage: Stage, seed_value: int, goes_home := true) -> Expedition:
-	var trip := Expedition.new(person, stage, seed_value, true, stage.most_food(person))
+	var trip := Expedition.new(person, stage, seed_value, true, person.max_food)
 	while not trip.is_over():
 		if trip.start_day():
 			trip.begin_walk(trip.roll())
@@ -598,12 +598,15 @@ func _test_picking_a_move() -> void:
 	_expect(_texts(row) == ["ATK", "Item", "Flee"], "the row is ATK, Item and Flee")
 	row.get_child(0).pressed.emit()
 	await get_tree().process_frame
-	_expect(_texts(row) == ["Slash", "Stab", "Rally", "Back"], "ATK lists every move")
+	_expect(_texts(row) == ["Slash", "Stab", "Rally"], "ATK lists every move")
+	_expect(row.get_child_count() == BattleScreen.MOVE_SLOTS, "and keeps a place empty for a fourth")
+	_expect(battle._back_tab.visible, "Back is the arrow on the corner")
 	_expect((row.get_child(0) as Button).icon == null, "a plain move shows no icon")
 	_expect((row.get_child(2) as Button).icon != null, "a move with a keyword shows its icon")
 	await _tap("ui_cancel")
 	await get_tree().process_frame
 	_expect(row.get_child(0).text == "ATK", "Esc steps back to ATK")
+	_expect(not battle._back_tab.visible, "where there is no way back")
 	_expect(not screen.leave_panel.visible, "and doesn't open the way out")
 	row.get_child(0).pressed.emit()
 	await get_tree().process_frame

@@ -21,6 +21,7 @@ const DOWN_COLOR := Color(1.0, 0.45, 0.4)
 const POISON_COLOR := Color(0.76, 0.48, 0.96)
 
 static var _arrows := {}
+static var _move_box: StyleBoxFlat
 
 var _fighter: Fighter
 var _shows_mp := true
@@ -202,7 +203,7 @@ func _list_moves(fighter: Fighter) -> void:
 
 func _move_row(heading: String, moves: Array[String]) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 6)
 	var title := Kit.text(heading)
 	title.modulate = Kit.GOLD
 	title.custom_minimum_size.x = 44
@@ -213,12 +214,33 @@ func _move_row(heading: String, moves: Array[String]) -> HBoxContainer:
 		var names := MoveIcons.names_for(move)
 		if names.is_empty():
 			names.append(MoveIcons.PLAIN)
+		# A thin box around each move's icons, so that a heavy poison hit reads as one move.
+		var chip := PanelContainer.new()
+		chip.add_theme_stylebox_override("panel", move_box())
+		chip.mouse_filter = Control.MOUSE_FILTER_STOP
+		chip.set_meta(&"move", move_id)
 		var picture := TextureRect.new()
 		picture.texture = MoveIcons.strip(names)
 		picture.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 		picture.custom_minimum_size.y = 24
-		picture.mouse_filter = Control.MOUSE_FILTER_STOP
-		picture.set_meta(&"move", move_id)
-		Tips.attach(picture, move.display_name, MoveIcons.hint_for(move))
-		row.add_child(picture)
+		picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.add_child(picture)
+		Tips.attach(chip, move.display_name, MoveIcons.hint_for(move))
+		row.add_child(chip)
 	return row
+
+
+## The thin box each of a monster's moves sits in.
+static func move_box() -> StyleBoxFlat:
+	if _move_box == null:
+		_move_box = StyleBoxFlat.new()
+		_move_box.bg_color = Color(0.06, 0.05, 0.12, 0.45)
+		_move_box.border_color = Color(1.0, 0.95, 0.82, 0.28)
+		_move_box.set_border_width_all(2)
+		_move_box.set_corner_radius_all(4)
+		_move_box.anti_aliasing = false
+		_move_box.content_margin_left = 6
+		_move_box.content_margin_right = 6
+		_move_box.content_margin_top = 2
+		_move_box.content_margin_bottom = 2
+	return _move_box

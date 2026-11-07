@@ -143,7 +143,7 @@ func _test_storehouse() -> void:
 	_expect(town.food_cost(8) == 0, "kept food costs nothing")
 	_expect(town.food_cost(14) == 4 * TownData.FOOD_PRICE, "only the rest is bought")
 	town.gold = 0
-	_expect(town.food_limit(town.stage, town.going) == mini(10, town.stage.most_food(town.going)),
+	_expect(town.food_limit(town.going) == mini(10, town.max_food(town.going)),
 			"kept food can be taken with no gold")
 	town.gold = 100
 	town.food = 12

@@ -683,6 +683,8 @@ func _press_something(main: GameController, presses: RandomNumberGenerator) -> v
 		for child in box.get_children():
 			if child is Button and not child.disabled:
 				buttons.append(child)
+		if main.battle_screen.visible and main.battle_screen._back_tab.visible:
+			buttons.append(main.battle_screen._back_tab)
 	if not buttons.is_empty():
 		buttons[presses.randi_range(0, buttons.size() - 1)].pressed.emit()
 

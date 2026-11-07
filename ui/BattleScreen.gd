@@ -39,6 +39,11 @@ const ENDING_PAUSE := 1.4
 const BACK := "back"
 const ITEM_MENU := "item"
 const BUTTON_SIZE := Vector2(176, 48)
+## A move list always shows this many places, so that an empty one says a move can still
+## be learned there.
+const MOVE_SLOTS := 4
+## How far the way back pokes out past the command window's top left corner.
+const BACK_TAB_OVERHANG := Vector2(14, 14)
 ## The narrowest a button gets in a row of three.
 const ROW_BUTTON_WIDTH := 116.0
 ## Words longer than this drop to the small size, so they still fit the box.
@@ -65,6 +70,7 @@ var _log: Label
 var _hint: Label
 var _command_panel: PanelContainer
 var _choices: GridContainer
+var _back_tab: Button
 var _flash: ColorRect
 # Fighter -> its BattleSprite.
 var _sprites := {}
@@ -136,6 +142,16 @@ func _ready() -> void:
 	_choices.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_command_panel.add_child(_choices)
 	_command_panel.hide()
+	# The way back out of a list is a small arrow on the window's corner, so that every
+	# place in the grid is left for a choice.
+	_back_tab = Button.new()
+	_back_tab.icon = Kit.icon("back")
+	_back_tab.focus_mode = Control.FOCUS_NONE
+	_back_tab.custom_minimum_size = Vector2(48, 48)
+	_back_tab.pressed.connect(func() -> void: _option_picked.emit(BACK))
+	Tips.attach(_back_tab, "Back", "Or press Esc.")
+	_arena.add_child(_back_tab)
+	_back_tab.hide()
 
 	_flash = ColorRect.new()
 	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -247,7 +263,7 @@ func _get_offense() -> Battle.Choice:
 			if item_id != BACK:
 				return Battle.Choice.new(Battle.Offense.ITEM, item_id)
 		elif picked is String and picked == ATK_MENU:
-			var move_id: String = await _ask(_move_options(attacker, Battle.offense_moves(attacker), true))
+			var move_id: String = await _ask(_move_options(attacker, Battle.offense_moves(attacker), true), MOVE_SLOTS)
 			if move_id != BACK:
 				return Battle.move_choice(move_id)
 		else:
@@ -261,7 +277,7 @@ func _get_defense() -> Dictionary:
 		await _wait(CPU_PAUSE)
 		return {"defense": _battle.cpu_defense(), "move": ""}
 	_say(DEF_WORDS % [_battle.attacker.display_name, defender.display_name])
-	var move_id: String = await _ask(_move_options(defender, Battle.defense_moves(defender), false))
+	var move_id: String = await _ask(_move_options(defender, Battle.defense_moves(defender), false), MOVE_SLOTS)
 	return {"defense": Battle.defense_of(Database.get_move(move_id)), "move": move_id}
 
 
@@ -313,13 +329,19 @@ func _input(event: InputEvent) -> void:
 
 
 ## Shows one button per option and waits for a press. Returns that option's value.
-## Up to three sit in one row; more make a grid of two columns, as a move list does.
-func _ask(options: Array[Dictionary]) -> Variant:
+## Up to three sit in one row; more make a grid of two columns, as a move list does. With
+## `slots`, the grid always has that many places, two to a row, and the ones without a
+## move stand empty. Back is never in the grid: it is the arrow on the window's corner.
+func _ask(options: Array[Dictionary], slots := 0) -> Variant:
 	_clear_choices()
-	_choices.columns = options.size() if options.size() <= 3 else 2
+	_has_back = options.any(func(option: Dictionary) -> bool: return option["value"] is String and option["value"] == BACK)
+	var shown: Array[Dictionary] = []
+	shown.assign(options.filter(func(option: Dictionary) -> bool: return not (option["value"] is String and option["value"] == BACK)))
+	var places := maxi(slots, shown.size())
+	_choices.columns = 2 if slots > 0 or shown.size() > 3 else maxi(shown.size(), 1)
 	var first_enabled: Button
 	var prompt := _log.text
-	for option in options:
+	for option in shown:
 		var button := Button.new()
 		button.text = option["text"]
 		button.custom_minimum_size = Vector2(BUTTON_SIZE.x if _choices.columns <= 2 else ROW_BUTTON_WIDTH, BUTTON_SIZE.y)
@@ -336,6 +358,8 @@ func _ask(options: Array[Dictionary]) -> Variant:
 		_choices.add_child(button)
 		if first_enabled == null and not option["disabled"]:
 			first_enabled = button
+	for place in places - shown.size():
+		_choices.add_child(_empty_slot())
 	# Three that don't fit side by side go two to a row.
 	if _choices.columns == 3 and _choices.get_combined_minimum_size().x > COMMAND_WIDTH - 48.0:
 		_choices.columns = 2
@@ -343,11 +367,13 @@ func _ask(options: Array[Dictionary]) -> Variant:
 			button.custom_minimum_size.x = BUTTON_SIZE.x
 	_place_commands()
 	_command_panel.show()
+	_back_tab.visible = _has_back
 	_keep_focus_on_row()
-	first_enabled.grab_focus()
-	_has_back = options.any(func(option: Dictionary) -> bool: return option["value"] is String and option["value"] == BACK)
+	if first_enabled != null:
+		first_enabled.grab_focus()
 	var picked: Variant = await _option_picked
 	_has_back = false
+	_back_tab.hide()
 	_clear_choices()
 	_command_panel.hide()
 	_say(prompt)
@@ -361,6 +387,24 @@ func _place_commands() -> void:
 	var tall := maxf(_command_panel.size.y, STAGE_SIZE.y - EDGE - BOTTOM_TOP)
 	_command_panel.size = Vector2(COMMAND_WIDTH, tall)
 	_command_panel.position = Vector2(STAGE_SIZE.x - EDGE - COMMAND_WIDTH, STAGE_SIZE.y - EDGE - tall)
+	_back_tab.position = _command_panel.position - BACK_TAB_OVERHANG
+
+
+# A place in a move list with no move in it yet: sunk into the window, with nothing to press.
+func _empty_slot() -> Panel:
+	var slot := Panel.new()
+	slot.custom_minimum_size = BUTTON_SIZE
+	slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.03, 0.08, 0.5)
+	style.border_color = Color(1.0, 0.95, 0.82, 0.12)
+	style.set_border_width_all(2)
+	style.border_width_top = 4
+	style.set_corner_radius_all(6)
+	style.anti_aliasing = false
+	slot.add_theme_stylebox_override("panel", style)
+	return slot
 
 
 # Focus stays in the grid, so a stray key can't wander off to what stands around the

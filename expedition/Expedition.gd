@@ -152,7 +152,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	map = IslandMap.open(stage.map_file)
 	player = make_player(person, hand, kept)
 	level_at_start = player.level
-	food_taken = stage.most_food(person) if food < 0 else food
+	food_taken = person.food_at(0 if kept == null else kept.level) if food < 0 else food
 	food_left = food_taken
 	space_id = map.portal
 	player.space_id = space_id
