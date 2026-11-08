@@ -38,6 +38,7 @@ var _trip: WeakRef
 var _values := {}
 # What a fight and a chest are worth today, worked out once for all the spaces.
 var _fight_worth := 0.0
+var _tough_worth := 0.0
 var _chest_worth := 0.0
 
 
@@ -53,7 +54,8 @@ func plan_day() -> void:
 
 ## Values every space again, because the day or where it is heading has changed.
 func refresh() -> void:
-	_fight_worth = _fight_value()
+	_fight_worth = _fight_value(trip.stage.foes)
+	_tough_worth = _fight_value(trip.stage.tough_foes)
 	_chest_worth = _chest_value()
 	_values = _home_values() if trip.heading_home else _roaming_values()
 
@@ -127,7 +129,7 @@ func _type_value(id: int) -> float:
 		BoardNode.NodeType.TREASURE:
 			return _chest_worth
 		BoardNode.NodeType.BATTLE:
-			return _fight_worth
+			return _tough_worth if trip.is_tough(id) else _fight_worth
 	return 0.0
 
 
@@ -137,15 +139,16 @@ func _chest_value() -> float:
 	return SpaceEffects.CHEST_GOLD_BASE + SpaceEffects.CHEST_GOLD_PER_LEVEL * trip.player.level
 
 
-# The fight on a Battle space, as CpuBrain would judge it. A defeat loses the gold carried
-# and ends the trip.
-func _fight_value() -> float:
+# A fight with one of `pool` (monster id -> weight), as CpuBrain would judge it. A defeat
+# loses the gold carried and ends the trip.
+func _fight_value(pool: Dictionary) -> float:
 	var player := trip.player
-	var ids := Database.monster_ids_for_level(player.level)
-	var gain := 0.0
-	for id in ids:
+	var total := 0
+	var value := 0.0
+	for id: String in pool:
 		var monster := Database.get_monster(id)
-		gain += monster.exp_reward * CpuBrain.EXP_VALUE + monster.gold_reward
-	gain /= ids.size()
-	var odds := CpuBrain.level_odds(player, player.level)
-	return odds * gain - (1.0 - odds) * (player.gold + LOST_TRIP_VALUE)
+		var gain: float = monster.exp_reward * CpuBrain.EXP_VALUE + monster.gold_reward
+		var odds := CpuBrain.monster_odds(player, monster)
+		value += pool[id] * (odds * gain - (1.0 - odds) * (player.gold + LOST_TRIP_VALUE))
+		total += pool[id]
+	return value / maxi(total, 1)

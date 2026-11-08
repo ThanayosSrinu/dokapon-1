@@ -330,6 +330,7 @@ func _create_spaces(rows: Array) -> void:
 		node.node_id = id
 		node.node_type = BoardNode.NodeType.get(type_name, BoardNode.NodeType.NORMAL)
 		node.display_name = row.get("name", "")
+		node.tough = row.get("tough", false)
 		node.position = Vector2(row.get("x", 0), row.get("y", 0)) * GRID
 		# Not owned by the scene, so a space is never saved into it.
 		add_child(node)

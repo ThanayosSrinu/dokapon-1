@@ -10,6 +10,8 @@ const WORDS := {
 	BoardNode.NodeType.PORTAL: "The only way home. They must land on it exactly.",
 }
 const GUARDED_TITLE := "Guarded Treasure"
+const TOUGH_TITLE := "Tough Monster"
+const TOUGH_WORDS := "A tough monster, far stronger than the others here. Landing exactly on it starts a fight, and walking past does nothing. Beat it for big rewards and a material for sure."
 
 
 ## The name and the words for space `id`, as they stand right now.
@@ -21,9 +23,12 @@ static func of(trip: Expedition, id: int) -> Dictionary:
 		return {"title": GUARDED_TITLE if guarded else BoardNode.TYPE_INFO[type]["name"],
 				"text": _chest_words(trip.player, guarded) if seen == null else _seen_chest_words(seen)}
 	var foe := trip.foreseen_monster(id) if type == BoardNode.NodeType.BATTLE else null
+	var tough := type == BoardNode.NodeType.BATTLE and trip.is_tough(id)
 	if foe != null:
-		return {"title": foe.display_name, "text": "%s, level %d. Landing exactly on it starts a fight, and walking past does nothing." % [
-				foe.display_name, foe.level]}
+		return {"title": foe.display_name, "text": "%s%s, level %d. Landing exactly on it starts a fight, and walking past does nothing." % [
+				"A tough monster: " if tough else "", foe.display_name, foe.level]}
+	if tough:
+		return {"title": TOUGH_TITLE, "text": TOUGH_WORDS}
 	return {"title": BoardNode.TYPE_INFO[type]["name"], "text": WORDS.get(type, "")}
 
 

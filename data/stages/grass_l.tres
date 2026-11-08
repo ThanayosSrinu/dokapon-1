@@ -15,4 +15,17 @@ picture = ExtResource("2")
 days = 21
 usual_food = 75
 monsters = 24
+foes = Dictionary[String, int]({
+"hedge_mage": 2,
+"orc_grunt": 3,
+"orc_peon": 2,
+"orc_scout": 3,
+"poacher": 3,
+"slime": 1
+})
+tough = 3
+tough_foes = Dictionary[String, int]({
+"bandit_chief": 1,
+"deserter": 1
+})
 chests = 12

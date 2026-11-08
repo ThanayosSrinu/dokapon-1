@@ -48,6 +48,9 @@ const TYPE_INFO := {
 	NodeType.PORTAL:   {"name": "Portal",   "color": Color(0.35, 0.43, 0.88)},
 }
 
+## The color of a tough monster's space, as tools/make_art.py draws its plate.
+const TOUGH_COLOR := Color("#7a1622")
+
 ## Half the width of the top face of a space, in the world.
 const BASE_RADIUS := 34.0
 ## How much of a circle the space keeps in height: it lies flat on the ground.
@@ -98,6 +101,13 @@ const DASHES := 10
 var guarded := false:
 	set(value):
 		guarded = value
+		queue_redraw()
+
+## When true, a Battle space holds a tough monster, and shows a dark plate with a horned
+## skull. Not saved; set by code while playing.
+var tough := false:
+	set(value):
+		tough = value
 		queue_redraw()
 
 ## When true, a glowing ring is drawn around the space (selected space,
@@ -197,13 +207,19 @@ func bump(strength := 1.0) -> void:
 func _draw() -> void:
 	var space_size := Vector2.ONE * GameArt.SPACE_CELL * GameArt.PIXEL
 	var top_left := -GameArt.SPACE_CENTER * GameArt.PIXEL
-	draw_texture_rect_region(GameArt.SPACES, Rect2(top_left, space_size),
-			Rect2(node_type * GameArt.SPACE_CELL, 0, GameArt.SPACE_CELL, GameArt.SPACE_CELL))
+	var is_tough := tough and node_type == NodeType.BATTLE
+	if is_tough:
+		draw_texture_rect(GameArt.TOUGH_SPACE, Rect2(top_left, space_size), false)
+	else:
+		draw_texture_rect_region(GameArt.SPACES, Rect2(top_left, space_size),
+				Rect2(node_type * GameArt.SPACE_CELL, 0, GameArt.SPACE_CELL, GameArt.SPACE_CELL))
 
 	var icon_size := Vector2.ONE * GameArt.ICON_CELL * GameArt.PIXEL
 	var icon_position := -icon_size * 0.5 - Vector2(0, 2 + _icon_height * GameArt.PIXEL)
 	if guarded and node_type == NodeType.TREASURE:
 		draw_texture_rect(GameArt.GUARDED_CHEST_ICON, Rect2(icon_position, icon_size), false)
+	elif is_tough:
+		draw_texture_rect(GameArt.TOUGH_ICON, Rect2(icon_position, icon_size), false)
 	else:
 		draw_texture_rect_region(GameArt.ICONS, Rect2(icon_position, icon_size),
 				Rect2(node_type * GameArt.ICON_CELL, 0, GameArt.ICON_CELL, GameArt.ICON_CELL))

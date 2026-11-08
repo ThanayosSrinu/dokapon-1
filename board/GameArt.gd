@@ -10,6 +10,10 @@ const SPACES: Texture2D = preload("res://assets/custom/spaces.png")
 const ICONS: Texture2D = preload("res://assets/custom/space_icons.png")
 ## A chest that a monster guards, with fangs and red eyes: drawn by tools/make_art.py.
 const GUARDED_CHEST_ICON: Texture2D = preload("res://assets/custom/guarded_chest_icon.png")
+## A tough monster's space: a dark red plate in a gold rim, and a horned skull. Drawn by
+## tools/make_art.py.
+const TOUGH_SPACE: Texture2D = preload("res://assets/custom/tough_space.png")
+const TOUGH_ICON: Texture2D = preload("res://assets/custom/tough_icon.png")
 ## The Portal's gate on the island, one row of frames. Its foot is at the bottom middle.
 const PORTAL_GATE: Texture2D = preload("res://assets/custom/portal/board_gate.png")
 const DIE: Texture2D = preload("res://assets/custom/die.png")

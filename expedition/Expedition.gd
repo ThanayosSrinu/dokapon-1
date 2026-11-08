@@ -72,6 +72,8 @@ const MATERIAL_DROP_CHANCE := 0.5
 var person: Adventurer
 var player: PlayerData
 var map: IslandMap
+## Where this trip goes. Its monsters come from here.
+var stage: Stage
 ## Who makes the choices when nobody does by hand, or null if the player does.
 var brain: ExpeditionBrain
 ## The current day, starting at 1 once start_day() is called.
@@ -142,6 +144,8 @@ var _foes := {}
 var _board := {}
 # The spaces that hold a monster right now, as keys.
 var _monsters := {}
+# The spaces that hold a tough monster right now, as keys. Each is one of _monsters too.
+var _tough := {}
 # Their level when today's fight began.
 var _level_before_fight := 1
 # What a chest holds while its guardian is fought.
@@ -161,14 +165,15 @@ var _aim := -1
 ## With `hand` on, the player makes every choice and no brain is made. `food` is the days of
 ## food bought, or -1 for all they can carry. `kept` is who they are on the roster, for the
 ## level, gear and moves they have from earlier trips.
-func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false, food := -1, kept: Member = null) -> void:
+func _init(new_person: Adventurer, new_stage: Stage, seed_value := 0, hand := false, food := -1, kept: Member = null) -> void:
 	person = new_person
 	by_hand = hand
+	stage = new_stage
 	# The seed makes the island as well as the trip, so the same seed gives the same trip.
 	var trip_seed := seed_value if seed_value != 0 else randi_range(1, 2147483647)
-	map_data = stage.make_map(trip_seed)
+	map_data = new_stage.make_map(trip_seed)
 	map = IslandMap.new(map_data)
-	trip_days = stage.days
+	trip_days = new_stage.days
 	player = make_player(person, hand, kept)
 	level_at_start = player.level
 	food_taken = (person.food_at() if kept == null else kept.max_food()) if food < 0 else food
@@ -177,7 +182,7 @@ func _init(new_person: Adventurer, stage: Stage, seed_value := 0, hand := false,
 	player.space_id = space_id
 	_depth = map.steps_from(map.portal)
 	GameState.start_expedition(player, trip_seed, map.portal)
-	_set_up_board(stage)
+	_set_up_board()
 	if not by_hand:
 		brain = ExpeditionBrain.new(self)
 
@@ -189,6 +194,11 @@ func is_over() -> bool:
 ## What stands on space `id` on this trip, as a BoardNode.NodeType.
 func type_at(id: int) -> BoardNode.NodeType:
 	return _board[id]
+
+
+## True if a tough monster waits on space `id`. The island marks these spaces.
+func is_tough(id: int) -> bool:
+	return _tough.has(id)
 
 
 ## True if a monster guards the chest on space `id`.
@@ -436,7 +446,7 @@ func land() -> void:
 		BoardNode.NodeType.TREASURE:
 			_open_chest()
 		BoardNode.NodeType.BATTLE:
-			_meet(_foes[space_id] if _foes.has(space_id) else _roll_monster())
+			_meet(_foes[space_id] if _foes.has(space_id) else _roll_monster(space_id))
 
 
 ## Plays `fight` with no screen, as the bot would.
@@ -460,8 +470,10 @@ func finish_fight(lines: PackedStringArray) -> void:
 	if won:
 		fights_won += 1
 		_remember_win(monster, level_before)
+		var was_tough := is_tough(space_id)
 		_clear_space(space_id)
-		if monster != null and _prize == null and GameState.rng.randf() < MATERIAL_DROP_CHANCE:
+		# A tough monster always leaves a material: it is worth the risk.
+		if monster != null and _prize == null and (was_tough or GameState.rng.randf() < MATERIAL_DROP_CHANCE):
 			_gain_material(_common_material())
 		if _prize != null:
 			_prize.guardian = null
@@ -492,23 +504,28 @@ func depth_of(id: int) -> int:
 
 # --- The steps of a day ------------------------------------------------------
 
-# Puts this trip's monsters and chests on the map, from the seed. What the file fixes in
-# place stays, and the rest go on empty road.
-func _set_up_board(stage: Stage) -> void:
+# Puts this trip's monsters and chests on the map, from the seed. What the island fixes in
+# place stays, its tough-monster spaces among them, and the rest go on empty road.
+func _set_up_board() -> void:
 	var road: Array[int] = []
+	var ordinary := 0
 	for id in map.spaces():
 		_board[id] = map.type_of(id)
 		if _board[id] == BoardNode.NodeType.NORMAL:
 			road.append(id)
 		elif _board[id] == BoardNode.NodeType.BATTLE:
 			_monsters[id] = true
+			if map.is_tough(id):
+				_tough[id] = true
+			else:
+				ordinary += 1
 	_shuffle(road)
 	for index in stage.chests - map.fixed_chests():
 		_board[road.pop_back()] = BoardNode.NodeType.TREASURE
 	for id in map.spaces():
 		if _board[id] == BoardNode.NodeType.TREASURE and GameState.rng.randf() < SpaceEffects.CHEST_GUARDIAN_CHANCE:
 			_guarded[id] = true
-	for index in stage.monsters - _monsters.size():
+	for index in stage.monsters - ordinary:
 		var id: int = road.pop_back()
 		_board[id] = BoardNode.NodeType.BATTLE
 		_monsters[id] = true
@@ -520,7 +537,7 @@ func _set_up_board(stage: Stage) -> void:
 	if player.perk(SkillTree.SEE_MONSTERS) > 0.0:
 		for id in map.spaces():
 			if _monsters.has(id):
-				_foes[id] = _roll_monster()
+				_foes[id] = _roll_monster(id)
 
 
 ## What the chest on space `id` holds, if they can see it, or null.
@@ -533,14 +550,14 @@ func foreseen_monster(id: int) -> MonsterData:
 	return _foes.get(id) if _monsters.has(id) else null
 
 
-func _roll_monster() -> MonsterData:
-	var ids := Database.monster_ids_for_level(player.level)
-	return Database.get_monster(ids[GameState.rng.randi_range(0, ids.size() - 1)])
+# The monsters belong to the place, not to the hero's level: see Stage.foes.
+func _roll_monster(id: int) -> MonsterData:
+	return stage.roll_tough_foe() if is_tough(id) else stage.roll_foe()
 
 
 func _roll_chest(id: int) -> SpaceEffects.Result:
 	var rolled := SpaceEffects.roll_chest(player)
-	rolled.guardian = SpaceEffects.roll_guardian(player) if is_guarded(id) else null
+	rolled.guardian = stage.roll_guardian() if is_guarded(id) else null
 	return rolled
 
 
@@ -556,6 +573,7 @@ func _shuffle(list: Array[int]) -> void:
 func _clear_space(id: int) -> void:
 	_board[id] = BoardNode.NodeType.NORMAL
 	_monsters.erase(id)
+	_tough.erase(id)
 	_foes.erase(id)
 	_guarded.erase(id)
 	space_emptied.emit(id)

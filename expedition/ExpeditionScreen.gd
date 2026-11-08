@@ -251,6 +251,7 @@ func _on_space_emptied(id: int) -> void:
 	var node := board.get_board_node(id)
 	node.node_type = trip.type_at(id)
 	node.guarded = trip.is_guarded(id)
+	node.tough = trip.is_tough(id)
 	node.bump()
 	_refresh_map()
 
@@ -846,6 +847,7 @@ func _build_world(town: TownData) -> void:
 	for id in trip.map.spaces():
 		board.get_board_node(id).node_type = trip.type_at(id)
 		board.get_board_node(id).guarded = trip.is_guarded(id)
+		board.get_board_node(id).tough = trip.is_tough(id)
 	trip.space_emptied.connect(_on_space_emptied)
 	var start := board.get_starting_node().global_position
 	camera = BoardCamera.new()

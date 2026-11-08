@@ -26,6 +26,8 @@ const FEWEST_ZONE_SPACES := 3
 const FEWEST_ZONE_ROADS := 2
 ## No two zones may share more roads than this, so each stays a place of its own.
 const MOST_ROADS_BETWEEN_ZONES := 2
+## A tough-monster space stands at least this many steps from the Portal.
+const TOUGH_FROM_PORTAL := 3
 ## All that a trip map may hold. The stage places most monsters and chests each trip.
 const ON_TRIPS := [BoardNode.NodeType.PORTAL, BoardNode.NodeType.NORMAL, BoardNode.NodeType.BATTLE, BoardNode.NodeType.TREASURE]
 
@@ -120,6 +122,7 @@ func problems() -> PackedStringArray:
 			found.append("Space %d is a kind of space trips don't have." % id)
 	for spur in spurs:
 		_check_spur_end(spur, found)
+	_check_tough(found)
 	found.append_array(_zone_problems())
 	return found
 
@@ -139,6 +142,36 @@ func _check_spur_end(spur: Dictionary, found: PackedStringArray) -> void:
 	for id: int in spur["spaces"]:
 		if map.neighbors(id).size() == 1 and map.type_of(id) != BoardNode.NodeType.TREASURE:
 			found.append("The spur end at space %d needs to be TREASURE." % id)
+
+
+# Tough monsters stand on plain road away from the Portal, never side by side, and when an
+# island has any, one guards the deepest spur on the space before its chest.
+func _check_tough(found: PackedStringArray) -> void:
+	var tough := map.tough_spaces()
+	if tough.is_empty():
+		return
+	var depth := map.steps_from(map.portal)
+	for id in tough:
+		if map.type_of(id) != BoardNode.NodeType.BATTLE:
+			found.append("Tough space %d needs to be BATTLE." % id)
+		if map.neighbors(id).size() != 2:
+			found.append("Tough space %d is on a fork or a dead end, and needs plain road." % id)
+		if not _in_spur.has(id) and depth[id] < TOUGH_FROM_PORTAL:
+			found.append("Tough space %d is %d steps from the Portal, and %d is the least." % [id, depth[id], TOUGH_FROM_PORTAL])
+		for next in map.neighbors(id):
+			if map.is_tough(next) and next > id:
+				found.append("Tough spaces %d and %d are side by side." % [id, next])
+	var guarded := false
+	for spur in spurs:
+		if spur["depth"] != deepest_spur():
+			continue
+		for id: int in spur["spaces"]:
+			if map.is_tough(id):
+				for next in map.neighbors(id):
+					if map.neighbors(next).size() == 1:
+						guarded = true
+	if not guarded:
+		found.append("No tough monster guards the chest at the end of the deepest spur.")
 
 
 func _zone_problems() -> PackedStringArray:

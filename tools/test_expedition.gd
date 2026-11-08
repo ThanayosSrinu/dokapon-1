@@ -150,7 +150,12 @@ func _test_board_is_made_each_trip() -> void:
 		var trip := Expedition.new(_bram, stage, 3)
 		_expect(_board_of(trip) == _board_of(Expedition.new(_bram, stage, 3)), "%s: a seed gives the same board" % id)
 		_expect(_board_of(trip) != _board_of(Expedition.new(_bram, stage, 4)), "%s: another seed gives another board" % id)
-		_expect(_count(trip, BoardNode.NodeType.BATTLE) == stage.monsters, "%s has the stage's monsters" % id)
+		_expect(_count(trip, BoardNode.NodeType.BATTLE) == stage.monsters + stage.tough, "%s has the stage's monsters" % id)
+		var tough := trip.map.tough_spaces()
+		_expect(tough.size() == stage.tough and stage.tough > 0, "%s has the stage's tough spaces" % id)
+		for space in tough:
+			_expect(trip.is_tough(space) and trip.type_at(space) == BoardNode.NodeType.BATTLE, "%s: a tough space holds a monster" % id)
+		_test_monsters_of_the_place(stage)
 		_expect(_count(trip, BoardNode.NodeType.TREASURE) == stage.chests, "%s has the stage's chests" % id)
 		_expect(trip.type_at(trip.map.portal) == BoardNode.NodeType.PORTAL, "%s keeps its Portal" % id)
 		var kinds := [BoardNode.NodeType.PORTAL, BoardNode.NodeType.NORMAL, BoardNode.NodeType.BATTLE, BoardNode.NodeType.TREASURE]
@@ -163,6 +168,37 @@ func _test_board_is_made_each_trip() -> void:
 					for space: int in spur["spaces"]:
 						if other.map.neighbors(space).size() == 1:
 							_expect(other.type_at(space) == BoardNode.NodeType.TREASURE, "%s: a deep spur always ends in a chest" % id)
+
+
+# Monsters come from the place, not from the hero's level, and a tough space holds a tough
+# monster that always leaves a material.
+func _test_monsters_of_the_place(stage: Stage) -> void:
+	var met := {}
+	var tough_met := {}
+	for seed_value in range(1, 31):
+		var trip := Expedition.new(_bram, stage, seed_value, true)
+		trip.player.level = 20
+		for space in trip.map.spaces():
+			if trip.type_at(space) == BoardNode.NodeType.BATTLE:
+				var foe: MonsterData = trip._roll_monster(space)
+				(tough_met if trip.is_tough(space) else met)[foe.id] = true
+	for id: String in met:
+		_expect(stage.foes.has(id), "%s: %s is one of its foes, whatever the hero's level" % [stage.id, id])
+	for id: String in tough_met:
+		_expect(stage.tough_foes.has(id), "%s: %s is one of its tough foes" % [stage.id, id])
+	_expect(not tough_met.is_empty(), "%s: tough spaces meet tough foes" % stage.id)
+	var trip := Expedition.new(_bram, stage, 5, true)
+	var space: int = trip.map.tough_spaces()[0]
+	trip.space_id = space
+	trip.player.level = 40
+	trip.begin_walk(0)
+	trip.land()
+	_expect(trip.fight != null and stage.tough_foes.has(trip.fight.opponent.monster.id), "%s: landing on a tough space fights a tough foe" % stage.id)
+	var before := trip.materials.size()
+	trip.auto_fight()
+	if trip.ending == Expedition.Ending.NONE:
+		_expect(not trip.is_tough(space) and trip.type_at(space) == BoardNode.NodeType.NORMAL, "%s: a beaten tough monster leaves empty road" % stage.id)
+		_expect(trip.materials.size() == before + 1 or trip.materials.size() == Expedition.MATERIAL_ROOM, "%s: a tough monster always leaves a material" % stage.id)
 
 
 func _test_used_spaces_turn_empty() -> void:

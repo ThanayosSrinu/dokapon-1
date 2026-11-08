@@ -15,6 +15,9 @@ extends RefCounted
 ##    and the end of every spur is a chest.
 ## 3. Zones grow out from spaces far apart, so each one is one piece.
 ## 4. Lakes sit inside rings, and a big island gets a river from a lake to the sea.
+## 4b. Tough monsters. One stands on the deepest spur, just before its chest, so the best
+##    chest has a price. The rest stand on plain road far from the Portal, each in a zone of
+##    its own. See _place_tough().
 ## 5. Many islands are made like this, those that break the map principle in MapReport are
 ##    thrown away, and the best looking of the rest is kept. See _score().
 
@@ -51,6 +54,8 @@ const ZONE_NOUNS: Array[String] = ["Fields", "Meadow", "Hollow", "Woods", "Glade
 
 var target := 36
 var chests := 4
+## How many tough-monster spaces to place.
+var tough := 0
 var rng := RandomNumberGenerator.new()
 
 # The island being made.
@@ -70,6 +75,7 @@ static func make(stage: Stage, seed_value: int) -> Dictionary:
 	var maker := IslandMaker.new()
 	maker.target = stage.spaces
 	maker.chests = stage.chests
+	maker.tough = stage.tough
 	return maker.best(seed_value)
 
 
@@ -429,8 +435,67 @@ func _finish() -> Dictionary:
 	for attempt in ZONE_TRIES:
 		data["zones"] = _zones(graph, points, ids)
 		if not data["zones"].is_empty() and _zones_fit(data["zones"], graph):
-			return data
+			return data if _place_tough(data, graph) else {}
 	return {}
+
+
+# Marks `tough` Battle spaces in `data`. The first guards the deepest spur, on the space
+# before its chest. The rest go on plain road, as far from the Portal as can be, never next
+# to another tough space, and each in a zone that has none yet while there is one. MapReport
+# checks the same rules. Returns false if there was no room for them all.
+func _place_tough(data: Dictionary, graph: Dictionary) -> bool:
+	if tough <= 0:
+		return true
+	var chosen: Array[int] = []
+	var steps := _steps_from(graph, 0)
+	# The spurs as MapReport sees them, since a later spur may branch off an earlier one.
+	# The guard stands before the furthest chest of the deepest spur.
+	var report := MapReport.new(IslandMap.new(data))
+	var on_spur := {}
+	var far_end := -1
+	for spur: Dictionary in report.spurs:
+		for id: int in spur["spaces"]:
+			on_spur[id] = true
+			if spur["depth"] == report.deepest_spur() and graph[id].size() == 1:
+				if far_end == -1 or steps[id] > steps[far_end]:
+					far_end = id
+	if far_end == -1 or graph[graph[far_end][0]].size() != 2:
+		return false
+	chosen.append(graph[far_end][0])
+	var candidates: Array[int] = []
+	for id: int in graph:
+		if id != 0 and graph[id].size() == 2 and not on_spur.has(id) and steps[id] >= MapReport.TOUGH_FROM_PORTAL:
+			candidates.append(id)
+	_shuffle(candidates)
+	candidates.sort_custom(func(a: int, b: int) -> bool: return steps[a] > steps[b])
+	var zone_of := {}
+	for zone: Dictionary in data["zones"]:
+		for id: int in zone["spaces"]:
+			zone_of[id] = zone["id"]
+	# First each in a zone of its own, then anywhere left.
+	for pass_index in 2:
+		for id in candidates:
+			if chosen.size() >= tough:
+				break
+			if chosen.has(id) or _next_to_any(graph, id, chosen):
+				continue
+			if pass_index == 0 and chosen.any(func(other: int) -> bool: return zone_of.get(other) == zone_of.get(id)):
+				continue
+			chosen.append(id)
+	if chosen.size() < tough:
+		return false
+	for row: Dictionary in data["spaces"]:
+		if chosen.has(row["id"]):
+			row["type"] = "BATTLE"
+			row["tough"] = true
+	return true
+
+
+func _next_to_any(graph: Dictionary, id: int, others: Array[int]) -> bool:
+	for next: int in graph[id]:
+		if others.has(next):
+			return true
+	return false
 
 
 # MapReport's zone rules: big enough, a way out on two sides, and no two zones joined by

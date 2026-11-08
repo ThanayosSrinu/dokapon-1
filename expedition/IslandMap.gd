@@ -18,6 +18,8 @@ var zones: Array[Dictionary] = []
 
 # Space id -> its BoardNode.NodeType, in map-file order.
 var _types := {}
+# The ids of tough-monster spaces, as keys. Each is a BATTLE space with "tough" set.
+var _tough := {}
 # Space id -> the ids it links to, from either end.
 var _links := {}
 # Vector3i(id, came_from, steps) -> the ids landings() found.
@@ -38,6 +40,8 @@ func _init(data: Dictionary) -> void:
 	for row: Dictionary in data["spaces"]:
 		var id := int(row["id"])
 		_types[id] = BoardNode.NodeType[row["type"]]
+		if row.get("tough", false):
+			_tough[id] = true
 		_links[id] = [] as Array[int]
 		if _types[id] == BoardNode.NodeType.PORTAL or _types[id] == BoardNode.NodeType.CASTLE:
 			portal = id
@@ -67,6 +71,19 @@ func neighbors(id: int) -> Array[int]:
 
 
 ## How many spaces the file itself marks as chests.
+## True if space `id` is a tough-monster space: a Battle space marked on the board.
+func is_tough(id: int) -> bool:
+	return _tough.has(id)
+
+
+## The ids of the tough-monster spaces, sorted.
+func tough_spaces() -> Array[int]:
+	var ids: Array[int] = []
+	ids.assign(_tough.keys())
+	ids.sort()
+	return ids
+
+
 func fixed_chests() -> int:
 	return _types.values().count(BoardNode.NodeType.TREASURE)
 

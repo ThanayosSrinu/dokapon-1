@@ -192,6 +192,40 @@ def make_guarded_icon():
     icon.save(OUT / "guarded_chest_icon.png")
 
 
+# A tough monster's space: a dark red plate in a gold rim, and a horned skull with burning
+# eyes over it, so it reads as "danger" from far away. "h" is horn, "e" is the glowing eye.
+TOUGH_COLOR = "#7a1622"
+TOUGH_SKULL = [
+    "h..........h", "hh........hh", ".hh.ssss.hh.", "..hssssssh..", ".ssssssssss.",
+    ".sReesseeRs.", ".sRRssssRRs.", ".ssssNNssss.", "..ssssssss..", "...sNsNsN...",
+    "...ssssss...",
+]
+TOUGH_COLORS = dict(PALETTE, h="#e8dcc0", e="#ffd23a")
+
+
+def make_tough_space():
+    """The plate and the icon of a tough-monster space."""
+    disc = space_disc(hexc(TOUGH_COLOR), hexc("#f6dc86"), hexc("#b57f2c"))
+    disc.save(OUT / "tough_space.png")
+    icon = Image.new("RGBA", (ICON_CELL, ICON_CELL), (0, 0, 0, 0))
+    rows = TOUGH_SKULL
+    left = (ICON_CELL - max(len(r) for r in rows)) // 2
+    top = (ICON_CELL - len(rows)) // 2
+    filled = {}
+    for y, row in enumerate(rows):
+        for x, char in enumerate(row):
+            if char != ".":
+                filled[(x, y)] = hexc(TOUGH_COLORS[char])
+    for (x, y) in filled:
+        for ox in (-1, 0, 1):
+            for oy in (-1, 0, 1):
+                if (x + ox, y + oy) not in filled:
+                    icon.putpixel((left + x + ox, top + y + oy), INK)
+    for (x, y), color in filled.items():
+        icon.putpixel((left + x, top + y), color)
+    icon.save(OUT / "tough_icon.png")
+
+
 # --- The die ----------------------------------------------------------------
 
 DIE_CELL = 72
@@ -919,6 +953,7 @@ if __name__ == "__main__":
     make_spaces()
     make_icons()
     make_guarded_icon()
+    make_tough_space()
     make_die()
     make_fx()
     make_crown()

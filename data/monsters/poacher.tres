@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MonsterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/MonsterData.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/puny/characters/Archer-Purple.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = "poacher"
+display_name = "Poacher"
+description = "Fast, but thin-skinned. It shoots first and rarely blocks."
+sheet = ExtResource("2")
+level = 5
+min_level = 4
+max_level = 8
+stats = Dictionary[String, int]({
+"attack": 18,
+"defense": 4,
+"magic": 1,
+"max_hp": 38,
+"max_mp": 1,
+"speed": 14
+})
+moves = Array[String](["stab", "lunge", "venom", "glance", "ward_off"])
+offense_weights = Dictionary[String, int]({
+"attack": 7,
+"smash": 1,
+"special": 3
+})
+defense_weights = Dictionary[String, int]({
+"guard": 1,
+"ward": 5
+})
+exp_reward = 90
+gold_reward = 70
+loot = Array[String](["herb", "scout_jerkin"])
+loot_chance = 0.2

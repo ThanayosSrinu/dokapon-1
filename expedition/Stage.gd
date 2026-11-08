@@ -23,8 +23,17 @@ extends Resource
 ## About how many turns a whole trip here takes, said at the Portal so that the food can be
 ## judged. It never limits the food: only the person's own Max Food does.
 @export var usual_food := 25
-## How many monsters a trip here meets on the board, placed anew each trip.
+## How many monsters a trip here meets on the board, placed anew each trip. Tough
+## monsters are counted apart, in `tough`.
 @export var monsters := 0
+## The monsters of this place: monster id -> how often it is met. A monster here
+## belongs to the place, not to the hero's level, so going back somewhere easy feels easy.
+@export var foes: Dictionary[String, int] = {}
+## How many tough-monster spaces each island has. IslandMaker places them, and each is
+## marked on the board, so the player can choose to face one or walk past.
+@export var tough := 0
+## The tough monsters of this place: monster id -> how often it is met.
+@export var tough_foes: Dictionary[String, int] = {}
 ## How many chests a trip here finds, counting the ones the map file fixes in place.
 @export var chests := 0
 
@@ -32,6 +41,23 @@ extends Resource
 
 # Stage id -> an island made from a fixed seed, for numbers said before a trip starts.
 static var _samples := {}
+
+
+## A monster for an ordinary Battle space here.
+func roll_foe() -> MonsterData:
+	return Database.get_monster(SpaceEffects.weighted_pick(foes))
+
+
+## A monster for a tough-monster space.
+func roll_tough_foe() -> MonsterData:
+	return Database.get_monster(SpaceEffects.weighted_pick(tough_foes))
+
+
+## A monster to guard a chest here: the stronger of two of this place's foes.
+func roll_guardian() -> MonsterData:
+	var first := roll_foe()
+	var second := roll_foe()
+	return first if first.level >= second.level else second
 
 
 ## A new island for a trip here, the same for the same `seed_value`. A seed that makes no

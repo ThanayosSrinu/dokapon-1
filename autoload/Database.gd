@@ -348,8 +348,18 @@ func _check_stage(stage: Stage, problems: PackedStringArray) -> void:
 		problems.append("stage %s needs a usual food above 0" % stage.id)
 	if stage.monsters < 0 or stage.chests < 3:
 		problems.append("stage %s needs at least 3 chests: islands put one at the end of each spur" % stage.id)
-	if stage.monsters + stage.chests >= stage.spaces / 2:
+	if stage.monsters + stage.tough + stage.chests >= stage.spaces / 2:
 		problems.append("stage %s has more monsters and chests than its islands have room for" % stage.id)
+	if stage.foes.is_empty():
+		problems.append("stage %s needs foes, the monsters met there" % stage.id)
+	if stage.tough < 0 or stage.tough_foes.is_empty():
+		problems.append("stage %s needs tough foes, for tough spaces and guarded chests" % stage.id)
+	for pool: Dictionary in [stage.foes, stage.tough_foes]:
+		for id: String in pool:
+			if not monsters.has(id):
+				problems.append("stage %s names a monster '%s' that does not exist" % [stage.id, id])
+			elif pool[id] < 1:
+				problems.append("stage %s gives monster %s a weight below 1" % [stage.id, id])
 	if stage.place == "" or stage.size_name == "":
 		problems.append("stage %s needs a place and a size name" % stage.id)
 
