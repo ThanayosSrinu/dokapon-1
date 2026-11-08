@@ -222,7 +222,9 @@ func _test_arrow() -> void:
 ## The menu as a player with no saved town sees it. Showing the town saves it, so a test
 ## that has been to town would otherwise find Continue first.
 func _open_fresh_menu() -> MainMenu:
-	TownData.delete_save()
+	for which in range(1, TownData.SLOT_COUNT + 1):
+		if which != TownData.TEST_SLOT:
+			TownData.delete_save(which)
 	return await _open(MENU)
 
 
@@ -261,6 +263,14 @@ func _test_menu_with_keys() -> void:
 	_expect(_focused() == menu.quit_button, "Esc on the menu goes to Quit")
 	menu.play_button.grab_focus()
 	await _tap("ui_accept")
+	await _wait()
+	_expect(menu.slots_panel.visible and _focused() == menu.slot_buttons[1], "Play opens the save slots on slot 1")
+	_expect(menu.slot_buttons[1].text == "Slot 1: New town", "an empty slot offers a new town")
+	await _tap("ui_cancel")
+	_expect(not menu.slots_panel.visible and _focused() == menu.play_button, "Esc closes the save slots")
+	await _tap("ui_accept")
+	await _wait()
+	await _tap("ui_accept")
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "Play leads to the town")
 	var town: TownScreen = get_tree().current_scene
@@ -282,6 +292,8 @@ func _test_menu_with_controller() -> void:
 	_expect(not menu.help_page().visible, "B closes How to Play")
 	menu.play_button.grab_focus()
 	await _pad(JOY_BUTTON_A)
+	await _wait()
+	await _pad(JOY_BUTTON_A)
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "A on Play leads to the town")
 	await _pad(JOY_BUTTON_B)
@@ -297,6 +309,8 @@ func _test_menu_with_mouse() -> void:
 	_expect(_focused() == menu.options_button, "hovering takes the focus")
 	_expect(menu.options_button.shown_offset == KitButton.LIFT, "hovering lifts")
 	await _click(menu.play_button)
+	await _wait()
+	await _click(menu.slot_buttons[1])
 	await _until_settled()
 	_expect(get_tree().current_scene is TownScreen, "a click on Play leads to the town")
 	var town: TownScreen = get_tree().current_scene

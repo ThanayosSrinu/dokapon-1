@@ -53,12 +53,24 @@ const BUILDINGS := {
 	"shop": {"name": "Shop", "job": "Buy gear for your people, and sell what trips bring home.", "start": 1},
 	"portal": {"name": "Portal", "job": "Send your adventurer off to explore, and bring them home.", "start": 1},
 }
-## The file the town is kept in, in SaveGame.folder().
-const SAVE_FILE := "town.save"
+## The files towns are kept in, in SaveGame.folder(): one per save slot.
+const SAVE_FILE := "town_%d.save"
+## Where saves were kept before there were slots. Moved into slot 1 when found.
+const OLD_SAVE_FILE := "town.save"
+## How many save slots there are.
+const SLOT_COUNT := 3
+## The slot kept for testing: made afresh with plenty of everything each time the game opens.
+const TEST_SLOT := 3
+const TEST_GOLD := 999999
+const TEST_MATERIALS := 999
 ## Raise this when what a town saves changes. Older files are then refused.
 const SAVE_VERSION := 1
 
 static var _current: TownData
+## The save slot the current town is kept in.
+static var slot := 1
+## Whether the test slot has been made afresh since the game opened.
+static var _test_slot_ready := false
 
 var gold := START_GOLD
 ## Today. See Calendar.
@@ -759,20 +771,22 @@ func reset_tree(one: Member) -> bool:
 
 # --- Saving -------------------------------------------------------------------
 
-static func save_path() -> String:
-	return SaveGame.folder().path_join(SAVE_FILE)
+## The file of save slot `which`, or of the current slot.
+static func save_path(which := 0) -> String:
+	_move_old_save()
+	return SaveGame.folder().path_join(SAVE_FILE % (slot if which == 0 else which))
 
 
-static func has_save() -> bool:
-	return FileAccess.file_exists(save_path())
+static func has_save(which := 0) -> bool:
+	return FileAccess.file_exists(save_path(which))
 
 
-static func delete_save() -> void:
-	if has_save():
-		DirAccess.remove_absolute(save_path())
+static func delete_save(which := 0) -> void:
+	if has_save(which):
+		DirAccess.remove_absolute(save_path(which))
 
 
-## Writes the town to its file. A lost town is never kept: its file is deleted instead.
+## Writes the town to its slot's file. A lost town is never kept: its file is deleted instead.
 func save() -> void:
 	if lost():
 		delete_save()
@@ -782,22 +796,79 @@ func save() -> void:
 		file.store_var(to_save())
 
 
-## Makes the saved town the current one. Returns false, changing nothing, if there is no
-## save or it can't be read.
-static func load_saved() -> bool:
-	if not has_save():
-		return false
-	var file := FileAccess.open(save_path(), FileAccess.READ)
-	if file == null:
-		return false
-	var saved: Variant = file.get_var(false)
-	if not saved is Dictionary or saved.get("version", 0) != SAVE_VERSION:
+## Makes the town saved in slot `which` (or the current slot) the current one, and that
+## slot the current slot. Returns false, changing nothing, if there is no save or it
+## can't be read.
+static func load_saved(which := 0) -> bool:
+	var saved := read_slot(which)
+	if saved.is_empty():
 		return false
 	var town := from_save(saved)
 	if town == null:
 		return false
+	if which != 0:
+		slot = which
 	_current = town
 	return true
+
+
+## What slot `which` holds, as plain values, or {} if it is empty or can't be read.
+static func read_slot(which := 0) -> Dictionary:
+	if not has_save(which):
+		return {}
+	var file := FileAccess.open(save_path(which), FileAccess.READ)
+	if file == null:
+		return {}
+	var saved: Variant = file.get_var(false)
+	if not saved is Dictionary or saved.get("version", 0) != SAVE_VERSION:
+		return {}
+	return saved
+
+
+## The slot of ordinary play saved to most recently, or 0 if they are all empty.
+static func newest_slot() -> int:
+	var found := 0
+	var latest := 0
+	for which in range(1, SLOT_COUNT + 1):
+		if which == TEST_SLOT or not has_save(which):
+			continue
+		var saved_at := FileAccess.get_modified_time(save_path(which))
+		if saved_at > latest:
+			latest = saved_at
+			found = which
+	return found
+
+
+## Throws away whatever the test slot holds and puts a new town there with the King's
+## first letter already done and claimed (so its plans are open), TEST_GOLD gold and
+## TEST_MATERIALS of every material. Done once each time the game opens. The current
+## town and slot are left as they were.
+static func reset_test_slot() -> void:
+	var town := TownData.new()
+	town.letter_progress = town.letter()["count"]
+	town.claim_letter()
+	town.gold = TEST_GOLD
+	for id: String in Database.materials:
+		town.materials[id] = TEST_MATERIALS
+	var file := FileAccess.open(save_path(TEST_SLOT), FileAccess.WRITE)
+	if file != null:
+		file.store_var(town.to_save())
+	_test_slot_ready = true
+
+
+## Resets the test slot if that has not been done since the game opened.
+static func ready_test_slot() -> void:
+	if not _test_slot_ready:
+		reset_test_slot()
+
+
+## A town saved before there were slots goes into slot 1, unless slot 1 is taken.
+static func _move_old_save() -> void:
+	var folder := SaveGame.folder()
+	var old := folder.path_join(OLD_SAVE_FILE)
+	var first := folder.path_join(SAVE_FILE % 1)
+	if FileAccess.file_exists(old) and not FileAccess.file_exists(first):
+		DirAccess.rename_absolute(old, first)
 
 
 ## The town as plain values, which hold no objects and so can't run code when read.

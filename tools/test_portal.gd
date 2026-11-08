@@ -371,6 +371,8 @@ func _test_path_with_keys() -> void:
 	TownData.start_new()
 	await _open_fresh_menu()
 	await _tap("ui_accept")
+	await _wait()
+	await _tap("ui_accept")
 	await _until_settled()
 	var town: TownScreen = get_tree().current_scene
 	_expect(town is TownScreen, "keys: the menu opens the town")
@@ -393,6 +395,8 @@ func _test_path_with_keys() -> void:
 func _test_path_with_controller() -> void:
 	TownData.start_new()
 	await _open_fresh_menu()
+	await _pad(JOY_BUTTON_A)
+	await _wait()
 	await _pad(JOY_BUTTON_A)
 	await _until_settled()
 	await _pad(JOY_BUTTON_A)
@@ -423,6 +427,8 @@ func _test_path_with_mouse() -> void:
 	TownData.start_new()
 	var menu: MainMenu = await _open_fresh_menu()
 	await _click(menu.play_button)
+	await _wait()
+	await _click(menu.slot_buttons[1])
 	await _until_settled()
 	var town: TownScreen = get_tree().current_scene
 	await _click(town.building("tavern"))

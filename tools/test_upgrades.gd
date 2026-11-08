@@ -389,29 +389,71 @@ func _test_town_shows_levels() -> void:
 
 
 func _test_menu_continue() -> void:
-	TownData.delete_save()
+	for which in range(1, TownData.SLOT_COUNT + 1):
+		TownData.delete_save(which)
+	TownData.reset_test_slot()
 	var menu: MainMenu = await _open(MENU)
 	_expect(menu.continue_button == null and menu.play_button.text == "Play", "with no save, there is only Play")
+	_expect(TownData.has_save(TownData.TEST_SLOT), "the test slot is always there")
+	var tested := TownData.read_slot(TownData.TEST_SLOT)
+	_expect(tested["gold"] == TownData.TEST_GOLD, "the test town has its gold")
+	var plenty := true
+	for id: String in Database.materials:
+		plenty = plenty and tested["materials"].get(id, 0) == TownData.TEST_MATERIALS
+	_expect(plenty and not Database.materials.is_empty(), "and plenty of every material")
+	_expect(tested["letter_index"] == 1 and tested["opened"].has("storehouse") and tested["opened"].has("smithy"),
+			"and the first letter done, so its plans are open")
+	TownData.slot = 2
 	var town := _town(4321)
 	town.save()
+	TownData.slot = 1
 	TownData.start_new()
 	menu = await _open(MENU)
 	_expect(menu.continue_button != null and _focused() == menu.continue_button, "with a save, Continue comes first")
-	_expect(menu.play_button.text == "New Town", "and Play becomes New Town")
+	_expect(menu.play_button.text == "Saves", "and Play becomes Saves")
 	menu.continue_button.pressed.emit()
 	await _until_settled()
-	_expect(get_tree().current_scene is TownScreen and TownData.current().gold == 4321, "Continue brings the saved town back")
+	_expect(get_tree().current_scene is TownScreen and TownData.current().gold == 4321 and TownData.slot == 2,
+			"Continue brings back the town in its slot")
 	menu = await _open(MENU)
 	menu.play_button.pressed.emit()
 	await _wait()
-	_expect(menu.confirm_panel.visible and _focused() == menu.keep_button, "New Town asks first, keeping the town by default")
+	_expect(menu.slots_panel.visible and _focused() == menu.slot_buttons[2], "Saves opens on the newest slot")
+	_expect(menu.slot_buttons[2].text.begins_with("Slot 2: ") and menu.slot_buttons[2].text.ends_with("4321 gold"),
+			"a saved slot says when and how rich")
+	_expect(not menu.erase_buttons[1].visible and menu.erase_buttons[2].visible, "only a saved slot can be erased")
+	_expect(not menu.erase_buttons.has(TownData.TEST_SLOT), "the test slot has no cross")
+	menu.erase_buttons[2].pressed.emit()
+	await _wait()
+	_expect(menu.confirm_panel.visible and _focused() == menu.keep_button, "erasing asks first, keeping the town by default")
 	await _tap("ui_cancel")
-	_expect(not menu.confirm_panel.visible and TownData.has_save(), "Esc keeps the town")
-	menu.play_button.pressed.emit()
+	_expect(not menu.confirm_panel.visible and menu.slots_panel.visible and TownData.has_save(2), "Esc keeps the town")
+	menu.erase_buttons[2].pressed.emit()
 	await _wait()
 	menu.confirm_button.pressed.emit()
+	await _wait()
+	_expect(not TownData.has_save(2) and menu.slot_buttons[2].text == "Slot 2: New town", "Erase it empties the slot")
+	menu.slot_buttons[TownData.TEST_SLOT].pressed.emit()
 	await _until_settled()
-	_expect(TownData.current().gold == TownData.START_GOLD, "Start a new town starts afresh")
+	_expect(TownData.slot == TownData.TEST_SLOT and TownData.current().gold == TownData.TEST_GOLD, "the test slot plays its town")
+	TownData.current().gold = 5
+	TownData.current().save()
+	TownData.reset_test_slot()
+	_expect(TownData.read_slot(TownData.TEST_SLOT)["gold"] == TownData.TEST_GOLD, "opening the game makes the test town afresh")
+	TownData.slot = 1
+	menu = await _open(MENU)
+	menu.play_button.pressed.emit()
+	await _wait()
+	menu.slot_buttons[1].pressed.emit()
+	await _until_settled()
+	_expect(TownData.slot == 1 and TownData.current().gold == TownData.START_GOLD, "an empty slot starts afresh")
+	TownData.delete_save(TownData.TEST_SLOT)
+	menu = await _open(MENU)
+	menu.play_button.pressed.emit()
+	await _wait()
+	_expect(TownData.read_slot(TownData.TEST_SLOT).get("gold", 0) == TownData.TEST_GOLD,
+			"a lost test town comes back as a test town")
+	TownData.slot = 1
 
 
 func _test_game_over_deletes_the_save() -> void:
