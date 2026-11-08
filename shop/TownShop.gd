@@ -1,15 +1,14 @@
 class_name TownShop
 extends Control
-## The town's Shop. The shelves on the left hold what is for sale, or, on the Sell tab, what
-## the town owns. The card on the right is who you shop for, with their gear and pack, and
+## The town's Shop. The list on the left holds what is for sale, or, on the Sell tab, what
+## the town owns, in groups by kind with each price on the right. The card on the right is who you shop for, with their gear and pack, and
 ## the item picked, with its moves and one button. The rules are in TownData: this only
 ## asks and redraws.
 
 const TOWN := "res://town/TownScreen.tscn"
 const STAGE := Vector2(1280, 720)
 const SHELF_SPOT := Vector2(40, 292)
-const COLUMNS := 8
-const SHELF_ROWS := 3
+const LIST_SIZE := Vector2(720, 300)
 const GAP := 8
 const CARD_LEFT := 816.0
 const CARD_TOP := 92.0
@@ -33,7 +32,14 @@ const SAY_PACKED := "It's in %s's pack."
 const SAY_SOLD := "I'll take it. %d gold for you."
 const SAY_EMPTY := "Nothing to sell yet. Trips bring things home."
 const EMPTY_STOCK := "The town owns nothing to sell. What a trip carries home comes here."
-const PICK_SOMETHING := "Pick something on the shelves."
+const PICK_SOMETHING := "Pick something on the list."
+## The groups of the list, in order, with their headings.
+const GROUPS := [
+	[ItemData.Kind.WEAPON, "Weapons"], [ItemData.Kind.ARMOR, "Armor"],
+	[ItemData.Kind.ACCESSORY, "Accessories"], [ItemData.Kind.CONSUMABLE, "Trip supplies"],
+	[ItemData.Kind.TOME, "Tomes"],
+]
+const MATERIAL_GROUP := "Materials"
 
 enum Tab { BUY, SELL }
 
@@ -50,8 +56,8 @@ var gold_chip: KitChip
 var date_chip: DateChip
 var arrow: KitArrow
 var bubble: TavernBubble
-## The tiles on the shelves now.
-var tiles: Array[ShopTile] = []
+## The rows of the list now, top to bottom.
+var rows: Array[ShopRow] = []
 ## The tiles of what the person shopped for wears.
 var slots: Array[BagTile] = []
 ## The tiles of their pack.
@@ -64,7 +70,7 @@ var person_index := 0
 var picked := {}
 
 var _stage: Node2D
-var _grid: GridContainer
+var _list: VBoxContainer
 var _empty: Label
 var _who: Label
 var _title: Label
@@ -92,8 +98,8 @@ func _ready() -> void:
 	arrow = KitArrow.new(null, KitArrow.Side.ABOVE)
 	add_child(arrow)
 	_refresh(false)
-	if not tiles.is_empty():
-		tiles[0].grab_focus()
+	if not rows.is_empty():
+		rows[0].grab_focus()
 	else:
 		back.grab_focus()
 	_say(SAY_HELLO % shopper().person.display_name if shopper() != null else SAY_NOBODY)
@@ -123,7 +129,7 @@ func show_tab(new_tab: Tab) -> void:
 	_refresh()
 
 
-## Puts the shelf tile holding `id` in the card, as a click would.
+## Puts the row holding `id` in the card, as a click would.
 func pick_on_shelf(id: String, material := false) -> void:
 	picked = {"from": "shelf", "id": id, "material": material}
 	_refresh()
@@ -144,15 +150,13 @@ func _build_shelves() -> Control:
 	var view := ScrollContainer.new()
 	view.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	view.follow_focus = true
-	view.custom_minimum_size = Vector2(COLUMNS * BagTile.SIZE + (COLUMNS - 1) * GAP + 12.0,
-			SHELF_ROWS * BagTile.SIZE + (SHELF_ROWS - 1) * GAP)
+	view.custom_minimum_size = LIST_SIZE
 	panel.body.add_child(view)
-	_grid = GridContainer.new()
-	_grid.columns = COLUMNS
-	_grid.add_theme_constant_override("h_separation", GAP)
-	_grid.add_theme_constant_override("v_separation", GAP)
-	view.add_child(_grid)
-	_empty = Kit.text(EMPTY_STOCK, COLUMNS * BagTile.SIZE, &"PaperLabel")
+	_list = VBoxContainer.new()
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.add_theme_constant_override("separation", 2)
+	view.add_child(_list)
+	_empty = Kit.text(EMPTY_STOCK, LIST_SIZE.x - 24.0, &"PaperLabel")
 	_empty.hide()
 	view.add_child(_empty)
 	return panel
@@ -273,39 +277,62 @@ func _refresh(roll := true) -> void:
 func _fill_shelves(town: TownData) -> void:
 	var focused := get_viewport().gui_get_focus_owner()
 	var focused_id := ""
-	if focused is ShopTile and tiles.has(focused):
-		focused_id = (focused as ShopTile).id
-	for tile in tiles:
-		_grid.remove_child(tile)
-		tile.queue_free()
-	tiles.clear()
-	if tab == Tab.BUY:
-		for id in town.on_sale():
-			_add_tile(ShopTile.new(id))
-	else:
-		for id in town.stock_ids():
-			_add_tile(ShopTile.new(id, false, town.stock_count(id)))
+	if focused is ShopRow and rows.has(focused):
+		focused_id = (focused as ShopRow).id
+	for child in _list.get_children():
+		_list.remove_child(child)
+		child.queue_free()
+	rows.clear()
+	var ids: Array[String] = town.on_sale() if tab == Tab.BUY else town.stock_ids()
+	for group: Array in GROUPS:
+		var heading := true
+		for id in ids:
+			var item := Database.get_item(id)
+			if item.kind != group[0]:
+				continue
+			if heading:
+				_add_heading(group[1])
+				heading = false
+			if tab == Tab.BUY:
+				_add_row(ShopRow.new(id, false, 0, item.price, town.gold >= item.price))
+			else:
+				_add_row(ShopRow.new(id, false, town.stock_count(id), TownData.sell_price(id)))
+	if tab == Tab.SELL:
+		var heading := true
 		for id in Database.sorted_ids(Database.materials):
 			if town.materials.get(id, 0) > 0:
-				_add_tile(ShopTile.new(id, true, town.materials[id]))
-	_empty.visible = tiles.is_empty()
-	_grid.visible = not tiles.is_empty()
-	# Keeps focus on the shelves, on what is picked, or on the first tile if that sold out.
+				if heading:
+					_add_heading(MATERIAL_GROUP)
+					heading = false
+				_add_row(ShopRow.new(id, true, town.materials[id], TownData.material_price(id)))
+	_empty.visible = rows.is_empty()
+	_list.visible = not rows.is_empty()
+	# Keeps focus on the list, on what is picked, or on the first row if that sold out.
 	if focused_id != "" or (focused != null and not is_instance_valid(focused)):
 		var keep: String = picked["id"] if picked.get("from", "") == "shelf" else focused_id
-		for tile in tiles:
-			if tile.id == keep:
-				tile.grab_focus.call_deferred()
+		for row in rows:
+			if row.id == keep:
+				row.grab_focus.call_deferred()
 				return
-		(tiles[0] if not tiles.is_empty() else sell_tab).grab_focus.call_deferred()
+		(rows[0] if not rows.is_empty() else sell_tab).grab_focus.call_deferred()
 
 
-func _add_tile(tile: ShopTile) -> void:
-	tile.pressed.connect(_pick.bind({"from": "shelf", "id": tile.id, "material": tile.is_material}))
-	tile.focus_entered.connect(_pick.bind({"from": "shelf", "id": tile.id, "material": tile.is_material}))
-	tile.lit = picked.get("from", "") == "shelf" and picked["id"] == tile.id
-	_grid.add_child(tile)
-	tiles.append(tile)
+func _add_heading(words: String) -> void:
+	var heading := Kit.text(words.to_upper(), 0.0, &"PaperLabel")
+	if _list.get_child_count() > 0:
+		heading.custom_minimum_size.y = 32.0
+		heading.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_list.add_child(heading)
+	_list.add_child(HSeparator.new())
+
+
+func _add_row(row: ShopRow) -> void:
+	var what := {"from": "shelf", "id": row.id, "material": row.is_material}
+	row.pressed.connect(_pick.bind(what))
+	row.focus_entered.connect(_pick.bind(what))
+	row.lit = picked.get("from", "") == "shelf" and picked["id"] == row.id
+	_list.add_child(row)
+	rows.append(row)
 
 
 func _show_person() -> void:
@@ -480,8 +507,8 @@ func _say(words: String) -> void:
 func _pick(what: Dictionary) -> void:
 	picked = what
 	_show_person()
-	for tile in tiles:
-		tile.lit = picked.get("from", "") == "shelf" and picked["id"] == tile.id
+	for row in rows:
+		row.lit = picked.get("from", "") == "shelf" and picked["id"] == row.id
 	_show_picked(TownData.current())
 
 
