@@ -12,3 +12,4 @@ _work/
 /tools/delegate.sh
 /tools/save.sh
 .claude/
+/.mcp.json
